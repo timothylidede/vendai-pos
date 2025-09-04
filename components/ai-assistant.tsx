@@ -34,7 +34,7 @@ export function AIAssistant({ isExpanded, onClose }: AIAssistantProps) {
       data-expanded={isExpanded}
       className={cn(
         styles.assistantPanel,
-        "border-l border-slate-700/50 flex flex-col",
+        "border-l border-white/20 flex flex-col",
         isMinimized && styles.minimized
       )}
     >
@@ -42,62 +42,65 @@ export function AIAssistant({ isExpanded, onClose }: AIAssistantProps) {
       <div
         className={cn(
           styles.header,
-          "flex items-center justify-between border-b border-slate-700/50 px-6"
+          "flex items-center justify-between border-b border-white/10 px-4"
         )}
       >
-        <div className="flex items-center gap-3">
-          <span className="font-semibold text-slate-200">Agent</span>
+        {/* Left icons */}
+        <div className="flex items-center gap-2">
           <button
-            className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+            className="p-1 rounded hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
             aria-label="New Chat"
             onClick={() => setChatHistory([])}
           >
-            <span className="text-xl">+</span>
+            <span className="text-lg">+</span>
           </button>
           <button
-            className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+            className="p-1 rounded hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
             aria-label="Chat History"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex bg-slate-800/50 rounded-lg p-0.5 mr-2">
-            <button
-              className={cn(
-                "px-3 py-1 rounded-md text-sm transition-colors",
-                mode === "ask" ? "bg-slate-700 text-slate-200" : "text-slate-400 hover:text-slate-300"
-              )}
-              onClick={() => setMode("ask")}
-            >
-              Ask
-            </button>
-            <button
-              className={cn(
-                "px-3 py-1 rounded-md text-sm transition-colors",
-                mode === "agent" ? "bg-slate-700 text-slate-200" : "text-slate-400 hover:text-slate-300"
-              )}
-              onClick={() => setMode("agent")}
-            >
-              Agent
-            </button>
-          </div>
+        {/* Center mode toggle */}
+        <div className="flex bg-black/20 rounded-lg p-0.5">
           <button
-            className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+            className={cn(
+              "px-3 py-1 rounded-md text-sm transition-colors",
+              mode === "ask" ? "bg-white/20 text-white backdrop-blur-sm" : "text-slate-300 hover:text-white"
+            )}
+            onClick={() => setMode("ask")}
+          >
+            Ask
+          </button>
+          <button
+            className={cn(
+              "px-3 py-1 rounded-md text-sm transition-colors",
+              mode === "agent" ? "bg-white/20 text-white backdrop-blur-sm" : "text-slate-300 hover:text-white"
+            )}
+            onClick={() => setMode("agent")}
+          >
+            Agent
+          </button>
+        </div>
+
+        {/* Right icons */}
+        <div className="flex items-center gap-2">
+          <button
+            className="p-1 rounded hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
             aria-label="Minimize"
             onClick={() => setIsMinimized(!isMinimized)}
           >
-            <span className="text-xl">−</span>
+            <span className="text-lg">−</span>
           </button>
           <button
             onClick={onClose}
-            className="p-1.5 rounded hover:bg-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+            className="p-1 rounded hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
             aria-label="Close AI Assistant"
           >
-            <span className="text-xl">×</span>
+            <span className="text-lg">×</span>
           </button>
         </div>
       </div>
@@ -109,11 +112,10 @@ export function AIAssistant({ isExpanded, onClose }: AIAssistantProps) {
             {chatHistory.length === 0 ? (
               <div className={styles.placeholder}>
                 <div className={styles.placeholderIcon}>💬</div>
-                <p className="text-lg">Ask about your shop</p>
-                <p className="text-sm opacity-75">I can help you manage your business efficiently</p>
+                <p className="text-base">How can I help?</p>
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex-1 overflow-y-auto p-4">
                 {/* Chat messages will go here */}
               </div>
             )}
@@ -133,7 +135,7 @@ export function AIAssistant({ isExpanded, onClose }: AIAssistantProps) {
                 }}
               />
               <button
-                className="p-2 rounded-lg hover:bg-slate-700/50 text-slate-400 hover:text-slate-200 transition-colors"
+                className="p-2 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
                 aria-label="Send message"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

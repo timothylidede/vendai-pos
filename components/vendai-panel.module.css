@@ -29,3 +29,24 @@
 .botIcon.spinning {
   transform: rotate(360deg);
 }
+
+.toggleButton {
+  transition: opacity 400ms cubic-bezier(0.4, 0, 0.2, 1),
+              transform 400ms cubic-bezier(0.4, 0, 0.2, 1),
+              visibility 0s linear 400ms;
+}
+
+.toggleButton[data-expanded="true"] {
+  opacity: 0;
+  transform: translateY(10px) scale(0.95);
+  visibility: hidden;
+}
+
+.toggleButton[data-expanded="false"] {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  visibility: visible;
+  transition: opacity 400ms cubic-bezier(0.4, 0, 0.2, 1),
+              transform 400ms cubic-bezier(0.4, 0, 0.2, 1),
+              visibility 0s linear 0s;
+}

@@ -1,14 +1,48 @@
 "use client"
 
-import { Package, AlertTriangle, TrendingUp, Plus } from "lucide-react"
+import { Package, AlertTriangle, TrendingUp, Plus, LayoutGrid, List } from "lucide-react"
 
 const inventory = [
-  { id: "1", name: "Coca Cola 500mL", stock: 24, minStock: 10, price: 60, status: "good" },
-  { id: "2", name: "Bread White", stock: 3, minStock: 10, price: 45, status: "low" },
-  { id: "3", name: "Sugar 2kg", stock: 0, minStock: 5, price: 180, status: "out" },
-  { id: "4", name: "Milk 1L", stock: 15, minStock: 8, price: 85, status: "good" },
-  { id: "5", name: "Rice 2kg", stock: 12, minStock: 6, price: 220, status: "good" },
-  { id: "6", name: "Cooking Oil 1L", stock: 2, minStock: 8, price: 150, status: "low" },
+  { 
+    id: "1", 
+    name: "Acoustic Bloc Screens", 
+    sku: "E-COM11",
+    variants: 2,
+    stock: 24, 
+    minStock: 10, 
+    price: 295.00, 
+    status: "good" 
+  },
+  { 
+    id: "2", 
+    name: "Cabinet with Doors", 
+    sku: "FURN_7800",
+    variants: 2,
+    stock: 3, 
+    minStock: 10, 
+    price: 140.00, 
+    status: "low" 
+  },
+  { 
+    id: "3", 
+    name: "Conference Chair", 
+    sku: "FURN_1118",
+    variants: 1,
+    stock: 0, 
+    minStock: 5, 
+    price: 33.00, 
+    status: "out" 
+  },
+  { 
+    id: "4", 
+    name: "Corner Desk Left Sit", 
+    sku: "FURN_0001",
+    variants: 1,
+    stock: 15, 
+    minStock: 8, 
+    price: 85.00, 
+    status: "good" 
+  }
 ]
 
 const getStatusColor = (status: string) => {
@@ -73,67 +107,56 @@ export function InventoryModule() {
         </div>
       </div>
 
-      {/* Inventory Table */}
+      {/* Products Grid */}
       <div className="glass rounded-lg p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-slate-200">Inventory Items</h3>
-          <button className="flex items-center space-x-2 px-4 py-2 bg-green-500/20 text-green-400 rounded-lg border border-green-500/30 hover:bg-green-500/30 transition-colors">
-            <Plus className="w-4 h-4" />
-            <span>Add Item</span>
-          </button>
+          <h3 className="text-lg font-semibold text-slate-200">Products</h3>
+          <div className="flex items-center space-x-3">
+            <button className="flex items-center space-x-2 px-4 py-2 bg-green-500/20 text-green-400 rounded-lg border border-green-500/30 hover:bg-green-500/30 transition-colors">
+              <Plus className="w-4 h-4" />
+              <span>New</span>
+            </button>
+            <div className="flex rounded overflow-hidden border border-slate-600/30">
+              <button className="px-3 py-2 bg-slate-700/50 text-slate-300">
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button className="px-3 py-2 bg-slate-700/20 text-slate-300 border-l border-slate-600/30">
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-700/50">
-                <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Item</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Stock</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Min Stock</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Price</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Status</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inventory.map((item) => (
-                <tr key={item.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
-                  <td className="py-3 px-4">
-                    <div className="text-sm font-medium text-slate-200">{item.name}</div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="text-sm font-mono text-slate-200">{item.stock}</div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="text-sm font-mono text-slate-400">{item.minStock}</div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="text-sm font-mono text-green-400">KSh {item.price}</div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div
-                      className={`inline-flex items-center space-x-1 px-2 py-1 rounded text-xs border ${getStatusColor(item.status)}`}
-                    >
-                      {getStatusIcon(item.status)}
-                      <span className="capitalize">{item.status}</span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex space-x-2">
-                      <button className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded text-xs border border-blue-500/30 hover:bg-blue-500/30 transition-colors">
-                        Edit
-                      </button>
-                      {(item.status === "low" || item.status === "out") && (
-                        <button className="px-3 py-1 bg-green-500/20 text-green-400 rounded text-xs border border-green-500/30 hover:bg-green-500/30 transition-colors">
-                          Restock
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {inventory.map((item) => (
+            <div 
+              key={item.id} 
+              className="border border-slate-700/40 rounded-lg bg-slate-800/20 p-4 hover:border-slate-600/60 transition-colors"
+            >
+              <div className="flex items-center space-x-4">
+                <div className="w-20 h-20 bg-slate-700/30 rounded flex items-center justify-center">
+                  <Package className="w-10 h-10 text-slate-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-slate-200 font-medium truncate">{item.name}</h4>
+                  <div className="text-xs text-slate-400 mt-1">[{item.sku}]</div>
+                  <div className="text-xs text-slate-400 mt-1">{item.variants} Variants</div>
+                  <div className="text-sm text-green-400 font-mono mt-2">KSh {item.price.toFixed(2)}</div>
+                </div>
+              </div>
+              
+              <div className="mt-4 flex items-center justify-between">
+                <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded text-xs border ${getStatusColor(item.status)}`}>
+                  {getStatusIcon(item.status)}
+                  <span className="capitalize">{item.status}</span>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-mono text-slate-200">{item.stock}</div>
+                  <div className="text-xs text-slate-400">On hand</div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

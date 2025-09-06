@@ -42,24 +42,6 @@ export function POSModule() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
-      {/* Products */}
-      <div className="glass rounded-lg p-6">
-        <h3 className="text-lg font-semibold mb-4 text-slate-200">Products</h3>
-        <div className="grid grid-cols-2 gap-4">
-          {products.map((product) => (
-            <button
-              key={product.id}
-              onClick={() => addToCart(product)}
-              className="glass-light rounded-lg p-4 text-left hover:bg-slate-600/30 transition-colors border border-slate-600/30"
-            >
-              <div className="text-sm font-medium text-slate-200 mb-1">{product.name}</div>
-              <div className="text-green-400 font-mono font-semibold mb-1">KSh {product.price}</div>
-              <div className="text-xs text-slate-400">Stock: {product.stock}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Cart */}
       <div className="glass rounded-lg p-6 flex flex-col">
         <div className="flex items-center space-x-2 mb-4">
@@ -114,6 +96,24 @@ export function POSModule() {
             </button>
           </div>
         )}
+      </div>
+      
+      {/* Products */}
+      <div className="glass rounded-lg p-6">
+        <h3 className="text-lg font-semibold mb-4 text-slate-200">Products</h3>
+        <div className="grid grid-cols-2 gap-4">
+          {products.map((product) => (
+            <button
+              key={product.id}
+              onClick={() => addToCart(product)}
+              className="glass-light rounded-lg p-4 text-left hover:bg-slate-600/30 transition-colors border border-slate-600/30"
+            >
+              <div className="text-sm font-medium text-slate-200 mb-1">{product.name}</div>
+              <div className="text-green-400 font-mono font-semibold mb-1">KSh {product.price}</div>
+              <div className="text-xs text-slate-400">Stock: {product.stock}</div>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )

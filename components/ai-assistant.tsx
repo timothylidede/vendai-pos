@@ -65,10 +65,10 @@ export function AIAssistant({ isExpanded, onClose }: AIAssistantProps) {
         </div>
 
         {/* Center mode toggle */}
-        <div className="flex bg-black/20 rounded-lg p-0.5">
+        <div className="flex bg-black/20 rounded-lg p-[2px]">
           <button
             className={cn(
-              "px-3 py-1 rounded-md text-sm transition-colors",
+              "px-2 py-0.5 rounded-md text-xs font-medium transition-colors",
               mode === "ask" ? "bg-white/20 text-white backdrop-blur-sm" : "text-slate-300 hover:text-white"
             )}
             onClick={() => setMode("ask")}
@@ -77,7 +77,7 @@ export function AIAssistant({ isExpanded, onClose }: AIAssistantProps) {
           </button>
           <button
             className={cn(
-              "px-3 py-1 rounded-md text-sm transition-colors",
+              "px-2 py-0.5 rounded-md text-xs font-medium transition-colors",
               mode === "agent" ? "bg-white/20 text-white backdrop-blur-sm" : "text-slate-300 hover:text-white"
             )}
             onClick={() => setMode("agent")}
@@ -105,20 +105,22 @@ export function AIAssistant({ isExpanded, onClose }: AIAssistantProps) {
         </div>
       </div>
 
-      {/* Body */}
+            {/* Body */}
       {!isMinimized && (
         <>
-          <div className="flex-1 overflow-hidden flex flex-col">
-            {chatHistory.length === 0 ? (
-              <div className={styles.placeholder}>
-                <div className={styles.placeholderIcon}>💬</div>
-                <p className="text-base">How can I help?</p>
-              </div>
-            ) : (
-              <div className="flex-1 overflow-y-auto p-4">
-                {/* Chat messages will go here */}
-              </div>
-            )}
+          <div className="flex-1 overflow-hidden flex flex-col justify-end">
+            <div className="flex-1 min-h-0">
+              {chatHistory.length === 0 ? (
+                <div className={styles.placeholder}>
+                  <div className={styles.placeholderIcon}>💬</div>
+                  <p className="text-base">How can I help?</p>
+                </div>
+              ) : (
+                <div className="h-full overflow-y-auto p-4">
+                  {/* Chat messages will go here */}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Chat Footer */}
@@ -144,7 +146,7 @@ export function AIAssistant({ isExpanded, onClose }: AIAssistantProps) {
               </button>
             </div>
             {/* Space for VendAI Button */}
-            <div className="h-10" /> {/* Placeholder space for VendAI button */}
+            <div className="h-3" /> {/* Reduced space for VendAI button */}
           </div>
         </>
       )}

@@ -40,6 +40,7 @@ const modules = [
 export function ModulesDashboard() {
   const [showChatbot, setShowChatbot] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
+  const router = useRouter();
   
   const toggleBot = useCallback(() => {
     setIsSpinning(true);
@@ -69,7 +70,6 @@ export function ModulesDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl w-full place-items-center">
           {modules.map((module, index) => {
             const Icon = module.icon
-            const router = useRouter()
             return (
               <motion.div
                 key={index}
@@ -81,6 +81,10 @@ export function ModulesDashboard() {
                 onClick={() => {
                   if (module.title === 'Point of Sale') {
                     router.push('/modules/pos')
+                  } else if (module.title === 'Inventory') {
+                    router.push('/modules/inventory')
+                  } else if (module.title === 'Suppliers') {
+                    router.push('/modules/suppliers')
                   }
                 }}
               >
@@ -104,8 +108,6 @@ export function ModulesDashboard() {
           })}
         </div>
       </div>
-
-  {/* Local bot removed: VendaiPanel provides the assistant button centrally */}
     </div>
   )
 }

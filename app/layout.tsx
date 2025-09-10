@@ -33,19 +33,32 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </div>
 
             <div className="flex items-center space-x-2">
-              {/* Window controls */}
+              {/* Minimal window controls: white icons, no background, ordered minimize, restore, close */}
               <button 
                 aria-label="minimize" 
-                className="w-3 h-3 rounded-full bg-slate-700 hover:bg-slate-600 transition-colors" 
-              />
+                className="w-5 h-5 flex items-center justify-center transition-colors mr-1 rounded-sm"
+              >
+                <svg width="14" height="14" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="3" y="6" width="6" height="1.5" fill="#fff" />
+                </svg>
+              </button>
               <button 
-                aria-label="maximize" 
-                className="w-3 h-3 rounded-full bg-slate-700 hover:bg-slate-600 transition-colors" 
-              />
+                aria-label="restore" 
+                className="w-5 h-5 flex items-center justify-center transition-colors mr-1 rounded-sm"
+              >
+                <svg width="14" height="14" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="3" y="3" width="6" height="6" stroke="#fff" strokeWidth="1.5" rx="0.5"/>
+                </svg>
+              </button>
               <button 
                 aria-label="close" 
-                className="w-3 h-3 rounded-full bg-red-600 hover:bg-red-500 transition-colors" 
-              />
+                className="w-5 h-5 flex items-center justify-center transition-colors rounded-sm"
+              >
+                <svg width="14" height="14" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <line x1="3" y1="3" x2="9" y2="9" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
+                  <line x1="9" y1="3" x2="3" y2="9" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
             </div>
           </header>
 

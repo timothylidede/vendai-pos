@@ -1,0 +1,19 @@
+id,name,wholesalePrice,category,description,image,stock,unit,brand,size,price,wholesaleQuantity
+98,Mcvities Digestive Biscuit 5x400g,2010,Biscuits and Cookies,Digestive biscuits - 5x400g,/images/products/mcvities-digestive-5x400g.jpg,40,5x400g,Mcvities,5x400g,2000,1
+99,Oreo Original Biscuit 12x55.2g,710,Biscuits and Cookies,Original biscuits - 12x55.2g,/images/products/oreo-original-12x55.2g.jpg,50,12x55.2g,Oreo,12x55.2g,700,1
+100,Maryland Choc Chip & Hazelnut Cookies 10x136g,2510,Biscuits and Cookies,Choc chip and hazelnut cookies - 10x136g,/images/products/maryland-choc-hazelnut-10x136g.jpg,40,10x136g,Maryland,10x136g,2500,1
+101,Maryland Choc Chip Cookies 10x136g,2510,Biscuits and Cookies,Choc chip cookies - 10x136g,/images/products/maryland-choc-chip-10x136g.jpg,40,10x136g,Maryland,10x136g,2500,1
+102,Oreo Original Biscuit 12x27.6g,410,Biscuits and Cookies,Original biscuits - 12x27.6g,/images/products/oreo-original-12x27.6g.jpg,50,12x27.6g,Oreo,12x27.6g,400,1
+103,Oreo Original Biscuit 12x18.4g,360,Biscuits and Cookies,Original biscuits - 12x18.4g,/images/products/oreo-original-12x18.4g.jpg,50,12x18.4g,Oreo,12x18.4g,350,1
+138,Maryland Double Choc Chip Cookies 10x136g,2610,Biscuits and Cookies,Double choc chip cookies - 10x136g,/images/products/maryland-double-choc-10x136g.jpg,40,10x136g,Maryland,10x136g,2600,1
+139,Maryland Choc Orange Cookies 10x136g,2610,Biscuits and Cookies,Choc orange cookies - 10x136g,/images/products/maryland-choc-orange-10x136g.jpg,40,10x136g,Maryland,10x136g,2600,1
+140,Maryland Strawberry Cookies 10x136g,2510,Biscuits and Cookies,Strawberry cookies - 10x136g,/images/products/maryland-strawberry-10x136g.jpg,40,10x136g,Maryland,10x136g,2500,1
+141,Maryland Vanilla Cookies 10x136g,2510,Biscuits and Cookies,Vanilla cookies - 10x136g,/images/products/maryland-vanilla-10x136g.jpg,40,10x136g,Maryland,10x136g,2500,1
+142,Maryland Caramel Cookies 10x136g,2610,Biscuits and Cookies,Caramel cookies - 10x136g,/images/products/maryland-caramel-10x136g.jpg,40,10x136g,Maryland,10x136g,2600,1
+143,Maryland Ginger Cookies 10x136g,2510,Biscuits and Cookies,Ginger cookies - 10x136g,/images/products/maryland-ginger-10x136g.jpg,40,10x136g,Maryland,10x136g,2500,1
+144,Nestle Kitkat Chunky 24x40g,3610,Biscuits and Cookies,Kitkat chunky - 24x40g,/images/products/kitkat-chunk-24x40g.jpg,30,24x40g,Nestle,24x40g,3600,1
+145,Nestle Kitkat 4 Fingers Orange 24x41.5g,4110,Biscuits and Cookies,Kitkat 4 fingers orange - 24x41.5g,/images/products/kitkat-orange-24x41.5g.jpg,30,24x41.5g,Nestle,24x41.5g,4100,1
+146,Nestle Smarties 24x38g,3610,Biscuits and Cookies,Smarties candy - 24x38g,/images/products/smarties-24x38g.jpg,35,24x38g,Nestle,24x38g,3600,1
+147,Nestle Milkybar 24x37g,3510,Biscuits and Cookies,Milkybar chocolate - 24x37g,/images/products/milkybar-24x37g.jpg,35,24x37g,Nestle,24x37g,3500,1
+148,Nestle Aero Mint Chocolate 24x33g,3310,Biscuits and Cookies,Aero mint chocolate - 24x33g,/images/products/aero-mint-24x33g.jpg,35,24x33g,Nestle,24x33g,3300,1
+150,Nestle Lion Bar 24x42g,4210,Biscuits and Cookies,Lion bar chocolate - 24x42g,/images/products/lion-bar-24x42g.jpg,30,24x42g,Nestle,24x42g,4200,1

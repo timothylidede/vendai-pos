@@ -1,0 +1,4 @@
+id,name,wholesalePrice,category,description,image,stock,unit,brand,size,price,wholesaleQuantity
+31,MENENGAI Bar Soap 1kg (Carton of 25pcs),3010,Personal Care & Hygiene,Quality bar soap 1kg - Carton of 25pcs,/images/products/menengai-soap-25pcs.jpg,20,25pcs,MENENGAI,Carton of 25,3000,1
+32,MSAFI Bar Soap 1kg (10pcs),1160,Personal Care & Hygiene,Premium bar soap 1kg - 10pcs,/images/products/msafi-soap-10pcs.jpg,25,10pcs,MSAFI,10 Pieces,1150,1
+33,BIDCO Cream Bar Soap 800g (25pcs),2310,Personal Care & Hygiene,Cream bar soap 800g - 25pcs,/images/products/bidco-soap-25pcs.jpg,30,25pcs,BIDCO,25 Pieces,2300,1

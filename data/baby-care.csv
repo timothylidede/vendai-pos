@@ -1,0 +1,21 @@
+id,name,wholesalePrice,category,description,image,stock,unit,brand,size,price,wholesaleQuantity
+39,Softcare Pampers (Bale of 6 Packets),2710,Baby Care,Premium baby diapers - Bale of 6 Packets,/images/products/softcare-pampers-6pcs.jpg,25,6 Packets,Softcare,Bale of 6,2700,1
+40,Kisskids (Bale of 6 Packets),2510,Baby Care,Quality baby diapers - Bale of 6 Packets,/images/products/kisskids-6pcs.jpg,30,6 Packets,Kisskids,Bale of 6,2500,1
+111,Softcare Gold Baby Diapers Small (48 pieces) 3-6kgs,560,Baby Care,Softcare Gold diapers small size - 48 pieces (3-6kgs),/images/products/softcare-gold-small-48pcs.jpg,50,48 pieces,Softcare,Small (3-6kgs),550,1
+112,Softcare Gold Baby Diapers Medium (42 pieces) 6.1-9kgs,560,Baby Care,Softcare Gold diapers medium size - 42 pieces (6.1-9kgs),/images/products/softcare-gold-medium-42pcs.jpg,50,42 pieces,Softcare,Medium (6.1-9kgs),550,1
+113,Softcare Gold Baby Diapers Large (40 pieces) 9.1-15kgs,560,Baby Care,Softcare Gold diapers large size - 40 pieces (9.1-15kgs),/images/products/softcare-gold-large-40pcs.jpg,50,40 pieces,Softcare,Large (9.1-15kgs),550,1
+114,Softcare Gold Baby Diapers Bale (6 Packets),3310,Baby Care,Softcare Gold diapers bale - 6 packets,/images/products/softcare-gold-bale-6pkts.jpg,20,6 Packets,Softcare,Bale of 6,3300,1
+115,Cuettie Baby Diapers Small (48 pieces) 3-6kgs,510,Baby Care,Cuettie diapers small size - 48 pieces (3-6kgs),/images/products/cuettie-small-48pcs.jpg,50,48 pieces,Cuettie,Small (3-6kgs),500,1
+116,Cuettie Baby Diapers Medium (44 pieces) 6.1-9kgs,510,Baby Care,Cuettie diapers medium size - 44 pieces (6.1-9kgs),/images/products/cuettie-medium-44pcs.jpg,50,44 pieces,Cuettie,Medium (6.1-9kgs),500,1
+117,Cuettie Baby Diapers Large (40 pieces) 9.1-15kgs,510,Baby Care,Cuettie diapers large size - 40 pieces (9.1-15kgs),/images/products/cuettie-large-40pcs.jpg,50,40 pieces,Cuettie,Large (9.1-15kgs),500,1
+118,Cuettie Baby Diapers Bale (6 Packets),3010,Baby Care,Cuettie diapers bale - 6 packets,/images/products/cuettie-bale-6pkts.jpg,20,6 Packets,Cuettie,Bale of 6,3000,1
+119,Hopebaby Pull-up Baby Diapers Large (9-14kgs) 22 pieces,560,Baby Care,Hopebaby pull-up diapers large size - 22 pieces (9-14kgs),/images/products/hopebaby-pullup-large-22pcs.jpg,40,22 pieces,Hopebaby,Large (9-14kgs),550,1
+120,Hopebaby Pull-up Baby Diapers Extra Large (>12kgs) 20 pieces,560,Baby Care,Hopebaby pull-up diapers extra large size - 20 pieces (>12kgs),/images/products/hopebaby-pullup-xl-20pcs.jpg,40,20 pieces,Hopebaby,Extra Large (>12kgs),550,1
+121,Hopebaby Pull-up Baby Diapers Carton (8 Packets),4410,Baby Care,Hopebaby pull-up diapers carton - 8 packets,/images/products/hopebaby-carton-8pkts.jpg,15,8 Packets,Hopebaby,Carton of 8,4400,1
+122,Sunny/Bluecare Adult Diapers Medium (10 diapers) 30-45in,760,Baby Care,Adult diapers medium size - 10 diapers (30-45in),/images/products/sunny-medium-10pcs.jpg,30,10 diapers,Sunny/Bluecare,Medium (30-45in),750,1
+123,Sunny/Bluecare Adult Diapers Large (10 diapers) 40-55in,760,Baby Care,Adult diapers large size - 10 diapers (40-55in),/images/products/sunny-large-10pcs.jpg,30,10 diapers,Sunny/Bluecare,Large (40-55in),750,1
+124,Sunny/Bluecare Adult Diapers Extra Large (10 diapers) 50-65in,760,Baby Care,Adult diapers extra large size - 10 diapers (50-65in),/images/products/sunny-xl-10pcs.jpg,30,10 diapers,Sunny/Bluecare,Extra Large (50-65in),750,1
+125,Sunny/Bluecare Adult Diapers Carton (6 Packets),4510,Baby Care,Sunny/Bluecare adult diapers carton - 6 packets,/images/products/sunny-carton-6pkts.jpg,15,6 Packets,Sunny/Bluecare,Carton of 6,4500,1
+126,Bluecare Pull-up Adult Diapers Large (10 diapers) 75-100cm,960,Baby Care,Pull-up adult diapers large size - 10 diapers (75-100cm),/images/products/bluecare-pullup-large-10pcs.jpg,25,10 diapers,Bluecare,Large (75-100cm),950,1
+127,Bluecare Pull-up Adult Diapers Extra Large (10 diapers) 90-120cm,960,Baby Care,Pull-up adult diapers extra large size - 10 diapers (90-120cm),/images/products/bluecare-pullup-xl-10pcs.jpg,25,10 diapers,Bluecare,Extra Large (90-120cm),950,1
+128,Bluecare Pull-up Adult Diapers Bale (10 Packets),9510,Baby Care,Bluecare pull-up adult diapers bale - 10 packets,/images/products/bluecare-bale-10pkts.jpg,10,10 Packets,Bluecare,Bale of 10,9500,1

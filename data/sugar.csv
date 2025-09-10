@@ -1,0 +1,3 @@
+id,name,wholesalePrice,category,description,image,stock,unit,brand,size,price,wholesaleQuantity
+19,SUGAR (Brown),6410,Sugar,Pure brown sugar - 50kg,/images/products/brown-sugar-50kg.jpg,10,50kg,,50 Kilograms,6400,1
+20,SUGAR (White),6510,Sugar,Pure white sugar - 50kg,/images/products/white-sugar-50kg.jpg,8,50kg,,50 Kilograms,6500,1

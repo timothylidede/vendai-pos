@@ -1,0 +1,33 @@
+id,name,wholesalePrice,category,description,image,stock,unit,brand,size,price,wholesaleQuantity
+45,Livelle Toilet Tissue 10x4s,1510,Cleaning Products,Soft toilet tissue - 10x4s,/images/products/livelle-tissue-10x4s.jpg,30,10x4s,Livelle,10x4s,1500,1
+46,Poshy Roll Xtra Toilet Tissue Unwrapped 4x10s,1010,Cleaning Products,Extra toilet tissue unwrapped - 4x10s,/images/products/poshy-tissue-4x10s.jpg,35,4x10s,Poshy,4x10s,1000,1
+47,Poshy Mega Tissue Jumbo Roll Wrapped 12x1s,2110,Cleaning Products,Jumbo roll wrapped tissue - 12x1s,/images/products/poshy-jumbo-12x1s.jpg,25,12x1s,Poshy,12x1s,2100,1
+48,Celine Premium Serviettes Single Pack 9x100 Sheets,860,Cleaning Products,Premium serviettes - 9x100 Sheets,/images/products/celine-serviettes-9x100.jpg,40,9x100 Sheets,Celine,9x100 Sheets,850,1
+49,Poshy Serviettes 9x100 Sheets,510,Cleaning Products,Quality serviettes - 9x100 Sheets,/images/products/poshy-serviettes-9x100.jpg,45,9x100 Sheets,Poshy,9x100 Sheets,500,1
+50,Velvex White Plain Serviettes 12x100 Sheets,910,Cleaning Products,White plain serviettes - 12x100 Sheets,/images/products/velvex-serviettes-12x100.jpg,35,12x100 Sheets,Velvex,12x100 Sheets,900,1
+51,Nuru Scouring Powder Lemon Fresh Bottle 24x500g,1210,Cleaning Products,Lemon fresh scouring powder - 24x500g,/images/products/nuru-powder-24x500g.jpg,30,24x500g,Nuru,24x500g,1200,1
+52,Msafi White Bar Soap 12x700g,1510,Cleaning Products,White bar soap - 12x700g,/images/products/msafi-white-soap-12x700g.jpg,25,12x700g,Msafi,12x700g,1500,1
+53,Nuru Dish Washing Paste Lemon Spark 6x800g,1510,Cleaning Products,Lemon spark dish washing paste - 6x800g,/images/products/nuru-paste-6x800g.jpg,30,6x800g,Nuru,6x800g,1500,1
+54,Velvex Dishwashing Liquid Lemon Burst 1x5L,460,Cleaning Products,Lemon burst dishwashing liquid - 1x5L,/images/products/velvex-liquid-1x5l.jpg,40,1x5L,Velvex,1x5L,450,1
+55,Sunlight Hand Washing Powder Eden Yellow 6x1Kg,2010,Cleaning Products,Eden yellow hand washing powder - 6x1Kg,/images/products/sunlight-powder-6x1kg.jpg,25,6x1Kg,Sunlight,6x1Kg,2000,1
+56,Vim Powder Lemon Fresh 6x1Kg,1010,Cleaning Products,Lemon fresh cleaning powder - 6x1Kg,/images/products/vim-powder-6x1kg.jpg,30,6x1Kg,Vim,6x1Kg,1000,1
+57,Jik Bleach Regular 4x1.5L,3010,Cleaning Products,Regular bleach - 4x1.5L,/images/products/jik-bleach-4x1.5l.jpg,20,4x1.5L,Jik,4x1.5L,3000,1
+58,Nuru Dish Washing Liquid Lemon Spark 4x5L,2510,Cleaning Products,Lemon spark dish washing liquid - 4x5L,/images/products/nuru-liquid-4x5l.jpg,25,4x5L,Nuru,4x5L,2500,1
+59,Jik Bleach Colours 4x1.5L,4510,Cleaning Products,Colour safe bleach - 4x1.5L,/images/products/jik-colours-4x1.5l.jpg,18,4x1.5L,Jik,4x1.5L,4500,1
+60,Kleen Kat Scouring Pad Value Pack 16x12Pack,4310,Cleaning Products,Value pack scouring pads - 16x12Pack,/images/products/kleen-kat-pads-16x12.jpg,20,16x12Pack,Kleen Kat,16x12Pack,4300,1
+61,Velvex Air Freshener After Rain Freshness 12x300ml,2810,Cleaning Products,After rain freshness air freshener - 12x300ml,/images/products/velvex-freshener-12x300ml.jpg,25,12x300ml,Velvex,12x300ml,2800,1
+62,Kleen Kat Sponge Scourer 14x5Pack,2510,Cleaning Products,Sponge scourer - 14x5Pack,/images/products/kleen-kat-sponge-14x5.jpg,30,14x5Pack,Kleen Kat,14x5Pack,2500,1
+63,Harpic Power Plus Original 12x1L,12510,Cleaning Products,Toilet cleaner - 12x1L,/images/products/harpic-12x1l.jpg,15,12x1L,Harpic,12x1L,12500,1
+64,Harpic Power Plus Original 24x500ml,12210,Cleaning Products,Toilet cleaner - 24x500ml,/images/products/harpic-24x500ml.jpg,20,24x500ml,Harpic,24x500ml,12200,1
+65,Softleaf Tissue Rolls 4x10s,1510,Cleaning Products,Tissue rolls - 4x10s,/images/products/softleaf-4x10s.jpg,35,4x10s,Softleaf,4x10s,1500,1
+66,Velvex Disinfectant Balls 5 Colored 12x5 Balls,1210,Cleaning Products,5 colored disinfectant balls - 12x5 Balls,/images/products/velvex-balls-12x5.jpg,30,12x5 Balls,Velvex,12x5 Balls,1200,1
+67,Velvex Liquid Hand Wash Nature 6x400ml,1110,Cleaning Products,Nature liquid hand wash - 6x400ml,/images/products/velvex-handwash-nature-6x400ml.jpg,25,6x400ml,Velvex,6x400ml,1100,1
+68,Velvex Liquid Hand Wash Coral 6x400ml,1110,Cleaning Products,Coral liquid hand wash - 6x400ml,/images/products/velvex-handwash-coral-6x400ml.jpg,25,6x400ml,Velvex,6x400ml,1100,1
+69,Velvex Multipurpose Liquid Detergent Green 1x5L,410,Cleaning Products,Green multipurpose liquid detergent - 1x5L,/images/products/velvex-detergent-1x5l.jpg,30,1x5L,Velvex,1x5L,400,1
+70,Cleanrol Kitchen Towel 24x2s,5010,Cleaning Products,Kitchen towel - 24x2s,/images/products/cleanrol-towel-24x2s.jpg,20,24x2s,Cleanrol,24x2s,5000,1
+149,Velvex Air Freshener Lavender & Camomile 6x300ml,1260,Cleaning Products,Lavender & camomile air freshener - 6x300ml,/images/products/velvex-freshener-6x300ml.jpg,25,6x300ml,Velvex,6x300ml,1250,1
+71,Velvex Toilet Cleaner Citrus Burst 6x1L,2210,Cleaning Products,Citrus burst toilet cleaner - 6x1L,/images/products/velvex-toilet-citrus-6x1l.jpg,20,6x1L,Velvex,6x1L,2200,1
+72,Velvex Toilet Cleaner Ocean Breeze 6x1L,2310,Cleaning Products,Ocean breeze toilet cleaner - 6x1L,/images/products/velvex-toilet-ocean-6x1l.jpg,20,6x1L,Velvex,6x1L,2300,1
+73,Glassy Liquid Glass and Window Cleaner Ocean Scent 12x600ml,1510,Cleaning Products,Ocean scent glass and window cleaner - 12x600ml,/images/products/glassy-liquid-12x600ml.jpg,30,12x600ml,Glassy,12x600ml,1500,1
+74,Rosy Clear Hand Sanitizing Gel 1x5L,1510,Cleaning Products,Hand sanitizing gel - 1x5L,/images/products/rosy-gel-1x5l.jpg,25,1x5L,Rosy,1x5L,1500,1
+75,Msafi Bleach Colour (750ml + 250ml Free) 12x1L,2010,Cleaning Products,Colour safe bleach with bonus - 12x1L,/images/products/msafi-bleach-12x1l.jpg,20,12x1L,Msafi,12x1L,2000,1

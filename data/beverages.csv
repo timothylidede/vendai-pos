@@ -1,0 +1,9 @@
+id,name,wholesalePrice,category,description,image,stock,unit,brand,size,price,wholesaleQuantity
+25,RED BULL (24 Pack),2410,Beverages,Premium energy drink - 24 Pack,/images/products/red-bull-24pack.jpg,20,24 Pack,RED BULL,24 Pack,2400,1
+26,AZAM Energy Drink 300ml (24 Pack),870,Beverages,Energy drink 300ml - 24 Pack,/images/products/azam-energy-24pack.jpg,25,24 Pack,AZAM,24 Pack,860,1
+27,PREDATOR Energy Drink 500ml (12pcs),490,Beverages,Energy drink 500ml - 12pcs,/images/products/predator-energy-12pcs.jpg,30,12pcs,PREDATOR,12 Pieces,480,1
+28,POWER PLAY Energy Drink 500ml (12pcs),510,Beverages,Energy drink 500ml - 12pcs,/images/products/powerplay-energy-12pcs.jpg,25,12pcs,POWER PLAY,12 Pieces,500,1
+132,Schweppes Tonic Water 24x300ml,2410,Beverages,Tonic water - 24x300ml,/images/products/schweppes-tonic-24x300ml.jpg,40,24x300ml,Schweppes,24x300ml,2400,1
+133,Schweppes Ginger Ale 24x300ml,2410,Beverages,Ginger ale - 24x300ml,/images/products/schweppes-ginger-24x300ml.jpg,40,24x300ml,Schweppes,24x300ml,2400,1
+134,Schweppes Soda Water 24x300ml,2310,Beverages,Soda water - 24x300ml,/images/products/schweppes-soda-24x300ml.jpg,40,24x300ml,Schweppes,24x300ml,2300,1
+135,Schweppes Bitter Lemon 24x300ml,2410,Beverages,Bitter lemon - 24x300ml,/images/products/schweppes-bitter-lemon-24x300ml.jpg,40,24x300ml,Schweppes,24x300ml,2400,1

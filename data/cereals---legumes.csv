@@ -1,0 +1,5 @@
+id,name,wholesalePrice,category,description,image,stock,unit,brand,size,price,wholesaleQuantity
+41,Makueni Ndengu,7510,Cereals & Legumes,Premium green grams - 90kgs,/images/products/makueni-ndengu-90kg.jpg,15,90kgs,,90 Kilograms,7500,1
+42,Nylon Ndengu,6510,Cereals & Legumes,Quality green grams - 90kgs,/images/products/nylon-ndengu-90kg.jpg,20,90kgs,,90 Kilograms,6500,1
+43,Kamande,5510,Cereals & Legumes,Premium beans - 50kgs,/images/products/kamande-50kg.jpg,25,50kgs,,50 Kilograms,5500,1
+44,Sorghum,3510,Cereals & Legumes,Quality sorghum - 90kgs,/images/products/sorghum-90kg.jpg,18,90kgs,,90 Kilograms,3500,1

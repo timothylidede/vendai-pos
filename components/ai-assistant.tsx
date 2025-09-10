@@ -89,13 +89,6 @@ export function AIAssistant({ isExpanded, onClose }: AIAssistantProps) {
         {/* Right icons */}
         <div className="flex items-center gap-2">
           <button
-            className="p-1 rounded hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
-            aria-label="Minimize"
-            onClick={() => setIsMinimized(!isMinimized)}
-          >
-            <span className="text-lg">−</span>
-          </button>
-          <button
             onClick={onClose}
             className="p-1 rounded hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
             aria-label="Close AI Assistant"

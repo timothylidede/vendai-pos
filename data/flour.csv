@@ -1,0 +1,19 @@
+id,name,wholesalePrice,category,description,image,stock,unit,brand,size,price,wholesaleQuantity
+151,WHEAT Flour Ajab 2kg Bale,1810,Flour,Premium wheat flour Ajab - 2kg Bale,/images/products/wheat-flour-ajab-2kg-bale.jpg,50,Bale,Ajab,2kg,1800,1
+152,WHEAT Flour Ajab 1kg Bale,1760,Flour,Premium wheat flour Ajab - 1kg Bale,/images/products/wheat-flour-ajab-1kg-bale.jpg,60,Bale,Ajab,1kg,1750,1
+153,WHEAT Flour Pembe 2kg Bale,1810,Flour,Premium wheat flour Pembe - 2kg Bale,/images/products/wheat-flour-pembe-2kg-bale.jpg,50,Bale,Pembe,2kg,1800,1
+154,WHEAT Flour Pembe 1kg Bale,1760,Flour,Premium wheat flour Pembe - 1kg Bale,/images/products/wheat-flour-pembe-1kg-bale.jpg,60,Bale,Pembe,1kg,1750,1
+155,WHEAT Flour Dola 2kg Bale,1810,Flour,Premium wheat flour Dola - 2kg Bale,/images/products/wheat-flour-dola-2kg-bale.jpg,50,Bale,Dola,2kg,1800,1
+156,WHEAT Flour Dola 1kg Bale,1760,Flour,Premium wheat flour Dola - 1kg Bale,/images/products/wheat-flour-dola-1kg-bale.jpg,60,Bale,Dola,1kg,1750,1
+157,WHEAT Flour Ndovu 2kg Bale,1810,Flour,Premium wheat flour Ndovu - 2kg Bale,/images/products/wheat-flour-ndovu-2kg-bale.jpg,50,Bale,Ndovu,2kg,1800,1
+158,WHEAT Flour Ndovu 1kg Bale,1760,Flour,Premium wheat flour Ndovu - 1kg Bale,/images/products/wheat-flour-ndovu-1kg-bale.jpg,60,Bale,Ndovu,1kg,1750,1
+159,WHEAT Flour Soko 2kg Bale,1810,Flour,Premium wheat flour Soko - 2kg Bale,/images/products/wheat-flour-soko-2kg-bale.jpg,50,Bale,Soko,2kg,1800,1
+160,WHEAT Flour Soko 1kg Bale,1760,Flour,Premium wheat flour Soko - 1kg Bale,/images/products/wheat-flour-soko-1kg-bale.jpg,60,Bale,Soko,1kg,1750,1
+161,MAIZE Flour Pembe 2kg Bale,1610,Flour,Pure maize flour Pembe - 2kg Bale,/images/products/maize-flour-pembe-2kg-bale.jpg,45,Bale,Pembe,2kg,1600,1
+162,MAIZE Flour Pembe 1kg Bale,1560,Flour,Pure maize flour Pembe - 1kg Bale,/images/products/maize-flour-pembe-1kg-bale.jpg,55,Bale,Pembe,1kg,1550,1
+163,MAIZE Flour Dola 2kg Bale,1610,Flour,Pure maize flour Dola - 2kg Bale,/images/products/maize-flour-dola-2kg-bale.jpg,45,Bale,Dola,2kg,1600,1
+164,MAIZE Flour Dola 1kg Bale,1560,Flour,Pure maize flour Dola - 1kg Bale,/images/products/maize-flour-dola-1kg-bale.jpg,55,Bale,Dola,1kg,1550,1
+165,MAIZE Flour Ndovu 2kg Bale,1610,Flour,Pure maize flour Ndovu - 2kg Bale,/images/products/maize-flour-ndovu-2kg-bale.jpg,45,Bale,Ndovu,2kg,1600,1
+166,MAIZE Flour Ndovu 1kg Bale,1560,Flour,Pure maize flour Ndovu - 1kg Bale,/images/products/maize-flour-ndovu-1kg-bale.jpg,55,Bale,Ndovu,1kg,1550,1
+167,MAIZE Flour Soko 2kg Bale,1610,Flour,Pure maize flour Soko - 2kg Bale,/images/products/maize-flour-soko-2kg-bale.jpg,45,Bale,Soko,2kg,1600,1
+168,MAIZE Flour Soko 1kg Bale,1560,Flour,Pure maize flour Soko - 1kg Bale,/images/products/maize-flour-soko-1kg-bale.jpg,55,Bale,Soko,1kg,1550,1

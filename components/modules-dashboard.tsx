@@ -10,6 +10,12 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
+// Animation variants for the arrow icon to keep motion consistent with card hover
+const arrowVariants = {
+  initial: { x: 0, opacity: 0.8, transition: { duration: 0 } }, // snap back instantly
+  hover: { x: 4, opacity: 1, transition: { type: 'spring' as const, stiffness: 340, damping: 16 } }
+}
+
 const modules = [
   {
     title: 'Point of Sale',
@@ -42,6 +48,7 @@ export function ModulesDashboard() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [hoveredCard, setHoveredCard] = useState<number | null>(null);
   const router = useRouter();
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -103,7 +110,7 @@ export function ModulesDashboard() {
               className="bg-slate-900 rounded-xl shadow-xl p-8 w-full max-w-sm text-center border border-slate-700"
             >
               <h3 className="text-lg font-semibold text-slate-100 mb-4">Logout?</h3>
-              <p className="text-slate-400 mb-6">Are you sure you want to logout? You will lose access to your organization and modules.</p>
+              <p className="text-slate-400 mb-6">Are you sure you want to logout?</p>
               <div className="flex gap-4 justify-center">
                 <button className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg font-semibold" onClick={handleLogout}>Yes, Logout</button>
                 <button className="bg-slate-700 hover:bg-slate-800 text-white px-5 py-2 rounded-lg font-semibold" onClick={() => setShowLeaveModal(false)}>Cancel</button>
@@ -182,6 +189,11 @@ export function ModulesDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl w-full place-items-center">
           {modules.map((module, index) => {
             const Icon = module.icon;
+            // Set shadow color based on module color
+            let shadowColor = 'rgba(66,133,244,0.10)'; // default blue
+            if (module.color === 'text-green-400') shadowColor = 'rgba(34,197,94,0.18)'; // green
+            if (module.color === 'text-purple-400') shadowColor = 'rgba(168,85,247,0.18)'; // purple
+
             return (
               <motion.div
                 key={index}
@@ -189,12 +201,14 @@ export function ModulesDashboard() {
                 whileHover={{
                   y: -6,
                   scale: 1.03,
-                  boxShadow: '0 4px 16px rgba(66,133,244,0.10)',
+                  boxShadow: `0 4px 24px ${shadowColor}`,
                   rotate: 0.2,
                   transition: { duration: 0.18, type: 'spring', stiffness: 250 }
                 }}
                 whileTap={{ scale: 0.98 }}
                 transition={{ type: 'spring', stiffness: 250 }}
+                onHoverStart={() => setHoveredCard(index)}
+                onHoverEnd={() => setHoveredCard(current => (current === index ? null : current))}
                 onClick={() => {
                   if (module.title === 'Point of Sale') {
                     router.push('/modules/pos');
@@ -221,7 +235,6 @@ export function ModulesDashboard() {
                   >
                     <Icon className={`w-12 h-12 ${module.color}`} />
                     <h3 className={`text-lg ${module.color} font-mono`}>{module.title}</h3>
-                    <ArrowRightCircle className="w-5 h-5 text-slate-600 group-hover:text-slate-400 transition-colors absolute bottom-4 right-4" />
                   </motion.div>
                 </Card>
               </motion.div>

@@ -317,13 +317,13 @@ export function WelcomePage() {
       )}
       {/* Logout button, top right below header */}
       {step !== 'onboarding' && (
-        <div className="absolute top-15 right-8 z-10">
+        <div className="absolute top-15 left-8 z-10">
           <button
             onClick={handleLogout}
             className="bg-red-600 hover:bg-red-700 text-white p-3 rounded-full shadow transition-colors flex items-center justify-center"
             title="Logout"
           >
-            <LogOut className="w-6 h-6" />
+            <LogOut className="w-6 h-6" style={{ transform: 'scaleX(-1)' }} />
           </button>
         </div>
       )}

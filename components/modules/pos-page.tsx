@@ -5,7 +5,7 @@ import { Card } from '../ui/card'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { ScrollArea } from '../ui/scroll-area'
-import { ScanBarcode, ShoppingCart, Trash2, Plus, ChevronDown, X, Search } from 'lucide-react'
+import { ScanBarcode, ShoppingCart, Trash2, Plus, ChevronDown, X, Search, Package } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 interface Product {
@@ -24,6 +24,7 @@ interface Order {
 }
 
 export function POSPage() {
+  const [headerCollapsed, setHeaderCollapsed] = useState(true);
   const [cart, setCart] = useState<Product[]>([])
   const [activeTab, setActiveTab] = useState<'register' | 'orders'>('register')
   const [showOrderModal, setShowOrderModal] = useState(false)
@@ -51,34 +52,41 @@ export function POSPage() {
   }
 
   return (
-  <div className="flex flex-col h-screen bg-slate-950 overflow-hidden">
+  <div className="flex flex-col h-[calc(100vh-2.5rem)] bg-slate-900 overflow-hidden">
       {/* Header */}
-  <div className="bg-slate-950">
+  <div className="bg-slate-900/40 backdrop-blur-sm">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-4">
-              <motion.button 
+            <div className="flex items-center space-x-2 px-1 py-1">
+              <button
                 type="button"
-                whileHover={{ scale: 1.05, backgroundColor: 'rgba(16,185,129,0.18)' }}
-                whileTap={{ scale: 0.97 }}
-                transition={{ type: 'spring', stiffness: 300 }}
-                className={`font-medium px-4 py-2 rounded-lg transition-colors ${activeTab === 'register' ? 'text-white bg-green-600' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
+                className={`px-4 py-1 font-semibold text-base rounded-md transition-colors duration-200 relative
+                  ${activeTab === 'register' ? 'text-green-500' : 'text-slate-200 hover:text-green-400'}`}
                 onClick={() => setActiveTab('register')}
               >
-                Register
-              </motion.button>
-              <motion.button 
+                <span className="relative">
+                  Register
+                  {activeTab === 'register' && (
+                    <span className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-green-400 via-green-200 to-green-400 rounded-full blur-sm animate-pulse"></span>
+                  )}
+                </span>
+              </button>
+              <button
                 type="button"
-                whileHover={{ scale: 1.05, backgroundColor: 'rgba(16,185,129,0.18)' }}
-                whileTap={{ scale: 0.97 }}
-                transition={{ type: 'spring', stiffness: 300 }}
-                className={`font-medium px-4 py-2 rounded-lg transition-colors ${activeTab === 'orders' ? 'text-white bg-green-600' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
+                className={`px-4 py-1 font-semibold text-base rounded-md transition-colors duration-200 relative
+                  ${activeTab === 'orders' ? 'text-green-500' : 'text-slate-200 hover:text-green-400'}`}
                 onClick={() => setActiveTab('orders')}
               >
-                Orders
-              </motion.button>
+                <span className="relative">
+                  Orders
+                  {activeTab === 'orders' && (
+                    <span className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-green-400 via-green-200 to-green-400 rounded-full blur-sm animate-pulse"></span>
+                  )}
+                </span>
+              </button>
             </div>
-            <div className="flex items-center space-x-2 ml-8">
+            {/* Collapsible header items */}
+            <div className={`flex items-center space-x-2 ml-8 ${headerCollapsed ? 'hidden' : ''}`}>
               <motion.button
                 whileHover={{ scale: 1.1, backgroundColor: 'rgba(251,191,36,0.18)' }}
                 whileTap={{ scale: 0.97 }}
@@ -97,7 +105,7 @@ export function POSPage() {
                 <ChevronDown className="w-4 h-4" />
               </Button>
             </div>
-            <div className="flex items-center space-x-1 ml-4">
+            <div className={`flex items-center space-x-1 ml-4 ${headerCollapsed ? 'hidden' : ''}`}> 
               {availableOrderNumbers.map((num) => (
                 <motion.button
                   key={num}
@@ -112,6 +120,14 @@ export function POSPage() {
                 </motion.button>
               ))}
             </div>
+            <button
+              type="button"
+              className="ml-2 p-2 rounded hover:bg-green-500/10 text-green-400"
+              aria-label="Toggle order header items"
+              onClick={() => setHeaderCollapsed(v => !v)}
+            >
+              <ShoppingCart className={`w-5 h-5 transition-transform ${headerCollapsed ? '' : 'rotate-90'}`} />
+            </button>
           </div>
           <div className="flex items-center space-x-4">
             <div className="relative">
@@ -195,12 +211,12 @@ export function POSPage() {
       )}
 
       {activeTab === 'register' ? (
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden min-h-0">
           {/* Left Side - Cart */}
-          <div className="w-1/3 border-r border-slate-800 bg-slate-900/50 backdrop-blur">
+          <div className="w-1/3  bg-slate-900/30 backdrop-blur-sm">
             <div className="h-full flex flex-col">
               {/* Cart Items */}
-              <div className="flex-1 p-6 overflow-y-auto">
+              <div className="flex-1 p-6 overflow-y-auto thin-scroll">
                 {cart.length === 0 ? (
                   <div className="flex items-center justify-center h-full text-slate-400">
                     <div className="text-center">
@@ -235,24 +251,16 @@ export function POSPage() {
 
               {/* Cart Total */}
               {cart.length > 0 && (
-                <div className="p-6 border-t border-slate-800 mt-auto">
-                  <div className="flex justify-between mb-4 text-white">
-                    <span>Subtotal</span>
-                    <span>${cart.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between mb-6 text-white">
-                    <span>Tax (10%)</span>
-                    <span>${(cart.reduce((sum, item) => sum + item.price * item.quantity, 0) * 0.1).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-lg font-semibold mb-6 text-white">
+                <div className="sticky bottom-0 p-6 border-t border-green-500/30 bg-slate-900/70 backdrop-blur">
+                  <div className="flex justify-between text-lg font-semibold mb-4 text-white">
                     <span>Total</span>
-                    <span>${(cart.reduce((sum, item) => sum + item.price * item.quantity, 0) * 1.1).toFixed(2)}</span>
+                    <span>KSh {cart.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2)}</span>
                   </div>
                   <motion.button
                     whileHover={{ scale: 1.05, backgroundColor: 'rgba(16,185,129,0.18)' }}
                     whileTap={{ scale: 0.97 }}
                     transition={{ type: 'spring', stiffness: 300 }}
-                    className="w-full bg-green-600 text-white font-semibold text-lg py-3 rounded-lg mt-4"
+                    className="w-full bg-green-600 text-white font-semibold text-lg py-3 rounded-lg"
                   >
                     Complete Order
                   </motion.button>
@@ -263,17 +271,17 @@ export function POSPage() {
 
           {/* Right Side - Product Grid */}
           <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
+            <div className="h-full overflow-y-auto thin-scroll">
               <div className="p-6">
-                <div className="grid grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
                   {/* Sample Products */}
                   {Array.from({ length: 12 }).map((_, i) => (
                     <motion.div
                       key={i}
-                      whileHover={{ scale: 1.04, backgroundColor: 'rgba(16,185,129,0.10)' }}
+                      whileHover={{ scale: 1.04 }}
                       whileTap={{ scale: 0.97 }}
-                      transition={{ type: 'spring', stiffness: 300 }}
-                      className="p-3 cursor-pointer bg-slate-900 border-slate-700 hover:bg-slate-800 transition-colors"
+                      transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+                      className="group relative rounded-xl overflow-hidden backdrop-blur-md bg-white/5 border border-white/10 hover:border-green-400/40 transition-all duration-300 shadow-[0_4px_18px_-4px_rgba(0,0,0,0.4)] hover:shadow-[0_6px_28px_-4px_rgba(16,185,129,0.45)] cursor-pointer"
                       onClick={() => {
                         const existingItem = cart.find(item => item.name === `Product ${i + 1}`)
                         if (existingItem) {
@@ -287,9 +295,14 @@ export function POSPage() {
                         }
                       }}
                     >
-                      <div className="aspect-square bg-slate-800 rounded-lg mb-2"></div>
-                      <div className="text-sm font-medium text-white">Product {i + 1}</div>
-                      <div className="text-sm text-green-400">$99.99</div>
+                      <div className="aspect-square w-full bg-gradient-to-br from-slate-800/60 to-slate-700/40 flex items-center justify-center">
+                        <Package className="w-16 h-16 text-slate-500 group-hover:scale-105 group-hover:text-green-300 transition-transform duration-300" />
+                      </div>
+                      <div className="p-3">
+                        <h4 className="text-slate-200 font-medium text-sm truncate group-hover:text-green-300 transition-colors">Product {i + 1}</h4>
+                        <p className="text-xs mt-1 text-green-400 font-semibold">KSh 99.99</p>
+                      </div>
+                      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-b from-transparent via-slate-900/10 to-slate-900/30" />
                     </motion.div>
                   ))}
                 </div>
@@ -299,11 +312,11 @@ export function POSPage() {
         </div>
       ) : (
         /* Orders View */
-        <div className="flex flex-1 overflow-hidden">
+  <div className="flex flex-1 overflow-hidden min-h-0">
           {/* Orders List */}
           <div className="flex-1 flex flex-col">
             {/* Orders Header */}
-            <div className="bg-slate-900 px-6 py-4">
+            <div className="bg-blue-900/40 backdrop-blur-sm px-6 py-4 border-b border-green-500/30">
               <div className="flex items-center justify-between">
                 <div className="relative flex-1 max-w-lg">
                   <Input 
@@ -326,9 +339,9 @@ export function POSPage() {
             </div>
 
             {/* Orders Content */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto thin-scroll">
               {sampleOrders.map((order) => (
-                <div key={order.id} className="flex items-center justify-between px-6 py-4 border-b border-slate-700 hover:bg-slate-800/50 cursor-pointer">
+                <div key={order.id} className="flex items-center justify-between px-6 py-4 border-b border-green-500/30 hover:bg-slate-800/50 cursor-pointer">
                   <div className="flex items-center space-x-6">
                     <div className="text-left">
                       <div className="text-slate-300 text-sm">{order.date}</div>
@@ -360,7 +373,7 @@ export function POSPage() {
           </div>
 
           {/* Right Side - Order Selection */}
-          <div className="w-1/3 border-l border-slate-800 bg-slate-900/50 backdrop-blur flex items-center justify-center">
+          <div className="w-1/3 border-l border-green-500/30 bg-blue-900/30 backdrop-blur-sm flex items-center justify-center">
             <div className="text-center text-slate-400">
               <ShoppingCart className="w-16 h-16 mx-auto mb-4 text-slate-600" />
               <p className="text-lg">Select an order or scan QR code</p>

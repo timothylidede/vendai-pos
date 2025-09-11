@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Package, AlertTriangle, TrendingUp, Plus, LayoutGrid, List } from "lucide-react"
 
 const inventory = [
@@ -48,7 +49,7 @@ const inventory = [
 const getStatusColor = (status: string) => {
   switch (status) {
     case "good":
-      return "text-green-400 bg-green-500/20 border-green-500/30"
+      return "text-blue-400 bg-blue-500/20 border-blue-500/30"
     case "low":
       return "text-orange-400 bg-orange-500/20 border-orange-500/30"
     case "out":
@@ -73,91 +74,23 @@ const getStatusIcon = (status: string) => {
 
 export function InventoryModule() {
   return (
-    <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="glass rounded-lg p-4 border border-green-500/30 bg-green-500/20">
-          <div className="flex items-center justify-between mb-2">
-            <Package className="w-5 h-5 text-green-400" />
-            <span className="text-2xl font-bold text-green-400">
-              {inventory.filter((item) => item.status === "good").length}
-            </span>
-          </div>
-          <div className="text-sm text-slate-200">Items in Stock</div>
-        </div>
-
-        <div className="glass rounded-lg p-4 border border-orange-500/30 bg-orange-500/20">
-          <div className="flex items-center justify-between mb-2">
-            <AlertTriangle className="w-5 h-5 text-orange-400" />
-            <span className="text-2xl font-bold text-orange-400">
-              {inventory.filter((item) => item.status === "low").length}
-            </span>
-          </div>
-          <div className="text-sm text-slate-200">Low Stock Items</div>
-        </div>
-
-        <div className="glass rounded-lg p-4 border border-red-500/30 bg-red-500/20">
-          <div className="flex items-center justify-between mb-2">
-            <AlertTriangle className="w-5 h-5 text-red-400" />
-            <span className="text-2xl font-bold text-red-400">
-              {inventory.filter((item) => item.status === "out").length}
-            </span>
-          </div>
-          <div className="text-sm text-slate-200">Out of Stock</div>
-        </div>
-      </div>
-
-      {/* Products Grid */}
-      <div className="glass rounded-lg p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-slate-200">Products</h3>
-          <div className="flex items-center space-x-3">
-            <button className="flex items-center space-x-2 px-4 py-2 bg-green-500/20 text-green-400 rounded-lg border border-green-500/30 hover:bg-green-500/30 transition-colors">
-              <Plus className="w-4 h-4" />
-              <span>New</span>
-            </button>
-            <div className="flex rounded overflow-hidden border border-slate-600/30">
-              <button className="px-3 py-2 bg-slate-700/50 text-slate-300">
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-              <button className="px-3 py-2 bg-slate-700/20 text-slate-300 border-l border-slate-600/30">
-                <List className="w-4 h-4" />
-              </button>
+    <div className="space-y-8">
+      <h3 className="text-lg font-semibold text-slate-200">Products</h3>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+        {inventory.map(item => (
+          <div
+            key={item.id}
+            className="group relative rounded-xl overflow-hidden backdrop-blur-md bg-white/5 border border-white/10 hover:border-blue-400/40 transition-all duration-300 shadow-[0_4px_18px_-4px_rgba(0,0,0,0.4)] hover:shadow-[0_6px_28px_-4px_rgba(30,64,175,0.45)] cursor-pointer"
+          >
+            <div className="aspect-square w-full bg-gradient-to-br from-slate-800/60 to-slate-700/40 flex items-center justify-center">
+              <Package className="w-16 h-16 text-slate-500 group-hover:scale-105 group-hover:text-blue-300 transition-transform duration-300" />
             </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {inventory.map((item) => (
-            <div 
-              key={item.id} 
-              className="border border-slate-700/40 rounded-lg bg-slate-800/20 p-4 hover:border-slate-600/60 transition-colors"
-            >
-              <div className="flex items-center space-x-4">
-                <div className="w-20 h-20 bg-slate-700/30 rounded flex items-center justify-center">
-                  <Package className="w-10 h-10 text-slate-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-slate-200 font-medium truncate">{item.name}</h4>
-                  <div className="text-xs text-slate-400 mt-1">[{item.sku}]</div>
-                  <div className="text-xs text-slate-400 mt-1">{item.variants} Variants</div>
-                  <div className="text-sm text-green-400 font-mono mt-2">KSh {item.price.toFixed(2)}</div>
-                </div>
-              </div>
-              
-              <div className="mt-4 flex items-center justify-between">
-                <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded text-xs border ${getStatusColor(item.status)}`}>
-                  {getStatusIcon(item.status)}
-                  <span className="capitalize">{item.status}</span>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-mono text-slate-200">{item.stock}</div>
-                  <div className="text-xs text-slate-400">On hand</div>
-                </div>
-              </div>
+            <div className="p-3">
+              <h4 className="text-slate-200 font-medium text-sm truncate group-hover:text-blue-300 transition-colors">{item.name}</h4>
             </div>
-          ))}
-        </div>
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-b from-transparent via-slate-900/10 to-slate-900/30" />
+          </div>
+        ))}
       </div>
     </div>
   )

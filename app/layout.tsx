@@ -23,42 +23,31 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           {/* Thin app header with logo and window controls */}
           <header className="fixed left-0 right-0 top-0 h-10 flex items-center justify-between px-3 border-b border-slate-800 bg-slate-900/60 backdrop-blur z-40">
             <div className="flex items-center space-x-3">
-              <Image 
-                src="/images/logo-icon.png" 
-                alt="VendAI"
-                width={24} 
-                height={24} 
-                className="rounded-sm transition-transform hover:rotate-180 duration-500" 
-              />
+              <a href="/modules" aria-label="Go to Modules Dashboard">
+                <Image 
+                  src="/images/logo-icon.png" 
+                  alt="VendAI"
+                  width={24} 
+                  height={24} 
+                  className="rounded-sm transition-transform hover:rotate-180 duration-500 cursor-pointer" 
+                />
+              </a>
             </div>
 
             <div className="flex items-center space-x-2">
-              {/* Minimal window controls: white icons, no background, ordered minimize, restore, close */}
+              {/* Window controls */}
               <button 
                 aria-label="minimize" 
-                className="w-5 h-5 flex items-center justify-center transition-colors mr-1 rounded-sm"
-              >
-                <svg width="14" height="14" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="3" y="6" width="6" height="1.5" fill="#fff" />
-                </svg>
-              </button>
+                className="w-3 h-3 rounded-full bg-slate-700 hover:bg-slate-600 transition-colors" 
+              />
               <button 
-                aria-label="restore" 
-                className="w-5 h-5 flex items-center justify-center transition-colors mr-1 rounded-sm"
-              >
-                <svg width="14" height="14" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="3" y="3" width="6" height="6" stroke="#fff" strokeWidth="1.5" rx="0.5"/>
-                </svg>
-              </button>
+                aria-label="maximize" 
+                className="w-3 h-3 rounded-full bg-slate-700 hover:bg-slate-600 transition-colors" 
+              />
               <button 
                 aria-label="close" 
-                className="w-5 h-5 flex items-center justify-center transition-colors rounded-sm"
-              >
-                <svg width="14" height="14" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <line x1="3" y1="3" x2="9" y2="9" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
-                  <line x1="9" y1="3" x2="3" y2="9" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </button>
+                className="w-3 h-3 rounded-full bg-red-600 hover:bg-red-500 transition-colors" 
+              />
             </div>
           </header>
 

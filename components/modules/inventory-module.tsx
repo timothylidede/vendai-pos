@@ -1,7 +1,9 @@
 "use client"
 
-import { useState } from "react"
-import { Package, AlertTriangle, TrendingUp, Plus, LayoutGrid, List, Upload, FileText, PlusCircle, Download, Check } from "lucide-react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { Package, AlertTriangle, TrendingUp, Plus, LayoutGrid, List, Upload, FileText, PlusCircle, Download, Check, ArrowLeft } from "lucide-react"
+import { motion } from "framer-motion"
 import { AIProcessingModal } from "../ai-processing-modal"
 
 interface ProcessingStep {
@@ -90,6 +92,25 @@ export function InventoryModule() {
   const [currentStep, setCurrentStep] = useState<string>('')
   const [processingError, setProcessingError] = useState<string>('')
   const [processedProducts, setProcessedProducts] = useState<any[]>([])
+  const [isEntering, setIsEntering] = useState(true)
+  const [isExiting, setIsExiting] = useState(false)
+  const router = useRouter()
+
+  // Handle entrance animation
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsEntering(false)
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const handleBackClick = () => {
+    if (isExiting) return
+    setIsExiting(true)
+    setTimeout(() => {
+      router.push('/modules')
+    }, 200)
+  }
 
   const initializeProcessingSteps = (): ProcessingStep[] => [
     {
@@ -279,7 +300,15 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
   }
 
   return (
-    <div className="space-y-8">
+    <motion.div 
+      className="flex flex-col h-[calc(100vh-2.5rem)] bg-slate-900 overflow-hidden"
+      initial={{ x: 0, y: -300, rotate: 0, opacity: 0 }}
+      animate={isExiting 
+        ? { x: 0, y: -300, rotate: 0, opacity: 0 }
+        : { x: 0, y: 0, rotate: 0, opacity: 1 }
+      }
+      transition={{ duration: 0.15, ease: [0.4, 0.0, 0.2, 1] }}
+    >
       {/* AI Processing Modal */}
       <AIProcessingModal
         isOpen={isProcessingModalOpen}
@@ -290,45 +319,59 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
         onRetry={handleRetryProcessing}
       />
 
-      {/* Tab Navigation */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2 p-1 backdrop-blur-md bg-gradient-to-r from-white/[0.08] to-white/[0.04] border border-white/[0.08] rounded-xl shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)]">
-          <button
-            type="button"
-            className={`px-4 py-2 font-semibold text-base rounded-lg transition-all duration-300 relative
-              ${activeTab === 'products' 
-                ? 'text-blue-400 backdrop-blur-md bg-gradient-to-r from-blue-500/[0.15] to-blue-500/[0.08] border border-blue-500/30 shadow-[0_4px_16px_-8px_rgba(59,130,246,0.3)]' 
-                : 'text-slate-200 hover:text-blue-400 hover:bg-white/[0.05] backdrop-blur-sm'}`}
-            onClick={() => setActiveTab('products')}
-          >
-            <span className="relative">
-              Products
-              {activeTab === 'products' && (
-                <span className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-blue-400 via-blue-200 to-blue-400 rounded-full blur-sm animate-pulse"></span>
-              )}
-            </span>
-          </button>
-          <button
-            type="button"
-            className={`px-4 py-2 font-semibold text-base rounded-lg transition-all duration-300 relative
-              ${activeTab === 'new' 
-                ? 'text-blue-400 backdrop-blur-md bg-gradient-to-r from-blue-500/[0.15] to-blue-500/[0.08] border border-blue-500/30 shadow-[0_4px_16px_-8px_rgba(59,130,246,0.3)]' 
-                : 'text-slate-200 hover:text-blue-400 hover:bg-white/[0.05] backdrop-blur-sm'}`}
-            onClick={() => setActiveTab('new')}
-          >
-            <span className="relative">
-              New
-              {activeTab === 'new' && (
-                <span className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-blue-400 via-blue-200 to-blue-400 rounded-full blur-sm animate-pulse"></span>
-              )}
-            </span>
-          </button>
+  {/* Header */}
+  <div className="bg-slate-900/40 backdrop-blur-sm">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center space-x-4">
+            {/* Back Button */}
+            <button 
+              onClick={handleBackClick}
+              className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.03] via-transparent to-blue-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+              <ArrowLeft className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
+            </button>
+            
+            <div className="flex items-center space-x-2 p-1 backdrop-blur-md bg-gradient-to-r from-white/[0.08] to-white/[0.04] border border-white/[0.08] rounded-xl shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)]">
+              <button
+                type="button"
+                className={`px-4 py-2 font-semibold text-base rounded-lg transition-all duration-300 relative
+                  ${activeTab === 'products' 
+                    ? 'text-blue-400 backdrop-blur-md bg-gradient-to-r from-blue-500/[0.15] to-blue-500/[0.08] border border-blue-500/30 shadow-[0_4px_16px_-8px_rgba(59,130,246,0.3)]' 
+                    : 'text-slate-200 hover:text-blue-400 hover:bg-white/[0.05] backdrop-blur-sm'}`}
+                onClick={() => setActiveTab('products')}
+              >
+                <span className="relative">
+                  Products
+                  {activeTab === 'products' && (
+                    <span className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-blue-400 via-blue-200 to-blue-400 rounded-full blur-sm animate-pulse"></span>
+                  )}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`px-4 py-2 font-semibold text-base rounded-lg transition-all duration-300 relative
+                  ${activeTab === 'new' 
+                    ? 'text-blue-400 backdrop-blur-md bg-gradient-to-r from-blue-500/[0.15] to-blue-500/[0.08] border border-blue-500/30 shadow-[0_4px_16px_-8px_rgba(59,130,246,0.3)]' 
+                    : 'text-slate-200 hover:text-blue-400 hover:bg-white/[0.05] backdrop-blur-sm'}`}
+                onClick={() => setActiveTab('new')}
+              >
+                <span className="relative">
+                  New
+                  {activeTab === 'new' && (
+                    <span className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-blue-400 via-blue-200 to-blue-400 rounded-full blur-sm animate-pulse"></span>
+                  )}
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Tab Content */}
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto">
       {activeTab === 'products' ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 p-4">
           {inventory.map(item => (
             <div
               key={item.id}
@@ -368,7 +411,7 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
         </div>
       ) : (
         /* New Product Options */
-        <div className="space-y-8">
+        <div className="space-y-8 p-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Upload Document Option */}
             <div className="group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] hover:border-white/[0.15] transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_48px_-12px_rgba(59,130,246,0.15)] cursor-pointer">
@@ -524,6 +567,7 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
           )}
         </div>
       )}
-    </div>
+      </div>
+    </motion.div>
   )
 }

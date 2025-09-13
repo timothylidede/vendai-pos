@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { ScrollArea } from '../ui/scroll-area'
-import { ScanBarcode, ShoppingCart, Trash2, Plus, ChevronDown, X, Search, Package } from 'lucide-react'
+import { ScanBarcode, ShoppingCart, Trash2, Plus, ChevronDown, X, Search, Package, ArrowLeft } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 interface Product {
@@ -29,6 +30,9 @@ export function POSPage() {
   const [activeTab, setActiveTab] = useState<'register' | 'orders'>('register')
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState('045')
+  const [isEntering, setIsEntering] = useState(true)
+  const [isExiting, setIsExiting] = useState(false)
+  const router = useRouter()
 
   const sampleOrders: Order[] = [
     { id: '004', number: '2504-001-00004', date: '09/04/2025', time: '11:55', amount: '0.00 KSh', status: 'Ongoing' },
@@ -51,12 +55,45 @@ export function POSPage() {
     // Here you would typically add logic to create a new order
   }
 
+  // Handle entrance animation
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsEntering(false)
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const handleBackClick = () => {
+    if (isExiting) return
+    setIsExiting(true)
+    setTimeout(() => {
+      router.push('/modules')
+    }, 200)
+  }
+
   return (
-  <div className="flex flex-col h-[calc(100vh-2.5rem)] bg-slate-900 overflow-hidden">
+    <motion.div 
+      className="flex flex-col h-[calc(100vh-2.5rem)] bg-slate-900 overflow-hidden"
+      initial={{ x: 0, y: -300, rotate: 0, opacity: 0 }}
+      animate={isExiting 
+        ? { x: 0, y: -300, rotate: 0, opacity: 0 }
+        : { x: 0, y: 0, rotate: 0, opacity: 1 }
+      }
+      transition={{ duration: 0.15, ease: [0.4, 0.0, 0.2, 1] }}
+    >
       {/* Header */}
   <div className="bg-slate-900/40 backdrop-blur-sm">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center space-x-4">
+            {/* Back Button */}
+            <button 
+              onClick={handleBackClick}
+              className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-green-500/[0.03] via-transparent to-green-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+              <ArrowLeft className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
+            </button>
+            
             <div className="flex items-center space-x-2 p-1 backdrop-blur-md bg-gradient-to-r from-white/[0.08] to-white/[0.04] border border-white/[0.08] rounded-xl shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)]">
               <button
                 type="button"
@@ -453,6 +490,6 @@ export function POSPage() {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from './ui/card'
 import { 
@@ -49,6 +49,9 @@ const modules = [
 export function ModulesDashboard() {
   const [showChatbot, setShowChatbot] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
+  const [clickedModule, setClickedModule] = useState<string | null>(null);
+  const [isEntering, setIsEntering] = useState(true);
   const router = useRouter();
   
   const toggleBot = useCallback(() => {
@@ -57,8 +60,87 @@ export function ModulesDashboard() {
     setTimeout(() => setIsSpinning(false), 2000);
   }, []);
 
+  // Handle entrance animation
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsEntering(false);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleModuleClick = useCallback((moduleTitle: string) => {
+    if (isExiting) return; // Prevent multiple clicks during animation
+    
+    setClickedModule(moduleTitle);
+    setIsExiting(true);
+    
+    // Navigate after animation completes
+    setTimeout(() => {
+      if (moduleTitle === 'Point of Sale') {
+        router.push('/modules/pos');
+      } else if (moduleTitle === 'Inventory') {
+        router.push('/modules/inventory');
+      } else if (moduleTitle === 'Suppliers') {
+        router.push('/modules/suppliers');
+      }
+    }, 200); // Wait for exit animation to complete
+  }, [isExiting, router]);
+
+  // Create exit variants for each module based on position
+  const getExitVariant = (index: number, isClicked: boolean) => {
+    if (!isExiting) return {};
+    
+    if (isClicked) {
+      // Clicked module scales up and fades
+      return {
+        scale: 1.05,
+        opacity: 0,
+        transition: { duration: 0.12, ease: [0.4, 0.0, 0.2, 1] as any }
+      };
+    }
+    
+    // Other modules exit in different directions based on position
+    const exitVariants = [
+      // Module 0 (POS - left position) - exit up
+      { x: 0, y: -300, rotate: 0, opacity: 0 },
+      // Module 1 (Inventory - center position) - exit up  
+      { x: 0, y: -300, rotate: 0, opacity: 0 },
+      // Module 2 (Suppliers - right position) - exit up
+      { x: 0, y: -300, rotate: 0, opacity: 0 }
+    ];
+    
+    return {
+      ...exitVariants[index],
+      transition: { duration: 0.15, ease: [0.4, 0.0, 0.2, 1] as any, delay: 0.02 }
+    };
+  };
+
   return (
-    <div className="flex-1 p-6 relative min-h-screen overflow-hidden">
+    <motion.div 
+      className="flex flex-col h-[calc(100vh-2.5rem)] p-6 relative overflow-hidden"
+      initial={{
+        opacity: 0,
+        y: isEntering ? -300 : 0
+      }}
+      animate={{
+        opacity: 1,
+        y: 0
+      }}
+      transition={{
+        duration: 0.15,
+        ease: [0.4, 0.0, 0.2, 1] as any
+      }}
+    >
+      {/* Exit Overlay */}
+      {isExiting && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm z-10"
+          transition={{ duration: 0.3 }}
+        />
+      )}
+      
       {/* Header */}
       <div className="flex justify-end mb-12">
         <div className="flex items-center space-x-4">
@@ -82,27 +164,34 @@ export function ModulesDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 max-w-6xl w-full place-items-center">
           {modules.map((module, index) => {
             const Icon = module.icon
+            const isClicked = clickedModule === module.title;
+            
             return (
               <motion.div
                 key={index}
                 className="w-full min-w-[320px] max-w-sm h-[240px]"
-                whileHover={{ 
+                initial={{ opacity: 1, scale: 1, x: 0, y: 0, rotate: 0 }}
+                animate={getExitVariant(index, isClicked)}
+                whileHover={!isExiting ? { 
                   y: -12,
                   scale: 1.02,
                   transition: { duration: 0.3, ease: "easeOut" }
-                }}
-                onClick={() => {
-                  if (module.title === 'Point of Sale') {
-                    router.push('/modules/pos')
-                  } else if (module.title === 'Inventory') {
-                    router.push('/modules/inventory')
-                  } else if (module.title === 'Suppliers') {
-                    router.push('/modules/suppliers')
-                  }
-                }}
+                } : {}}
+                onClick={() => handleModuleClick(module.title)}
+                style={{ pointerEvents: isExiting ? 'none' : 'auto' }}
               >
                 <div 
-                  className={`group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] ${module.hoverBorderColor} transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] ${module.shadowColor} cursor-pointer h-full`}
+                  className={`group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] ${module.hoverBorderColor} transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] ${module.shadowColor} cursor-pointer h-full ${
+                    isClicked ? 'ring-2 ring-offset-2 ring-offset-slate-900 ' + (
+                      module.color === 'text-green-400' ? 'ring-green-400/50' :
+                      module.color === 'text-blue-400' ? 'ring-blue-400/50' : 
+                      'ring-purple-400/50'
+                    ) + ' shadow-2xl ' + (
+                      module.color === 'text-green-400' ? 'shadow-green-400/25' :
+                      module.color === 'text-blue-400' ? 'shadow-blue-400/25' :
+                      'shadow-purple-400/25'
+                    ) : ''
+                  }`}
                 >
                   {/* Glassmorphic background overlay */}
                   <div className={`absolute inset-0 bg-gradient-to-br ${module.bgGradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
@@ -150,6 +239,6 @@ export function ModulesDashboard() {
           })}
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }

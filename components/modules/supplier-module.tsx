@@ -154,54 +154,10 @@ export function SupplierModule() {
     .reduce((sum, inv) => sum + inv.total, 0)
 
   return (
-    <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="glass rounded-lg p-4 border border-blue-500/30 bg-blue-500/20">
-          <div className="flex items-center justify-between mb-2">
-            <Package className="w-5 h-5 text-blue-400" />
-            <span className="text-2xl font-bold text-blue-400">{suppliers.length}</span>
-          </div>
-          <div className="text-sm text-slate-200">Active Suppliers</div>
-          <div className="text-xs text-slate-400 mt-1">Managing {suppliers.reduce((sum, sup) => sum + sup.products.length, 0)} products</div>
-        </Card>
+    <div className="">
 
-        <Card className="glass rounded-lg p-4 border border-green-500/30 bg-green-500/20">
-          <div className="flex items-center justify-between mb-2">
-            <DollarSign className="w-5 h-5 text-green-400" />
-            <span className="text-2xl font-bold text-green-400">
-              {totalPayable.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="text-sm text-slate-200">Total Payable</div>
-          <div className="text-xs text-slate-400 mt-1">{invoices.filter(inv => inv.paymentStatus !== 'paid').length} unpaid invoices</div>
-        </Card>
-
-        <Card className="glass rounded-lg p-4 border border-red-500/30 bg-red-500/20">
-          <div className="flex items-center justify-between mb-2">
-            <AlertCircle className="w-5 h-5 text-red-400" />
-            <span className="text-2xl font-bold text-red-400">
-              {overdueAmount.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="text-sm text-slate-200">Overdue Amount</div>
-          <div className="text-xs text-slate-400 mt-1">{invoices.filter(inv => inv.status === 'overdue').length} overdue invoices</div>
-        </Card>
-
-        <Card className="glass rounded-lg p-4 border border-purple-500/30 bg-purple-500/20">
-          <div className="flex items-center justify-between mb-2">
-            <Wallet className="w-5 h-5 text-purple-400" />
-            <span className="text-2xl font-bold text-purple-400">
-              {suppliers.reduce((sum, sup) => sum + sup.creditLimit, 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="text-sm text-slate-200">Total Credit Limit</div>
-          <div className="text-xs text-slate-400 mt-1">{suppliers.filter(sup => sup.currentCredit > 0).length} suppliers using credit</div>
-        </Card>
-      </div>
-
-      {/* Main Content */}
-      <Card className="glass rounded-lg p-6">
+  {/* Main Content */}
+  
         <Tabs value={activeView} onValueChange={setActiveView}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <TabsList className="bg-slate-800/50">
@@ -368,7 +324,7 @@ export function SupplierModule() {
             </div>
           </TabsContent>
         </Tabs>
-      </Card>
+      
 
       {/* Invoice Creation Dialog */}
       <Dialog open={showInvoiceDialog} onOpenChange={setShowInvoiceDialog}>

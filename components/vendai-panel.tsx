@@ -94,12 +94,9 @@ export function VendaiPanel() {
     <>
       {/* Vendai Logo Button (styled like ModulesDashboard) */}
       <button
-        ref={btnRef}
-        onMouseEnter={() => setIsSpinning(true)}
-        onMouseLeave={() => setIsSpinning(false)}
         onClick={handleToggle}
         style={{ touchAction: 'manipulation' }}
-        className={`${styles.toggleButton} fixed bottom-6 right-6 z-[9999] p-4 rounded-full bg-slate-800 shadow-2xl border-2 border-slate-600 hover:bg-slate-700 transform hover:scale-110 active:scale-95 focus:outline-none`}
+        className={`${styles.toggleButton} fixed bottom-6 right-6 z-[9999] p-4 rounded-full bg-slate-800 shadow-2xl border-2 border-slate-600 hover:bg-slate-700 transform hover:scale-110 active:scale-95 focus:outline-none ${isSpinning ? 'animate-spin-continuous' : ''}`}
         data-expanded={isExpanded}
         aria-label="Open Vendai Assistant"
       >
@@ -108,7 +105,7 @@ export function VendaiPanel() {
           alt="Vendai Logo"
           width={40}
           height={40}
-          className={`w-10 h-10 object-contain ${isSpinning ? styles['animate-spin-continuous'] : ''}`}
+          className="w-10 h-10 object-contain"
         />
       </button>
 

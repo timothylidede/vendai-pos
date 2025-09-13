@@ -212,3 +212,71 @@
 .thin-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(15, 23, 42, 0.9);
 }
+
+/* Cyclic wheel effects */
+.cyclic-wheel {
+  position: relative;
+  overflow: hidden;
+}
+
+.cyclic-wheel::before,
+.cyclic-wheel::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 80px;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.cyclic-wheel::before {
+  top: 0;
+  background: linear-gradient(to bottom, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.7) 50%, transparent 100%);
+}
+
+.cyclic-wheel::after {
+  bottom: 0;
+  background: linear-gradient(to top, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.7) 50%, transparent 100%);
+}
+
+/* Smooth scroll snap behavior */
+.wheel-scroll {
+  scroll-behavior: smooth;
+  scroll-snap-type: y mandatory;
+}
+
+.wheel-item {
+  scroll-snap-align: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* iOS-like picker wheel effect */
+.picker-wheel {
+  perspective: 1000px;
+  transform-style: preserve-3d;
+}
+
+.picker-item {
+  transform-origin: center;
+  backface-visibility: hidden;
+}
+
+.picker-item:not(.selected) {
+  opacity: 0.6;
+  transform: scale(0.9);
+}
+
+/* Shimmer animation for glassmorphic effects */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%) skewX(-12deg);
+  }
+  100% {
+    transform: translateX(200%) skewX(-12deg);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 3s infinite;
+}

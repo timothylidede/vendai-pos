@@ -88,6 +88,72 @@ const suppliers: Supplier[] = [
       }
     ],
     accountBalance: -45000
+  },
+  {
+    id: "SUP002",
+    name: "Sam West Distributors",
+    contact: {
+      phone: "+254 733 456 789",
+      email: "sales@samwest.co.ke",
+      address: "Industrial Area, Nairobi"
+    },
+    paymentTerms: "Net 14",
+    creditLimit: 750000,
+    currentCredit: 32000,
+    status: "active",
+    products: [
+      {
+        id: "PRD007",
+        name: "Maize Flour 2kg",
+        sku: "SW-MAI-007",
+        unitPrice: 165,
+        category: "Flour",
+        minOrderQuantity: 20,
+        leadTime: "1-2 days",
+        inStock: true
+      },
+      {
+        id: "PRD008", 
+        name: "White Sugar 1kg",
+        sku: "SW-SUG-008",
+        unitPrice: 125,
+        category: "Sweeteners",
+        minOrderQuantity: 25,
+        leadTime: "Same day",
+        inStock: true
+      },
+      {
+        id: "PRD009",
+        name: "Cooking Fat 1kg",
+        sku: "SW-FAT-009", 
+        unitPrice: 285,
+        category: "Oils & Fats",
+        minOrderQuantity: 15,
+        leadTime: "1-2 days",
+        inStock: true
+      },
+      {
+        id: "PRD010",
+        name: "Black Tea 250g",
+        sku: "SW-TEA-010",
+        unitPrice: 195,
+        category: "Beverages",
+        minOrderQuantity: 12,
+        leadTime: "2-3 days", 
+        inStock: true
+      },
+      {
+        id: "PRD011",
+        name: "Salt 500g",
+        sku: "SW-SAL-011",
+        unitPrice: 45,
+        category: "Seasonings",
+        minOrderQuantity: 30,
+        leadTime: "Same day",
+        inStock: true
+      }
+    ],
+    accountBalance: -32000
   }
 ]
 
@@ -197,6 +263,7 @@ export function SupplierModule() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false)
   const [showSupplierDetails, setShowSupplierDetails] = useState(false)
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   const [isEntering, setIsEntering] = useState(true)
   const [isExiting, setIsExiting] = useState(false)
   const router = useRouter()
@@ -318,63 +385,148 @@ export function SupplierModule() {
         {activeView === 'suppliers' ? (
           !showSupplierDetails ? (
             // Suppliers List View
-            <div className="flex items-center justify-center min-h-[400px]">
-              <div 
-                onClick={() => setShowSupplierDetails(true)}
-                className="group relative w-96 h-72 cursor-pointer transform transition-all duration-500 hover:scale-105 hover:-translate-y-2"
-              >
-                {/* Animated Background */}
-                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.15] via-purple-400/[0.08] to-purple-600/[0.12] rounded-2xl blur-xl group-hover:blur-2xl transition-all duration-500 opacity-75 group-hover:opacity-100 animate-pulse"></div>
-                
-                {/* Main Card */}
-                <div className="relative bg-gradient-to-br from-slate-800/90 to-slate-900/90 backdrop-blur-xl border border-purple-500/20 rounded-2xl p-8 shadow-2xl group-hover:shadow-purple-500/25 transition-all duration-500">
-                  {/* Logo */}
-                  <div className="flex justify-center mb-6">
-                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-400/20 to-purple-600/20 border border-purple-400/30 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <img 
-                        src="/images/mahitaji-logo.png" 
-                        alt="Mahitaji Logo" 
-                        className="w-12 h-12 object-contain"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          target.parentElement!.innerHTML = '<div class="text-2xl font-bold text-purple-400">M</div>';
-                        }}
-                      />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
+              {suppliers.map((supplier, index) => (
+                <div 
+                  key={supplier.id}
+                  onClick={() => {
+                    setSelectedSupplier(supplier)
+                    setShowSupplierDetails(true)
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`View details for ${supplier.name}`}
+                  className="group relative cursor-pointer transform transition-all duration-500 hover:scale-[1.02] hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 rounded-3xl"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setSelectedSupplier(supplier)
+                      setShowSupplierDetails(true)
+                    }
+                  }}
+                >
+                  {/* Glassmorphic Card */}
+                  <div className="relative h-80 rounded-3xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-white/[0.02] backdrop-blur-xl border border-white/[0.15] shadow-2xl group-hover:shadow-purple-500/20 transition-all duration-500 p-6 overflow-hidden">
+                    
+                    {/* Floating background orbs for depth */}
+                    <div className="absolute -top-10 -right-10 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-400/15 transition-colors duration-700"></div>
+                    <div className="absolute -bottom-10 -left-10 w-24 h-24 bg-indigo-500/8 rounded-full blur-xl group-hover:bg-indigo-400/12 transition-colors duration-700"></div>
+                    
+                    {/* Header Section */}
+                    <div className="relative z-10 flex items-start justify-between mb-6">
+                      <div className="flex items-center space-x-4">
+                        {/* Bigger Logo - No Border */}
+                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500/10 to-indigo-500/10 backdrop-blur-sm flex items-center justify-center group-hover:scale-105 transition-all duration-300 shadow-lg">
+                          <img 
+                            src={supplier.name === "Mahitaji Enterprises Ltd" ? "/images/mahitaji-logo.png" : "/images/sam-west-logo.png"}
+                            alt={`${supplier.name} Logo`} 
+                            className="w-14 h-14 object-contain filter drop-shadow-lg"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              target.parentElement!.innerHTML = `<div class="text-2xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">${supplier.name.charAt(0)}</div>`;
+                            }}
+                          />
+                        </div>
+                        
+                        {/* Company Info */}
+                        <div className="flex-1">
+                          <h3 className="text-xl font-bold text-white mb-1 group-hover:text-purple-200 transition-colors duration-300 leading-tight">
+                            {supplier.name}
+                          </h3>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                            <span className="text-emerald-400 text-sm font-medium">Verified Partner</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Gold Verification Icon */}
+                      <div className="group/verify relative flex-shrink-0">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400/20 to-amber-500/20 backdrop-blur-sm flex items-center justify-center group-hover/verify:rotate-12 group-hover:animate-spin transition-all duration-500 shadow-lg">
+                          <svg className="w-6 h-6 text-yellow-400 filter drop-shadow-sm" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18l-1.45-1.32C5.4 13.36 2 9.28 2 5.5 2 3.42 3.42 2 5.5 2c1.74 0 3.41.81 4.5 2.09C11.09 2.81 12.76 2 14.5 2 16.58 2 18 3.42 18 5.5c0 3.78-3.4 7.86-6.55 11.18L10 18z" />
+                          </svg>
+                        </div>
+                        
+                        {/* Verified Tooltip */}
+                        <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-yellow-500/95 to-amber-500/95 backdrop-blur-sm text-white px-3 py-2 rounded-xl text-xs font-medium opacity-0 group-hover/verify:opacity-100 transition-all duration-300 pointer-events-none whitespace-nowrap z-20 shadow-lg">
+                          Verified Supplier
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-yellow-500/95"></div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  
-                  {/* Company Info */}
-                  <div className="text-center mb-6">
-                    <h3 className="text-xl font-bold text-white mb-2 group-hover:text-purple-200 transition-colors duration-300">
-                      {suppliers[0].name}
-                    </h3>
-                    <p className="text-slate-300 text-sm leading-relaxed">
-                      {suppliers[0].contact.address}
-                    </p>
-                  </div>
-                  
-                  {/* Status & Stats */}
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                      <span className="text-green-400 text-sm font-medium">Active</span>
+                    
+                    {/* Key Metrics Grid */}
+                    <div className="relative z-10 grid grid-cols-2 gap-4 mb-6">
+                      <div className="bg-white/5 backdrop-blur-sm rounded-xl p-3 border border-white/10">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-slate-300 text-xs font-medium">Products</span>
+                          <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
+                        </div>
+                        <div className="text-white text-xl font-bold">{supplier.products.length}</div>
+                        <div className="text-purple-400 text-xs">items available</div>
+                      </div>
+                      
+                      <div className="bg-white/5 backdrop-blur-sm rounded-xl p-3 border border-white/10">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-slate-300 text-xs font-medium">Credit Usage</span>
+                          <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                        </div>
+                        <div className="text-white text-sm font-bold">
+                          {Math.round((supplier.currentCredit / supplier.creditLimit) * 100)}%
+                        </div>
+                        <div className="w-full bg-slate-700/50 rounded-full h-1.5 mt-1">
+                          <div 
+                            className="h-1.5 rounded-full bg-gradient-to-r from-orange-500 to-red-500 transition-all duration-500"
+                            style={{ width: `${(supplier.currentCredit / supplier.creditLimit) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-slate-400 text-xs">Products</div>
-                      <div className="text-purple-400 font-bold text-lg">{suppliers[0].products.length}</div>
+                    
+                    {/* Payment Terms & Contact */}
+                    <div className="relative z-10 space-y-3 mb-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 text-sm">Payment Terms</span>
+                        <span className="text-white text-sm font-medium px-2 py-1 bg-white/10 rounded-lg backdrop-blur-sm">
+                          {supplier.paymentTerms}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2 text-slate-300 text-sm">
+                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span className="truncate">{supplier.contact.address.split(',')[0]}</span>
+                      </div>
                     </div>
+                    
+                    {/* Account Status */}
+                    <div className="relative z-10 flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <div className={`w-3 h-3 rounded-full ${supplier.accountBalance < 0 ? 'bg-red-400 animate-pulse' : 'bg-green-400'}`}></div>
+                        <span className={`text-sm font-medium ${supplier.accountBalance < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                          {supplier.accountBalance < 0 ? 'Outstanding Balance' : 'Good Standing'}
+                        </span>
+                      </div>
+                      
+                      <div className="text-right">
+                        <div className="text-slate-400 text-xs">Balance</div>
+                        <div className={`font-bold text-sm ${supplier.accountBalance < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                          KSh {Math.abs(supplier.accountBalance).toLocaleString('en-KE', { minimumFractionDigits: 0 })}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Subtle hover glow effect */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-transparent to-indigo-500/5 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                   </div>
-                  
-                  {/* Hover Effect */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.03] to-purple-600/[0.05] rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                  
-                  {/* Animated Border */}
-                  <div className="absolute inset-0 rounded-2xl border border-transparent bg-gradient-to-r from-purple-400/20 via-purple-500/10 to-purple-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)', maskComposite: 'xor', WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)', WebkitMaskComposite: 'xor'}}></div>
                 </div>
-              </div>
+              ))}
             </div>
-          ) : (
+          ) : selectedSupplier ? (
             // Supplier Details View
             <div className="flex gap-6 h-full">
               {/* Left Panel - Supplier Details */}
@@ -394,18 +546,18 @@ export function SupplierModule() {
                     <div className="flex items-center space-x-4 mb-6">
                       <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-400/20 to-purple-600/20 border border-purple-400/30 flex items-center justify-center">
                         <img 
-                          src="/images/mahitaji-logo.png" 
-                          alt="Mahitaji Logo" 
+                          src={selectedSupplier.name === "Mahitaji Enterprises Ltd" ? "/images/mahitaji-logo.png" : "/images/sam-west-logo.png"}
+                          alt={`${selectedSupplier.name} Logo`} 
                           className="w-10 h-10 object-contain"
                           onError={(e) => {
                             const target = e.target as HTMLImageElement;
                             target.style.display = 'none';
-                            target.parentElement!.innerHTML = '<div class="text-lg font-bold text-purple-400">M</div>';
+                            target.parentElement!.innerHTML = `<div class="text-lg font-bold text-purple-400">${selectedSupplier.name.charAt(0)}</div>`;
                           }}
                         />
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-white">{suppliers[0].name}</h3>
+                        <h3 className="text-lg font-semibold text-white">{selectedSupplier.name}</h3>
                         <div className="flex items-center space-x-2 mt-1">
                           <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                           <span className="text-green-400 text-sm">Active</span>
@@ -419,11 +571,11 @@ export function SupplierModule() {
                         <div className="space-y-2 text-sm text-slate-300">
                           <div className="flex items-center space-x-2">
                             <span className="text-slate-500">📧</span>
-                            <span>{suppliers[0].contact.email}</span>
+                            <span>{selectedSupplier.contact.email}</span>
                           </div>
                           <div className="flex items-center space-x-2">
                             <span className="text-slate-500">📞</span>
-                            <span>{suppliers[0].contact.phone}</span>
+                            <span>{selectedSupplier.contact.phone}</span>
                           </div>
                           <div className="flex items-center space-x-2">
                             <span className="text-slate-500">📍</span>
@@ -437,25 +589,25 @@ export function SupplierModule() {
                         <div className="space-y-3">
                           <div className="flex justify-between">
                             <span className="text-slate-400">Payment Terms</span>
-                            <span className="text-white font-medium">{suppliers[0].paymentTerms}</span>
+                            <span className="text-white font-medium">{selectedSupplier.paymentTerms}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-400">Credit Limit</span>
                             <span className="text-white font-mono">
-                              KSh {suppliers[0].creditLimit.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                              KSh {selectedSupplier.creditLimit.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-400">Current Credit</span>
                             <span className="text-orange-400 font-mono">
-                              KSh {suppliers[0].currentCredit.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                              KSh {selectedSupplier.currentCredit.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-400">Account Balance</span>
-                            <span className={`font-mono ${suppliers[0].accountBalance < 0 ? 'text-red-400' : 'text-purple-400'}`}>
-                              KSh {Math.abs(suppliers[0].accountBalance).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                              {suppliers[0].accountBalance < 0 ? ' (Owed)' : ''}
+                            <span className={`font-mono ${selectedSupplier.accountBalance < 0 ? 'text-red-400' : 'text-purple-400'}`}>
+                              KSh {Math.abs(selectedSupplier.accountBalance).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                              {selectedSupplier.accountBalance < 0 ? ' (Owed)' : ''}
                             </span>
                           </div>
                         </div>
@@ -470,12 +622,12 @@ export function SupplierModule() {
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-semibold text-white">Product Catalog</h2>
                   <div className="text-sm text-slate-400">
-                    {suppliers[0].products.length} products available
+                    {selectedSupplier.products.length} products available
                   </div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto max-h-[calc(100vh-12rem)]">
-                  {suppliers[0].products.map((product) => (
+                  {selectedSupplier.products.map((product) => (
                     <Card key={product.id} className="group relative overflow-hidden bg-slate-800/30 border-slate-700/50 hover:border-purple-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/10">
                       <div className="p-4">
                         {/* Product Image Placeholder */}
@@ -539,6 +691,17 @@ export function SupplierModule() {
                     </Card>
                   ))}
                 </div>
+              </div>
+            </div>
+          ) : (
+            // No supplier selected fallback
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-slate-700/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Package className="w-8 h-8 text-slate-400" />
+                </div>
+                <h3 className="text-lg font-medium text-white mb-2">No Supplier Selected</h3>
+                <p className="text-slate-400">Please select a supplier to view details</p>
               </div>
             </div>
           )

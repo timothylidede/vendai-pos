@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
 import styles from './vendai-panel.module.css'
@@ -10,6 +11,10 @@ export function VendaiPanel() {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isSpinning, setIsSpinning] = useState(false)
   const btnRef = useRef<HTMLButtonElement | null>(null)
+  const pathname = usePathname()
+  
+  // Check if we should hide the panel on certain pages
+  const shouldHidePanel = pathname === '/' || pathname.startsWith('/onboarding') || pathname === '/test-auth'
   
   const handleToggle = () => {
     // Spin the logo for feedback
@@ -89,6 +94,11 @@ export function VendaiPanel() {
     window.addEventListener('vendai:open-assistant', handleOpen)
     return () => window.removeEventListener('vendai:open-assistant', handleOpen)
   }, [])
+
+  // Don't render anything if we should hide the panel
+  if (shouldHidePanel) {
+    return null
+  }
   
   return (
     <>

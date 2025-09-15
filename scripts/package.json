@@ -1,0 +1,19 @@
+{
+  "name": "supplier-data-generator",
+  "version": "1.0.0", 
+  "description": "Generate supplier product data using OpenAI API",
+  "type": "module",
+  "scripts": {
+    "generate": "node generate-supplier-products.js",
+    "install-python-deps": "pip install -r requirements.txt"
+  },
+  "dependencies": {
+    "openai": "^4.57.0",
+    "pdf-parse": "^1.1.1",
+    "fs": "^0.0.1-security",
+    "path": "^0.12.7"
+  },
+  "keywords": ["pos", "supplier", "openai", "pdf", "data-generation"],
+  "author": "VendAI POS",
+  "license": "MIT"
+}

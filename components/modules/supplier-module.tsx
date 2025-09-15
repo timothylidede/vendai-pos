@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { DollarSign, FileText, Package, Wallet, AlertCircle, Plus, Search, Filter, ChevronDown, Clock, MoreVertical, ArrowLeft } from "lucide-react"
+import { DollarSign, FileText, Package, Wallet, AlertCircle, Plus, Search, Filter, ChevronDown, Clock, MoreVertical, ArrowLeft, X } from "lucide-react"
 import { motion } from "framer-motion"
 import { Card } from "../ui/card"
 import { Button } from "../ui/button"
@@ -530,166 +530,227 @@ export function SupplierModule() {
             // Supplier Details View
             <div className="flex gap-6 h-full">
               {/* Left Panel - Supplier Details */}
-              <div className="w-1/3 space-y-4">
-                <div className="flex items-center mb-6">
-                  <button 
-                    onClick={() => setShowSupplierDetails(false)}
-                    className="mr-4 p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
-                  >
-                    <ChevronDown className="w-5 h-5 text-slate-400 rotate-90" />
-                  </button>
-                  <h2 className="text-xl font-semibold text-white">Supplier Details</h2>
-                </div>
-                
-                <Card className="bg-slate-800/50 border-slate-700">
-                  <div className="p-6">
-                    <div className="flex items-center space-x-4 mb-6">
-                      <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-400/20 to-purple-600/20 border border-purple-400/30 flex items-center justify-center">
+              <div className="w-1/3 space-y-6 p-1 ml-4">
+                {/* Back Button */}
+                <button 
+                  onClick={() => setShowSupplierDetails(false)}
+                  className="group flex items-center space-x-2 text-slate-400 hover:text-white transition-colors duration-200 mb-6"
+                >
+                  <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform duration-200" />
+                  <span className="text-sm font-medium">Back to suppliers</span>
+                </button>
+
+                {/* Supplier Header */}
+                <div className="relative">
+                  {/* Glassmorphic background */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/[0.08] via-white/[0.04] to-white/[0.02] backdrop-blur-xl rounded-3xl"></div>
+                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-indigo-500/5 rounded-3xl"></div>
+                  
+                  <div className="relative p-6 rounded-3xl border border-white/10">
+                    <div className="flex items-center space-x-4 mb-4">
+                      {/* Logo */}
+                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500/10 to-indigo-500/10 backdrop-blur-sm flex items-center justify-center shadow-lg">
                         <img 
                           src={selectedSupplier.name === "Mahitaji Enterprises Ltd" ? "/images/mahitaji-logo.png" : "/images/sam-west-logo.png"}
                           alt={`${selectedSupplier.name} Logo`} 
-                          className="w-10 h-10 object-contain"
+                          className="w-12 h-12 object-contain filter drop-shadow-lg"
                           onError={(e) => {
                             const target = e.target as HTMLImageElement;
                             target.style.display = 'none';
-                            target.parentElement!.innerHTML = `<div class="text-lg font-bold text-purple-400">${selectedSupplier.name.charAt(0)}</div>`;
+                            target.parentElement!.innerHTML = `<div class="text-xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">${selectedSupplier.name.charAt(0)}</div>`;
                           }}
                         />
                       </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-white">{selectedSupplier.name}</h3>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                          <span className="text-green-400 text-sm">Active</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-4">
-                      <div>
-                        <h4 className="text-sm font-medium text-slate-400 mb-2">Contact Information</h4>
-                        <div className="space-y-2 text-sm text-slate-300">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-slate-500">📧</span>
-                            <span>{selectedSupplier.contact.email}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-slate-500">📞</span>
-                            <span>{selectedSupplier.contact.phone}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-slate-500">📍</span>
-                            <span>{suppliers[0].contact.address}</span>
-                          </div>
-                        </div>
-                      </div>
                       
-                      <div className="pt-4 border-t border-slate-700">
-                        <h4 className="text-sm font-medium text-slate-400 mb-3">Account Details</h4>
-                        <div className="space-y-3">
-                          <div className="flex justify-between">
-                            <span className="text-slate-400">Payment Terms</span>
-                            <span className="text-white font-medium">{selectedSupplier.paymentTerms}</span>
+                      {/* Verification Badge */}
+                      <div className="flex-1">
+                        <h3 className="text-xl font-bold text-white mb-1">{selectedSupplier.name}</h3>
+                        <div className="flex items-center space-x-3">
+                          <div className="flex items-center space-x-1.5">
+                            <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                            <span className="text-emerald-400 text-sm font-medium">Verified Partner</span>
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-400">Credit Limit</span>
-                            <span className="text-white font-mono">
-                              KSh {selectedSupplier.creditLimit.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-400">Current Credit</span>
-                            <span className="text-orange-400 font-mono">
-                              KSh {selectedSupplier.currentCredit.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-400">Account Balance</span>
-                            <span className={`font-mono ${selectedSupplier.accountBalance < 0 ? 'text-red-400' : 'text-purple-400'}`}>
-                              KSh {Math.abs(selectedSupplier.accountBalance).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                              {selectedSupplier.accountBalance < 0 ? ' (Owed)' : ''}
-                            </span>
-                          </div>
+                          <div className="w-1 h-1 bg-slate-500 rounded-full"></div>
+                          <span className="text-slate-400 text-sm">{selectedSupplier.products.length} products</span>
                         </div>
                       </div>
                     </div>
                   </div>
-                </Card>
+                </div>
+
+                {/* Key Relationship Metrics */}
+                <div className="space-y-4">
+                  {/* Financial Overview */}
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/[0.05] to-white/[0.02] backdrop-blur-lg rounded-2xl"></div>
+                    <div className="relative p-5 rounded-2xl border border-white/[0.08] space-y-5">
+                      
+                      {/* Account Standing */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-slate-400 text-sm font-medium block mb-1">Account Status</span>
+                          <div className="flex items-center space-x-2">
+                            <div className={`w-2.5 h-2.5 rounded-full ${selectedSupplier.accountBalance < 0 ? 'bg-red-400 animate-pulse' : 'bg-emerald-400'}`}></div>
+                            <span className={`text-lg font-bold ${selectedSupplier.accountBalance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                              {selectedSupplier.accountBalance < 0 ? 'Outstanding' : 'Current'}
+                            </span>
+                          </div>
+                        </div>
+                        {selectedSupplier.accountBalance < 0 && (
+                          <div className="text-right">
+                            <span className="text-slate-400 text-xs block">Owed</span>
+                            <span className="text-red-300 font-mono font-bold">
+                              KSh {Math.abs(selectedSupplier.accountBalance).toLocaleString('en-KE', { minimumFractionDigits: 0 })}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="h-px bg-slate-600/30"></div>
+
+                      {/* Credit Utilization */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-slate-400 text-sm font-medium">Credit Usage</span>
+                          <span className="text-white font-bold">
+                            {Math.round((selectedSupplier.currentCredit / selectedSupplier.creditLimit) * 100)}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-700/30 rounded-full h-2 mb-2">
+                          <div 
+                            className="h-2 rounded-full bg-gradient-to-r from-orange-400 to-red-500 transition-all duration-500"
+                            style={{ width: `${(selectedSupplier.currentCredit / selectedSupplier.creditLimit) * 100}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between text-xs text-slate-400">
+                          <span>Used: KSh {selectedSupplier.currentCredit.toLocaleString('en-KE', { minimumFractionDigits: 0 })}</span>
+                          <span>Limit: KSh {selectedSupplier.creditLimit.toLocaleString('en-KE', { minimumFractionDigits: 0 })}</span>
+                        </div>
+                      </div>
+
+                      <div className="h-px bg-slate-600/30"></div>
+
+                      {/* Payment Terms */}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-slate-400 text-sm font-medium block mb-1">Payment Terms</span>
+                          <span className="text-white text-lg font-bold">{selectedSupplier.paymentTerms}</span>
+                        </div>
+                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500/20 to-indigo-500/20 flex items-center justify-center">
+                          <Clock className="w-4 h-4 text-blue-400" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Contact */}
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/[0.05] to-white/[0.02] backdrop-blur-lg rounded-2xl"></div>
+                    <div className="relative p-4 rounded-2xl border border-white/[0.08]">
+                      <span className="text-slate-400 text-sm font-medium block mb-3">Quick Contact</span>
+                      <div className="space-y-2">
+                        <a 
+                          href={`tel:${selectedSupplier.contact.phone}`}
+                          className="flex items-center space-x-3 p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] transition-colors duration-200 group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center group-hover:bg-green-500/30 transition-colors">
+                            <span className="text-lg">📞</span>
+                          </div>
+                          <span className="text-white text-sm font-medium group-hover:text-green-300 transition-colors">
+                            {selectedSupplier.contact.phone}
+                          </span>
+                        </a>
+                        <a 
+                          href={`mailto:${selectedSupplier.contact.email}`}
+                          className="flex items-center space-x-3 p-2 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] transition-colors duration-200 group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center group-hover:bg-blue-500/30 transition-colors">
+                            <span className="text-lg">📧</span>
+                          </div>
+                          <span className="text-white text-sm font-medium group-hover:text-blue-300 transition-colors truncate">
+                            {selectedSupplier.contact.email}
+                          </span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
               
               {/* Right Panel - Product Catalog */}
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-semibold text-white">Product Catalog</h2>
-                  <div className="text-sm text-slate-400">
-                    {selectedSupplier.products.length} products available
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto max-h-[calc(100vh-12rem)]">
-                  {selectedSupplier.products.map((product) => (
-                    <Card key={product.id} className="group relative overflow-hidden bg-slate-800/30 border-slate-700/50 hover:border-purple-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/10">
-                      <div className="p-4">
-                        {/* Product Image Placeholder */}
-                        <div className="w-full h-32 bg-gradient-to-br from-slate-700/30 to-slate-600/20 rounded-lg flex items-center justify-center mb-3 group-hover:from-purple-500/10 group-hover:to-purple-600/5 transition-all duration-300">
-                          <Package className="w-12 h-12 text-slate-500 group-hover:text-purple-400 transition-colors duration-300" />
-                        </div>
-                        
-                        {/* Product Info */}
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-start">
-                            <h4 className="font-medium text-slate-200 group-hover:text-white transition-colors duration-300 line-clamp-2">
-                              {product.name}
-                            </h4>
-                            <div className={`px-2 py-1 rounded text-xs border transition-all duration-300 ${
+              <div className="flex-1 overflow-hidden">
+                <div className="h-full overflow-y-auto thin-scroll">
+                  <div className="p-6">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+                      {selectedSupplier.products.map((product) => (
+                        <motion.div
+                          key={product.id}
+                          whileHover={{ scale: 1.08, y: -8 }}
+                          whileTap={{ scale: 0.95 }}
+                          transition={{ type: 'spring', stiffness: 300, damping: 18 }}
+                          className="group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] hover:border-purple-400/40 transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_48px_-12px_rgba(147,51,234,0.2)] cursor-pointer hover:-rotate-1"
+                        >
+                          {/* Glassmorphic background overlay */}
+                          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.03] via-transparent to-indigo-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                          
+                          <div className="aspect-square w-full bg-gradient-to-br from-slate-800/60 to-slate-700/40 flex items-center justify-center relative">
+                            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.02] via-transparent to-purple-600/[0.03] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                            <Package className="w-16 h-16 text-slate-400 group-hover:scale-125 group-hover:text-purple-300 group-hover:rotate-12 transition-all duration-500 relative z-10" />
+                            
+                            {/* Stock status indicator */}
+                            <div className={`absolute top-3 right-3 w-8 h-8 rounded-full border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 transform scale-75 group-hover:scale-100 ${
                               product.inStock 
-                                ? 'text-green-400 bg-green-500/10 border-green-500/20 group-hover:bg-green-500/20' 
-                                : 'text-red-400 bg-red-500/10 border-red-500/20'
+                                ? 'bg-gradient-to-br from-emerald-400/20 to-emerald-500/30 border-emerald-400/40'
+                                : 'bg-gradient-to-br from-red-400/20 to-red-500/30 border-red-400/40'
                             }`}>
-                              {product.inStock ? 'In Stock' : 'Out of Stock'}
+                              {product.inStock ? (
+                                <Plus className="w-4 h-4 text-emerald-300" />
+                              ) : (
+                                <X className="w-4 h-4 text-red-300" />
+                              )}
                             </div>
                           </div>
                           
-                          <p className="text-xs text-slate-400 font-mono">{product.sku}</p>
-                          <p className="text-xs text-slate-400">{product.category}</p>
-                          
-                          <div className="pt-2 border-t border-slate-700/50">
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="text-lg font-bold text-purple-400 font-mono">
+                          <div className="p-4 relative">
+                            <h4 className="text-slate-200 font-medium text-sm group-hover:text-white transition-colors duration-300 line-clamp-1 mb-1">
+                              {product.name}
+                            </h4>
+                            <div className="text-xs text-slate-400 group-hover:text-slate-300 mb-2 font-mono">
+                              {product.sku}
+                            </div>
+                            <div className="flex items-center justify-between opacity-60 group-hover:opacity-100 transition-all duration-500 transform translate-y-1 group-hover:translate-y-0">
+                              <span className="text-purple-400 font-semibold text-sm">
                                 KSh {product.unitPrice.toFixed(2)}
+                              </span>
+                              <span className={`text-xs px-2 py-1 rounded-full border ${
+                                product.inStock 
+                                  ? 'text-emerald-300 bg-emerald-700/50 border-emerald-600/50 group-hover:text-emerald-200'
+                                  : 'text-red-300 bg-red-700/50 border-red-600/50 group-hover:text-red-200'
+                              } transition-colors duration-300`}>
+                                {product.inStock ? 'In Stock' : 'Out of Stock'}
                               </span>
                             </div>
                             
-                            <div className="text-xs text-slate-400 space-y-1">
-                              <div>Min. Order: {product.minOrderQuantity} units</div>
-                              <div>Lead Time: {product.leadTime}</div>
-                            </div>
-                            
-                            <div className="flex gap-2 mt-3">
-                              <Button 
-                                size="sm" 
-                                className="flex-1 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border-purple-500/30 hover:border-purple-400/50 transition-all duration-300"
-                                disabled={!product.inStock}
-                              >
-                                <Plus className="w-3 h-3 mr-1" />
-                                Add to Cart
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                className="px-3 hover:bg-slate-700/50"
-                              >
-                                <FileText className="w-3 h-3" />
-                              </Button>
+                            {/* Additional product info on hover */}
+                            <div className="mt-2 opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-2 group-hover:translate-y-0">
+                              <div className="text-xs text-slate-400 space-y-1">
+                                <div>Min: {product.minOrderQuantity} units</div>
+                                <div className="text-purple-300">{product.leadTime}</div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        
-                        {/* Hover Effect Overlay */}
-                        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.02] to-purple-600/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
-                      </div>
-                    </Card>
-                  ))}
+                          
+                          {/* Top highlight line */}
+                          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-400/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                          
+                          {/* Shimmer effect */}
+                          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700">
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-200/5 to-transparent transform -skew-x-12 translate-x-[-100%] group-hover:translate-x-[200%] transition-transform duration-1000" />
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -54,6 +54,14 @@ export interface Product {
   size?: string
   wholesaleQuantity?: number
   distributorName?: string
+  // Units of Measure (optional, for POS/inventory conversions)
+  baseUom?: UnitCode // e.g., CTN (carton) stored at supplier/inventory level
+  retailUom?: UnitCode // e.g., PCS
+  unitsPerBase?: number // how many retail units per base unit
+  pieceBarcode?: string
+  cartonBarcode?: string
+  allowBreak?: boolean // whether breaking base packs is allowed
+  retailPrice?: number // explicit per-piece POS price (if different from price)
 }
 
 export interface CartItem {
@@ -171,4 +179,69 @@ export interface ChatHistory {
   messages: Message[]
   createdAt: Date
   updatedAt: Date
+}
+
+// New: standardized unit codes and POS/Inventory types
+export type UnitCode =
+  | 'CTN' // Carton
+  | 'BOX'
+  | 'PKT' // Packet
+  | 'BAG'
+  | 'BOTTLE'
+  | 'JAR'
+  | 'PCS' // Piece (retail)
+  | 'DOZ' // Dozen
+  | string
+
+export interface PackagingSpec {
+  baseUom: UnitCode
+  retailUom: UnitCode
+  unitsPerBase: number
+  allowBreak: boolean
+}
+
+export interface POSProduct {
+  id: string
+  name: string
+  brand?: string
+  category?: string
+  image?: string
+  baseUom: UnitCode
+  retailUom: UnitCode
+  unitsPerBase: number
+  pieceBarcode?: string
+  cartonBarcode?: string
+  piecePrice: number
+  cartonPrice?: number // optional wholesale price for reference
+}
+
+export interface InventoryRecord {
+  productId: string
+  orgId: string
+  qtyBase: number // stored wholesale count (e.g., cartons)
+  qtyLoose: number // leftover loose pieces out of base packs
+  unitsPerBase: number // denormalized for fast math
+  updatedAt: string
+  updatedBy: string
+  avgUnitCost?: number // optional costing
+}
+
+export interface POSOrderLine {
+  productId: string
+  name: string
+  quantityPieces: number
+  unitPrice: number // per piece
+  lineTotal: number
+}
+
+export interface POSOrderDoc {
+  id?: string
+  orgId: string
+  userId: string
+  lines: POSOrderLine[]
+  total: number
+  createdAt: string
+  status: 'pending' | 'paid' | 'cancelled' | 'completed'
+  paymentMethod?: string
+  paymentRef?: string
 }

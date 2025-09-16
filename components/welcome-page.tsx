@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { motion } from 'framer-motion';
-import { signInWithPopup } from 'firebase/auth';
+import { signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '@/lib/firebase';
 import { useState } from 'react';
@@ -13,71 +13,141 @@ import { useState } from 'react';
 export function WelcomePage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
+    setErrorMessage(null);
+    
     try {
       console.log('Starting Google sign in...');
       
-      // Sign in with Google
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      
-      console.log('Google sign in successful:', user.email);
-      
-      // Check if user exists in Firestore
-      const userDocRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userDocRef);
-      
-      if (userDoc.exists()) {
-        // Existing user - go to dashboard
-        console.log('Existing user detected - redirecting to dashboard');
+      // Check if we're in Electron environment
+      if (typeof window !== 'undefined' && (window as any).electronAPI) {
+        // Use Electron OAuth flow - like VSCode, Zoom, etc.
+        console.log('Using Electron OAuth flow...');
         
-        // Get user role to determine landing page
-        const userData = userDoc.data();
-        const userRole = userData?.role || 'retailer';
+        const electronAPI = (window as any).electronAPI;
+        const oauthResult = await electronAPI.googleOAuth() as any;
         
-        // Store user role for dashboard experience
-        localStorage.setItem('vendai-user-role', userRole);
-        localStorage.setItem('vendai-first-login', 'false');
-        
-        router.push('/modules');
+        if (oauthResult && oauthResult.success && oauthResult.user) {
+          const googleUser = oauthResult.user;
+          console.log('OAuth successful, creating Firebase user:', googleUser.email);
+          
+          // Prefer proper Firebase sign-in using the returned Google tokens
+          try {
+            const credential = GoogleAuthProvider.credential(
+              oauthResult.tokens.idToken || null,
+              oauthResult.tokens.accessToken || null
+            );
+            const userCred = await signInWithCredential(auth, credential);
+            const uid = userCred.user.uid;
+
+            const userDocRef = doc(db, 'users', uid);
+            const userDoc = await getDoc(userDocRef);
+
+            if (userDoc.exists()) {
+              console.log('Existing user detected - checking onboarding status');
+              const userData = userDoc.data();
+              const userRole = (userData as any)?.role || 'retailer';
+              const onboardingCompleted = (userData as any)?.onboardingCompleted;
+              
+              localStorage.setItem('vendai-user-role', userRole);
+              
+              // If user has a role and has completed onboarding, go to modules
+              if (userRole && onboardingCompleted) {
+                console.log('User has role and completed onboarding - redirecting to dashboard');
+                localStorage.setItem('vendai-first-login', 'false');
+                router.push('/modules');
+              } else {
+                console.log('User exists but needs to complete onboarding');
+                localStorage.setItem('vendai-first-login', 'true');
+                router.push('/onboarding');
+              }
+            } else {
+              console.log('New user detected - creating profile and redirecting to onboarding');
+              await setDoc(userDocRef, {
+                uid,
+                email: userCred.user.email,
+                displayName: userCred.user.displayName,
+                photoURL: userCred.user.photoURL,
+                createdAt: new Date().toISOString(),
+                onboardingCompleted: false,
+                role: 'retailer'
+              });
+              localStorage.setItem('vendai-first-login', 'true');
+              router.push('/onboarding');
+            }
+          } catch (fbErr: any) {
+            console.error('Firebase sign-in with Google credential failed:', fbErr);
+            // As a fallback, keep the previous local-only behavior
+            const userDocRef = doc(db, 'users', googleUser.id);
+            const userDoc = await getDoc(userDocRef);
+            if (!userDoc.exists()) {
+              await setDoc(userDocRef, {
+                uid: googleUser.id,
+                email: googleUser.email,
+                displayName: googleUser.name,
+                photoURL: googleUser.picture,
+                createdAt: new Date().toISOString(),
+                onboardingCompleted: false,
+                role: 'retailer' // Default role
+              });
+              localStorage.setItem('vendai-first-login', 'true');
+              router.push('/onboarding');
+            } else {
+              console.log('Existing user fallback - checking onboarding status');
+              const userData = userDoc.data();
+              const userRole = (userData as any)?.role || 'retailer';
+              const onboardingCompleted = (userData as any)?.onboardingCompleted;
+              
+              localStorage.setItem('vendai-user-role', userRole);
+              
+              if (userRole && onboardingCompleted) {
+                console.log('User has role and completed onboarding - redirecting to dashboard');
+                localStorage.setItem('vendai-first-login', 'false');
+                router.push('/modules');
+              } else {
+                console.log('User exists but needs to complete onboarding');
+                localStorage.setItem('vendai-first-login', 'true');
+                router.push('/onboarding');
+              }
+            }
+          }
+        } else {
+          throw new Error('OAuth failed or was cancelled');
+        }
       } else {
-        // New user - create basic user document and go to onboarding
-        console.log('New user detected - redirecting to onboarding');
-        
-        await setDoc(userDocRef, {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-          createdAt: new Date(),
-          onboardingCompleted: false,
-        });
-        
-        // Set as first-time user for onboarding experience
-        localStorage.setItem('vendai-first-login', 'true');
-        
-        router.push('/onboarding');
+        // Fallback for web (though this shouldn't happen in Electron)
+        console.log('Not in Electron - this should not happen');
+        setErrorMessage('This app requires Electron to run properly.');
       }
     } catch (error: any) {
       console.error('Google sign in error:', error);
       
-      // Handle specific error cases
-      if (error.code === 'auth/popup-closed-by-user') {
-        console.log('Sign-in popup was closed by user');
-      } else if (error.code === 'auth/cancelled-popup-request') {
-        console.log('Sign-in popup was cancelled');
-      } else {
-        alert('Sign in failed. Please try again.');
+      let friendlyMessage = 'An error occurred during sign in. Please try again.';
+      
+      if (error.message?.includes('OAuth timeout')) {
+        friendlyMessage = 'Sign in timed out. Please try again.';
+      } else if (error.message?.includes('cancelled') || error.message?.includes('closed')) {
+        friendlyMessage = 'Sign in was cancelled. Please try again if you want to continue.';
+      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        friendlyMessage = 'Network error. Please check your internet connection and try again.';
       }
+      
+      setErrorMessage(friendlyMessage);
+      
+      // Auto-clear error after 5 seconds
+      setTimeout(() => {
+        setErrorMessage(null);
+      }, 5000);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900 flex items-center justify-center p-6">
+    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900 flex items-center justify-center p-6 relative">
       <div className="max-w-md w-full">
         <motion.div 
           initial={{ opacity: 0, y: 20 }} 
@@ -114,12 +184,23 @@ export function WelcomePage() {
           <Button
             onClick={handleGoogleSignIn}
             disabled={isLoading}
-            className="w-full py-4 px-6 bg-white hover:bg-gray-50 border border-gray-300 hover:border-gray-400 text-black font-medium rounded-xl transition-all duration-200 flex items-center justify-center space-x-3 shadow-lg hover:shadow-xl transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+            className={`w-full py-4 px-6 font-medium rounded-xl transition-all duration-200 flex items-center justify-center space-x-3 shadow-lg hover:shadow-xl transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ${
+              errorMessage 
+                ? 'bg-red-50 hover:bg-red-100 border border-red-300 hover:border-red-400 text-red-700' 
+                : 'bg-white hover:bg-gray-50 border border-gray-300 hover:border-gray-400 text-black'
+            }`}
           >
             {isLoading ? (
               <>
-                <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                 <span>Signing in...</span>
+              </>
+            ) : errorMessage ? (
+              <>
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 9V13M12 17H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span>Try Again</span>
               </>
             ) : (
               <>
@@ -133,6 +214,18 @@ export function WelcomePage() {
               </>
             )}
           </Button>
+
+          {/* Error Message */}
+          {errorMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg"
+            >
+              <p className="text-red-400 text-sm text-center">{errorMessage}</p>
+            </motion.div>
+          )}
 
           {/* Footer */}
           <div className="text-center mt-6">

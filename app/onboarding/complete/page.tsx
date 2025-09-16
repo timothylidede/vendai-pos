@@ -7,11 +7,55 @@ import { Button } from '@/components/ui/button';
 import { CheckCircle, Sparkles, ArrowRight, Store, Truck } from 'lucide-react';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
+import { auth, db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 
 export default function OnboardingCompletePage() {
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
   const [userRole] = useState<'retailer' | 'distributor'>('retailer'); // This would come from state/props
   const [businessName] = useState('Mambo Grocers'); // This would come from state/props
+  
+  // Check if user has already completed onboarding
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const userDocRef = doc(db, 'users', user.uid);
+          const userDoc = await getDoc(userDocRef);
+          
+          if (userDoc.exists() && userDoc.data().onboardingCompleted) {
+            // User has already completed onboarding, redirect to modules
+            console.log('User has already completed onboarding, redirecting from complete to modules');
+            router.push('/modules');
+            return;
+          }
+          
+          setLoading(false);
+        } catch (error) {
+          console.error('Error checking onboarding status:', error);
+          setLoading(false);
+        }
+      } else {
+        router.push('/signup');
+      }
+    });
+
+    return () => unsubscribe();
+  }, [router]);
+
+  // Show loading while checking status
+  if (loading) {
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
   
   const handleGoToDashboard = () => {
     // Route based on user role

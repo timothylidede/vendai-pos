@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
@@ -8,14 +8,20 @@ import { Input } from '../ui/input'
 import { ScrollArea } from '../ui/scroll-area'
 import { ScanBarcode, ShoppingCart, Trash2, Plus, ChevronDown, X, Search, Package, ArrowLeft } from 'lucide-react'
 import { motion } from 'framer-motion'
+import type { POSProduct, POSOrderLine, POSOrderDoc } from '@/lib/types'
+import { listPOSProducts, addPosOrder, listRecentOrders, getInventory } from '@/lib/pos-operations'
+import { useAuth } from '@/contexts/auth-context'
+import { useToast } from '@/hooks/use-toast'
 
-interface Product {
+interface CartLine {
+  productId: string
   name: string
   price: number
   quantity: number
+  image?: string
 }
 
-interface Order {
+interface OrderRow {
   id: string
   number: string
   date: string
@@ -25,27 +31,28 @@ interface Order {
 }
 
 export function POSPage() {
-  const [headerCollapsed, setHeaderCollapsed] = useState(true);
-  const [cart, setCart] = useState<Product[]>([])
+  const [headerCollapsed, setHeaderCollapsed] = useState(true)
+  const [cart, setCart] = useState<CartLine[]>([])
   const [activeTab, setActiveTab] = useState<'register' | 'orders'>('register')
   const [showOrderModal, setShowOrderModal] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mpesa' | 'card'>('cash')
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [mpesaPhone, setMpesaPhone] = useState('')
+  const [processingPayment, setProcessingPayment] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState('045')
   const [isEntering, setIsEntering] = useState(true)
   const [isExiting, setIsExiting] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const searchRef = useRef<HTMLInputElement | null>(null)
   const router = useRouter()
+  const { toast } = useToast()
+  const { userData } = useAuth()
+  const [loading, setLoading] = useState(false)
+  const [products, setProducts] = useState<POSProduct[]>([])
 
-  const sampleOrders: Order[] = [
-    { id: '004', number: '2504-001-00004', date: '09/04/2025', time: '11:55', amount: '0.00 KSh', status: 'Ongoing' },
-    { id: '006', number: '2504-001-00006', date: '09/04/2025', time: '11:56', amount: '81.20 KSh', status: 'Payment' },
-    { id: '008', number: '2510-001-00008', date: '09/04/2025', time: '11:57', amount: '0.00 KSh', status: 'Ongoing' },
-    { id: '009', number: '2525-001-00009', date: '09/04/2025', time: '11:22', amount: '0.00 KSh', status: 'Ongoing' },
-    { id: '010', number: '2534-001-00010', date: 'Today', time: '01:14', amount: '0.00 KSh', status: 'Ongoing' },
-    { id: '011', number: '2534-001-00011', date: 'Today', time: '01:14', amount: '0.00 KSh', status: 'Ongoing' },
-    { id: '012', number: '2534-001-00012', date: 'Today', time: '01:14', amount: '0.00 KSh', status: 'Ongoing' },
-    { id: '013', number: '2534-001-00013', date: 'Today', time: '01:14', amount: '0.00 KSh', status: 'Ongoing' },
-    { id: '014', number: '2534-001-00014', date: 'Today', time: '01:14', amount: '0.00 KSh', status: 'Ongoing' },
-    { id: '015', number: '2534-001-00015', date: 'Today', time: '01:14', amount: '0.00 KSh', status: 'Ongoing' },
-  ]
+  const [recentOrders, setRecentOrders] = useState<POSOrderDoc[]>([])
 
   const availableOrderNumbers = ['040', '041', '042', '043', '044', '045']
 
@@ -63,12 +70,134 @@ export function POSPage() {
     return () => clearTimeout(timer)
   }, [])
 
+  // Load recent orders for Orders tab
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const orgId = userData?.organizationName || 'default'
+        const { orders, missingIndex, indexHint } = await listRecentOrders(orgId, 30)
+        if (active) setRecentOrders(orders as any)
+        if (missingIndex) {
+          toast({ title: 'Index not found (using fallback)', description: 'Create Firestore index for faster Orders: ' + (indexHint || '') })
+        }
+      } catch (e) {
+        console.error(e)
+      }
+    })()
+    return () => { active = false }
+  }, [userData?.organizationName])
+
   const handleBackClick = () => {
     if (isExiting) return
     setIsExiting(true)
     setTimeout(() => {
       router.push('/modules')
     }, 200)
+  }
+
+  // Helpers
+  const formatMoney = (ksh: number) => `KSh ${ksh.toFixed(2)}`
+
+  const addProductToCart = async (p: POSProduct) => {
+    console.log('Adding product to cart:', p.name, p.id)
+    
+    // inventory check
+    const orgId = userData?.organizationName || 'default'
+    try {
+      const inv = await getInventory(orgId, p.id)
+      console.log('Inventory check:', inv)
+      
+      if (inv) {
+        const totalPieces = inv.qtyBase * inv.unitsPerBase + inv.qtyLoose
+        console.log('Total pieces available:', totalPieces)
+        
+        if (totalPieces <= 0) {
+          toast({ title: 'Out of stock', description: `${p.name} is not available in inventory`, variant: 'destructive' as any })
+          return
+        }
+        if (totalPieces <= 3) {
+          toast({ title: 'Low stock', description: `${p.name}: Only ${totalPieces} units left` })
+        }
+      } else {
+        // Allow adding to cart even without inventory record for demo purposes
+        console.log('No inventory record found, allowing cart addition for demo')
+      }
+    } catch (e) {
+      console.warn('Inventory check failed', e)
+      // Don't block cart addition if inventory check fails
+    }
+
+    console.log('Current cart before addition:', cart)
+    setCart(prev => {
+      const idx = prev.findIndex(line => line.productId === p.id)
+      console.log('Existing item index:', idx)
+      
+      if (idx >= 0) {
+        const next = [...prev]
+        next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 }
+        console.log('Updated existing item:', next[idx])
+        return next
+      }
+      
+      const newItem = { 
+        productId: p.id, 
+        name: p.name, 
+        price: p.piecePrice, 
+        quantity: 1, 
+        image: p.image 
+      }
+      console.log('Adding new item to cart:', newItem)
+      return [...prev, newItem]
+    })
+    
+    toast({ title: 'Added to cart', description: p.name })
+  }
+
+  const incrementLine = (productId: string) => {
+    setCart(prev => prev.map(l => (l.productId === productId ? { ...l, quantity: l.quantity + 1 } : l)))
+  }
+
+  const decrementLine = (productId: string) => {
+    setCart(prev => prev
+      .map(l => (l.productId === productId ? { ...l, quantity: l.quantity - 1 } : l))
+      .filter(l => l.quantity > 0)
+    )
+  }
+
+  const cartTotal = useMemo(() => cart.reduce((sum, l) => sum + l.price * l.quantity, 0), [cart])
+
+  // Load products from Firestore
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      setLoading(true)
+      try {
+        const res = await listPOSProducts(userData?.organizationName || 'default', searchTerm)
+        if (active) setProducts(res)
+      } catch (e) {
+        console.error(e)
+        toast({ title: 'Failed to load products', description: String(e) })
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [searchTerm, userData?.organizationName])
+
+  const filteredProducts = products
+
+  const tryQuickAddByCode = (input: string) => {
+    const raw = input.trim().toLowerCase()
+    if (!raw) return false
+    // Match by piece or carton barcode, or exact id
+    const byBarcode = products.find(p => p.pieceBarcode?.toLowerCase() === raw || p.cartonBarcode?.toLowerCase() === raw)
+    if (byBarcode) { addProductToCart(byBarcode); return true }
+    const byId = products.find(p => p.id.toLowerCase() === raw)
+    if (byId) { addProductToCart(byId); return true }
+    return false
   }
 
   return (
@@ -174,7 +303,19 @@ export function POSPage() {
           <div className="flex items-center space-x-4">
             <div className="relative">
               <Input 
-                placeholder="Search products..." 
+                ref={searchRef}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const ok = tryQuickAddByCode(searchTerm)
+                    if (!ok && filteredProducts.length === 1) {
+                      addProductToCart(filteredProducts[0])
+                    }
+                    setSearchTerm('')
+                  }
+                }}
+                placeholder="Search name/brand or scan code…" 
                 className="bg-gradient-to-r from-white/[0.08] to-white/[0.04] backdrop-blur-md border border-white/[0.08] hover:border-white/[0.15] text-white placeholder-slate-400 pr-8 w-64 transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] focus:shadow-[0_8px_24px_-8px_rgba(59,130,246,0.2)] focus:border-blue-400/30"
               />
               <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
@@ -183,7 +324,10 @@ export function POSPage() {
                 </div>
               </div>
             </div>
-            <button className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105">
+            <button 
+              onClick={() => setShowBarcodeScanner(true)}
+              className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
+            >
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] via-transparent to-blue-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
               <ScanBarcode className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
             </button>
@@ -286,7 +430,7 @@ export function POSPage() {
                       
                       {/* Duplicate items for circular effect */}
                       {[...cart, ...cart, ...cart].map((item, i) => {
-                        const originalIndex = i % cart.length;
+                        const originalIndex = i % cart.length
                         return (
                           <motion.div 
                             key={`${originalIndex}-${Math.floor(i / cart.length)}`}
@@ -296,7 +440,7 @@ export function POSPage() {
                             <div className="flex justify-between items-center w-full">
                               <div className="flex-1">
                                 <div className="font-medium text-white text-sm truncate">{item.name}</div>
-                                <div className="text-xs text-slate-400">KSh {item.price}</div>
+                                <div className="text-xs text-slate-400">{formatMoney(item.price)}</div>
                               </div>
                               <div className="flex items-center gap-1">
                                 <Button 
@@ -304,10 +448,8 @@ export function POSPage() {
                                   size="sm" 
                                   className="h-6 w-6 p-0 text-xs"
                                   onClick={() => {
-                                    setCart(prev => prev
-                                      .map((p, idx) => idx === originalIndex ? { ...p, quantity: p.quantity - 1 } : p)
-                                      .filter(p => p.quantity > 0)
-                                    );
+                                    const pid = cart[originalIndex].productId
+                                    decrementLine(pid)
                                   }}
                                 >-</Button>
                                 <span className="text-white text-sm w-6 text-center">{item.quantity}</span>
@@ -316,9 +458,8 @@ export function POSPage() {
                                   size="sm" 
                                   className="h-6 w-6 p-0 text-xs"
                                   onClick={() => {
-                                    setCart(prev => prev.map((p, idx) => 
-                                      idx === originalIndex ? { ...p, quantity: p.quantity + 1 } : p
-                                    ))
+                                    const pid = cart[originalIndex].productId
+                                    incrementLine(pid)
                                   }}
                                 >+</Button>
                               </div>
@@ -341,13 +482,17 @@ export function POSPage() {
                 <div className="sticky bottom-0 p-6 bg-slate-900/70 backdrop-blur">
                   <div className="flex justify-between text-lg font-semibold mb-4 text-white">
                     <span>Total</span>
-                    <span>KSh {cart.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2)}</span>
+                    <span>{formatMoney(cartTotal)}</span>
                   </div>
                   <motion.button
                     whileHover={{ scale: 1.05, backgroundColor: 'rgba(16,185,129,0.18)' }}
                     whileTap={{ scale: 0.97 }}
                     transition={{ type: 'spring', stiffness: 300 }}
                     className="w-full bg-gradient-to-r from-green-300 via-green-400 to-slate-800 text-white font-semibold text-lg py-3 rounded-lg"
+                    onClick={() => {
+                      setPaymentAmount(cartTotal.toString())
+                      setShowPaymentModal(true)
+                    }}
                   >
                     Complete Order
                   </motion.button>
@@ -361,26 +506,15 @@ export function POSPage() {
             <div className="h-full overflow-y-auto thin-scroll">
               <div className="p-6">
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
-                  {/* Sample Products */}
-                  {Array.from({ length: 12 }).map((_, i) => (
+                  {/* Real Products */}
+                  {filteredProducts.map((p) => (
                     <motion.div
-                      key={i}
+                      key={p.id}
                       whileHover={{ scale: 1.08, y: -8 }}
                       whileTap={{ scale: 0.95 }}
                       transition={{ type: 'spring', stiffness: 300, damping: 18 }}
                       className="group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] hover:border-green-400/40 transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_48px_-12px_rgba(34,197,94,0.2)] cursor-pointer hover:-rotate-1"
-                      onClick={() => {
-                        const existingItem = cart.find(item => item.name === `Product ${i + 1}`)
-                        if (existingItem) {
-                          setCart(prev => prev.map(item => 
-                            item.name === `Product ${i + 1}` 
-                              ? { ...item, quantity: item.quantity + 1 }
-                              : item
-                          ))
-                        } else {
-                          setCart(prev => [...prev, { name: `Product ${i + 1}`, price: 99.99, quantity: 1 }])
-                        }
-                      }}
+                      onClick={() => addProductToCart(p)}
                     >
                       {/* Glassmorphic background overlay */}
                       <div className="absolute inset-0 bg-gradient-to-br from-green-500/[0.03] via-transparent to-emerald-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -396,11 +530,11 @@ export function POSPage() {
                       </div>
                       
                       <div className="p-4 relative">
-                        <h4 className="text-slate-200 font-medium text-sm group-hover:text-white transition-colors duration-300">Product {i + 1}</h4>
+                        <h4 className="text-slate-200 font-medium text-sm group-hover:text-white transition-colors duration-300">{p.name}</h4>
                         <div className="mt-2 flex items-center justify-between opacity-60 group-hover:opacity-100 transition-all duration-500 transform translate-y-1 group-hover:translate-y-0">
-                          <span className="text-green-400 font-semibold text-sm">KSh 99.99</span>
+                          <span className="text-green-400 font-semibold text-sm">{formatMoney(p.piecePrice)}</span>
                           <span className="text-xs text-slate-400 group-hover:text-slate-300 px-2 py-1 rounded-full bg-slate-700/50 border border-slate-600/50">
-                            In Stock
+                            {p.retailUom}
                           </span>
                         </div>
                       </div>
@@ -449,27 +583,23 @@ export function POSPage() {
 
             {/* Orders Content */}
             <div className="flex-1 overflow-y-auto thin-scroll">
-              {sampleOrders.map((order) => (
+              {recentOrders.map((order) => (
                 <div key={order.id} className="flex items-center justify-between px-6 py-4 border-b border-green-500/30 hover:bg-slate-800/50 cursor-pointer">
                   <div className="flex items-center space-x-6">
                     <div className="text-left">
-                      <div className="text-slate-300 text-sm">{order.date}</div>
-                      <div className="text-slate-400 text-xs">{order.time}</div>
+                      <div className="text-slate-300 text-sm">{new Date(order.createdAt).toLocaleDateString()}</div>
+                      <div className="text-slate-400 text-xs">{new Date(order.createdAt).toLocaleTimeString()}</div>
                     </div>
                     <div className="text-left">
                       <div className="text-white font-medium">{order.id}</div>
-                      <div className="text-slate-400 text-sm">{order.number}</div>
+                      <div className="text-slate-400 text-sm">{order.lines?.length ?? 0} items</div>
                     </div>
                   </div>
                   <div className="text-white font-medium">
-                    {order.amount}
+                    {formatMoney(order.total || 0)}
                   </div>
                   <div className="flex items-center space-x-3">
-                    <span className={`px-3 py-1 rounded text-sm ${
-                      order.status === 'Payment' 
-                        ? 'bg-green-600 text-white' 
-                        : 'bg-blue-600 text-white'
-                    }`}>
+                    <span className={`px-3 py-1 rounded text-sm ${order.status === 'paid' ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'}`}>
                       {order.status}
                     </span>
                     <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
@@ -488,6 +618,281 @@ export function POSPage() {
               <p className="text-lg">Select an order or scan QR code</p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Barcode Scanner Modal */}
+      {showBarcodeScanner && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300 }}
+            className="bg-slate-900 rounded-2xl p-8 max-w-md w-full mx-4 border border-green-500/30"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-white">Barcode Scanner</h3>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setShowBarcodeScanner(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+            
+            <div className="text-center">
+              <div className="w-32 h-32 mx-auto mb-6 rounded-2xl bg-slate-800 border-2 border-dashed border-green-500/50 flex items-center justify-center">
+                <ScanBarcode className="w-16 h-16 text-green-400" />
+              </div>
+              
+              <p className="text-slate-300 mb-4">
+                To use a barcode scanner:
+              </p>
+              
+              <div className="text-left space-y-2 text-sm text-slate-400 mb-6">
+                <p>• Connect a USB barcode scanner</p>
+                <p>• Scan directly into the search box</p>
+                <p>• Or manually type the barcode</p>
+              </div>
+              
+              <div className="mb-4">
+                <Input
+                  placeholder="Scan or type barcode here..."
+                  className="bg-slate-800 border-slate-600 text-white text-center"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const barcode = e.currentTarget.value.trim()
+                      if (barcode) {
+                        const product = products.find(p => 
+                          p.pieceBarcode === barcode || 
+                          p.cartonBarcode === barcode ||
+                          p.id === barcode
+                        )
+                        if (product) {
+                          addProductToCart(product)
+                          setShowBarcodeScanner(false)
+                        } else {
+                          toast({ 
+                            title: 'Product not found', 
+                            description: `No product found with barcode: ${barcode}`,
+                            variant: 'destructive' as any
+                          })
+                        }
+                        e.currentTarget.value = ''
+                      }
+                    }
+                  }}
+                  autoFocus
+                />
+              </div>
+              
+              <Button
+                onClick={() => setShowBarcodeScanner(false)}
+                className="w-full bg-slate-700 hover:bg-slate-600 text-white"
+              >
+                Close Scanner
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Payment Modal */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300 }}
+            className="bg-slate-900 rounded-2xl p-8 max-w-md w-full mx-4 border border-green-500/30"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-white">Complete Payment</h3>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setShowPaymentModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+            
+            <div className="mb-6">
+              <div className="flex justify-between text-lg mb-4">
+                <span className="text-slate-300">Total Amount:</span>
+                <span className="text-white font-semibold">{formatMoney(cartTotal)}</span>
+              </div>
+              
+              {/* Payment Method Selection */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-300 mb-2">Payment Method</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setPaymentMethod('cash')}
+                    className={`p-3 rounded-lg border text-sm font-medium transition-all ${
+                      paymentMethod === 'cash' 
+                        ? 'bg-green-500/20 border-green-500/50 text-green-300' 
+                        : 'bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-500'
+                    }`}
+                  >
+                    Cash
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPaymentMethod('mpesa')
+                      setPaymentAmount(cartTotal.toString()) // M-Pesa requires exact amount
+                    }}
+                    className={`p-3 rounded-lg border text-sm font-medium transition-all ${
+                      paymentMethod === 'mpesa' 
+                        ? 'bg-green-500/20 border-green-500/50 text-green-300' 
+                        : 'bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-500'
+                    }`}
+                  >
+                    M-Pesa
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPaymentMethod('card')
+                      setPaymentAmount(cartTotal.toString()) // Card requires exact amount
+                    }}
+                    className={`p-3 rounded-lg border text-sm font-medium transition-all ${
+                      paymentMethod === 'card' 
+                        ? 'bg-green-500/20 border-green-500/50 text-green-300' 
+                        : 'bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-500'
+                    }`}
+                  >
+                    Card
+                  </button>
+                </div>
+              </div>
+
+              {/* Amount Input */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-300 mb-2">Amount Received</label>
+                <Input
+                  type="number"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  placeholder="Enter amount"
+                  className="bg-slate-800 border-slate-600 text-white"
+                />
+                {parseFloat(paymentAmount) > cartTotal && paymentMethod === 'cash' && (
+                  <p className="text-green-400 text-sm mt-2">
+                    Change: {formatMoney(parseFloat(paymentAmount) - cartTotal)}
+                  </p>
+                )}
+              </div>
+
+              {/* M-Pesa Phone Number */}
+              {paymentMethod === 'mpesa' && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">M-Pesa Phone Number</label>
+                  <Input
+                    type="tel"
+                    value={mpesaPhone}
+                    onChange={(e) => setMpesaPhone(e.target.value)}
+                    placeholder="254700000000"
+                    className="bg-slate-800 border-slate-600 text-white"
+                  />
+                  <p className="text-slate-400 text-xs mt-1">Format: 254XXXXXXXXX</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowPaymentModal(false)}
+                className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-800"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={async () => {
+                  setProcessingPayment(true)
+                  const orgId = userData?.organizationName || 'default'
+                  const userId = userData?.uid || 'anonymous'
+                  const lines: POSOrderLine[] = cart.map(l => ({
+                    productId: l.productId,
+                    name: l.name,
+                    quantityPieces: l.quantity,
+                    unitPrice: l.price,
+                    lineTotal: l.quantity * l.price,
+                  }))
+
+                  try {
+                    // Handle M-Pesa payment simulation
+                    if (paymentMethod === 'mpesa') {
+                      if (!mpesaPhone || !/^254\d{9}$/.test(mpesaPhone)) {
+                        toast({ 
+                          title: 'Invalid phone number', 
+                          description: 'Please enter a valid M-Pesa phone number (254XXXXXXXXX)',
+                          variant: 'destructive' as any
+                        })
+                        return
+                      }
+                      
+                      // Simulate M-Pesa STK push
+                      toast({ 
+                        title: 'M-Pesa Request Sent', 
+                        description: `Please check your phone ${mpesaPhone} for payment prompt`,
+                      })
+                      
+                      // Simulate processing delay
+                      await new Promise(resolve => setTimeout(resolve, 3000))
+                      
+                      // Simulate successful payment (in real implementation, this would be webhook-driven)
+                      toast({ 
+                        title: 'M-Pesa Payment Received', 
+                        description: `KSh ${cartTotal} received from ${mpesaPhone}`,
+                      })
+                    }
+
+                    const id = await addPosOrder(orgId, userId, lines)
+                    const itemsCount = cart.reduce((n, l) => n + l.quantity, 0)
+                    const change = paymentMethod === 'cash' ? (parseFloat(paymentAmount) - cartTotal) : 0
+                    
+                    let paymentDetails = ''
+                    if (paymentMethod === 'mpesa') {
+                      paymentDetails = ` • M-Pesa: ${mpesaPhone}`
+                    } else if (change > 0) {
+                      paymentDetails = ` • Change: ${formatMoney(change)}`
+                    }
+                    
+                    toast({ 
+                      title: 'Payment Complete', 
+                      description: `Order #${id} • ${itemsCount} item(s) • ${formatMoney(cartTotal)}${paymentDetails}` 
+                    })
+                    
+                    setCart([])
+                    setShowPaymentModal(false)
+                    setPaymentAmount('')
+                    setMpesaPhone('')
+                    
+                  } catch (e) {
+                    toast({ title: 'Failed to complete payment', description: String(e), variant: 'destructive' as any })
+                  } finally {
+                    setProcessingPayment(false)
+                  }
+                }}
+                disabled={
+                  processingPayment || 
+                  !paymentAmount || 
+                  (paymentMethod === 'cash' && parseFloat(paymentAmount) < cartTotal) ||
+                  (paymentMethod === 'mpesa' && (!mpesaPhone || !parseFloat(paymentAmount))) ||
+                  (paymentMethod !== 'cash' && parseFloat(paymentAmount) !== cartTotal)
+                }
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+              >
+                {processingPayment ? 'Processing...' : 'Complete Payment'}
+              </Button>
+            </div>
+          </motion.div>
         </div>
       )}
     </motion.div>

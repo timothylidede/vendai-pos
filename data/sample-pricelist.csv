@@ -1,0 +1,6 @@
+name,brand,category,barcode,carton barcode,retail uom,base uom,units per base,unit price,carton price
+Coca-Cola 500ml,Coca-Cola,Beverages,5449000131805,1234567890001,PCS,CTN,24,80,1920
+Royco Mchuzi Mix 200g,Royco,Spices,6161105450016,1234567890002,PCS,CTN,24,80,1920
+EXE All Purpose Wheat Flour 2kg,EXE,Flour,6161100210271,1234567890003,PCS,CTN,12,230,2760
+Menengai Bar Soap 800g,Menengai,Household,6161103950006,1234567890004,PCS,CTN,24,150,3600
+Ajab Wheat Flour 2kg,Ajab,Flour,6161100210455,1234567890005,PCS,CTN,12,220,2640

@@ -1,3 +1,10 @@
+'use client'
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { onAuthStateChanged } from "firebase/auth"
+import { doc, getDoc } from "firebase/firestore"
+import { auth, db } from "@/lib/firebase"
 import { WelcomePage } from "@/components/welcome-page"
 import { MainDashboard } from "@/components/main-dashboard"
 // Assistant is now hosted globally by `VendaiPanel` (components/vendai-panel.tsx)
@@ -5,13 +12,68 @@ import { NotificationDots } from "@/components/notification-dots"
 import { Sidebar } from "@/components/sidebar"
 
 export default function HomePage() {
-  // TODO: Add logic to check if this is first time launch
-  const isFirstTimeLaunch = true;
+  const [isLoading, setIsLoading] = useState(true)
+  const [user, setUser] = useState<any>(null)
+  const router = useRouter()
 
-  if (isFirstTimeLaunch) {
-    return <WelcomePage />;
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+      if (authUser) {
+        try {
+          // Check if user has completed onboarding
+          const userDocRef = doc(db, 'users', authUser.uid)
+          const userDoc = await getDoc(userDocRef)
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data()
+            const hasRole = userData.role
+            const onboardingCompleted = userData.onboardingCompleted
+            
+            if (hasRole && onboardingCompleted) {
+              // User is authenticated and onboarded - redirect to modules
+              router.push('/modules')
+              return
+            } else {
+              // User exists but hasn't completed onboarding
+              router.push('/onboarding')
+              return
+            }
+          } else {
+            // User document doesn't exist - redirect to onboarding
+            router.push('/onboarding')
+            return
+          }
+        } catch (error) {
+          console.error('Error checking user data:', error)
+          // On error, redirect to onboarding to be safe
+          router.push('/onboarding')
+          return
+        }
+      } else {
+        // No user logged in - show welcome page
+        setUser(null)
+        setIsLoading(false)
+      }
+    })
+
+    return () => unsubscribe()
+  }, [router])
+
+  // Show loading while checking authentication
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-900">
+        <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    )
   }
 
+  // Show welcome page for non-authenticated users
+  if (!user) {
+    return <WelcomePage />
+  }
+
+  // Fallback - shouldn't reach here due to redirects above
   return (
     <div className="flex h-screen bg-slate-900 overflow-hidden">
       {/* Sidebar */}
@@ -35,5 +97,5 @@ export default function HomePage() {
         </div>
       </div>
     </div>
-  );
+  )
 }

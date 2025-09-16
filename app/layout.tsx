@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react'
 import Image from 'next/image'
 import { ThemeProvider } from '@/components/theme-provider'
+import { AuthProvider } from '@/contexts/auth-context'
 import { VendaiPanel } from '@/components/vendai-panel'
+import { WindowControls } from '@/components/window-controls'
+import { Toaster } from '@/components/ui/toaster'
 import './globals.css'
 
 export const metadata = {
@@ -36,30 +39,22 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
             <div className="flex items-center space-x-2">
               {/* Window controls */}
-              <button 
-                aria-label="minimize" 
-                className="w-3 h-3 rounded-full bg-slate-700 hover:bg-slate-600 transition-colors" 
-              />
-              <button 
-                aria-label="maximize" 
-                className="w-3 h-3 rounded-full bg-slate-700 hover:bg-slate-600 transition-colors" 
-              />
-              <button 
-                aria-label="close" 
-                className="w-3 h-3 rounded-full bg-red-600 hover:bg-red-500 transition-colors" 
-              />
+              <WindowControls />
             </div>
           </header>
 
           {/* Main content */}
-          <main className="pt-10">
-            {children}
-          </main>
+          <AuthProvider>
+            <main className="pt-10">
+              {children}
+            </main>
+          </AuthProvider>
           
           {/* Vendai Panel */}
           <VendaiPanel />
           
           {/* AI Assistant is hosted by VendaiPanel */}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

@@ -1,0 +1,677 @@
+const { app, BrowserWindow, Menu, shell, ipcMain, dialog, session } = require('electron');
+const path = require('path');
+// Load environment variables for Electron main (development + production)
+try {
+  const dotenv = require('dotenv');
+  // Load from project root .env.local if present
+  dotenv.config({ path: path.join(__dirname, '..', '.env.local') });
+  // Also load generic .env as fallback
+  dotenv.config({ path: path.join(__dirname, '..', '.env') });
+} catch (e) {
+  // dotenv is optional; if not installed, we will rely on process env provided by the shell/bundler
+}
+const { spawn } = require('child_process');
+const { autoUpdater } = require('electron-updater');
+const express = require('express');
+const crypto = require('crypto');
+const isDev = process.env.NODE_ENV === 'development';
+
+// Keep a global reference of the window object
+let mainWindow;
+let nextServer;
+let authWindow;
+let oauthServer;
+let currentOAuthProcess = null;
+
+// OAuth Configuration for Firebase - we'll use Firebase's OAuth flow
+const OAUTH_PORT = 5173;
+const REDIRECT_URI = `http://127.0.0.1:${OAUTH_PORT}/callback`;
+
+// PKCE helper functions
+function base64URLEncode(buf) {
+  return buf.toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function sha256(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest();
+}
+
+// Start Next.js server in production
+function startNextServer() {
+  return new Promise((resolve, reject) => {
+    if (isDev) {
+      // In development, try both common ports
+      const tryUrl = async (url) => {
+        try {
+          const response = await fetch(url);
+          if (response.ok) {
+            return url;
+          }
+        } catch (error) {
+          return null;
+        }
+        return null;
+      };
+      
+      // Try common development ports
+      const checkPorts = async () => {
+        const urls = [
+          'http://localhost:3000',
+          'http://localhost:3001',
+          'http://localhost:3002'
+        ];
+        
+        for (const url of urls) {
+          const result = await tryUrl(url);
+          if (result) {
+            console.log(`Found Next.js dev server at ${result}`);
+            resolve(result);
+            return;
+          }
+        }
+        
+        // If no server found, default to 3000 and let it fail gracefully
+        console.log('No Next.js dev server found, defaulting to http://localhost:3000');
+        resolve('http://localhost:3000');
+      };
+      
+      // Give the dev server a moment to start, then check
+      setTimeout(checkPorts, 2000);
+      return;
+    }
+
+    nextServer = spawn('npm', ['start'], {
+      cwd: path.join(__dirname, '..'),
+      shell: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let output = '';
+    nextServer.stdout.on('data', (data) => {
+      output += data.toString();
+      if (output.includes('Ready') || output.includes('started server')) {
+        resolve('http://localhost:3000');
+      }
+    });
+
+    nextServer.stderr.on('data', (data) => {
+      console.error('Next.js error:', data.toString());
+    });
+
+    // Fallback timeout
+    setTimeout(() => {
+      resolve('http://localhost:3000');
+    }, 10000);
+  });
+}
+
+async function createWindow() {
+  // Start Next.js server first
+  const serverUrl = await startNextServer();
+
+  // Create the browser window
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 1000,
+    minHeight: 700,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      enableRemoteModule: false,
+      preload: path.join(__dirname, 'preload.js')
+    },
+    icon: path.join(__dirname, '../public/logo-icon.png'),
+    show: false,
+    frame: false, // Remove window frame since app has its own header
+    titleBarStyle: 'hidden',
+    backgroundColor: '#0f172a', // Match your app's background
+    webSecurity: false // Allow local file access
+  });
+
+  // Load the app
+  console.log(`Loading Electron window with URL: ${serverUrl}`);
+  mainWindow.loadURL(serverUrl);
+
+  // Show window when ready to prevent visual flash
+  mainWindow.once('ready-to-show', () => {
+    console.log('Electron window ready to show');
+    mainWindow.show();
+    
+    // Only open dev tools in development mode if explicitly needed
+    // Remove this line to prevent dev tools from opening automatically
+    // if (isDev) {
+    //   mainWindow.webContents.openDevTools();
+    // }
+  });
+
+  // Add error handling for failed loads
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error(`Failed to load ${validatedURL}: ${errorDescription} (${errorCode})`);
+  });
+
+  // Log when page finishes loading
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('Page finished loading in Electron window');
+  });
+
+  // Handle window closed
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    // Kill Next.js server when window closes
+    if (nextServer) {
+      nextServer.kill('SIGTERM');
+    }
+  });
+
+  // Handle window maximize/unmaximize events
+  mainWindow.on('maximize', () => {
+    if (mainWindow) {
+      mainWindow.webContents.send('window-state-changed', { isMaximized: true });
+    }
+  });
+
+  mainWindow.on('unmaximize', () => {
+    if (mainWindow) {
+      mainWindow.webContents.send('window-state-changed', { isMaximized: false });
+    }
+  });
+
+  // Handle external links
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  // Prevent navigation to external websites
+  mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+    try {
+      const parsedUrl = new URL(navigationUrl);
+      const isLocal = parsedUrl.origin.startsWith('http://localhost') || parsedUrl.origin.startsWith('http://127.0.0.1');
+      if (!isLocal) {
+        event.preventDefault();
+        shell.openExternal(navigationUrl);
+      }
+    } catch (e) {
+      // If URL parsing fails, block navigation
+      event.preventDefault();
+    }
+  });
+}
+
+// Create application menu
+function createMenu() {
+  const template = [
+    {
+      label: 'VendAI POS',
+      submenu: [
+        {
+          label: 'About VendAI POS',
+          click: () => {
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'About VendAI POS',
+              message: 'VendAI POS',
+              detail: 'AI-Powered Point of Sale System\nVersion 1.0.0'
+            });
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Preferences',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => {
+            // You can implement preferences window here
+            mainWindow.webContents.send('open-preferences');
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Quit',
+          accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
+          click: () => {
+            app.quit();
+          }
+        }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectall' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'close' }
+      ]
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Learn More',
+          click: () => {
+            shell.openExternal('https://github.com/timothylidede/vendai-pos');
+          }
+        }
+      ]
+    }
+  ];
+
+  // macOS specific menu adjustments
+  if (process.platform === 'darwin') {
+    template[0].label = app.getName();
+    template[0].submenu.unshift(
+      { role: 'about' },
+      { type: 'separator' }
+    );
+    
+    // Window menu
+    template[3].submenu = [
+      { role: 'close' },
+      { role: 'minimize' },
+      { role: 'zoom' },
+      { type: 'separator' },
+      { role: 'front' }
+    ];
+  }
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
+// App event listeners
+app.whenReady().then(() => {
+  // Set up custom protocol for OAuth redirects
+  if (!app.isDefaultProtocolClient('vendai-pos')) {
+    app.setAsDefaultProtocolClient('vendai-pos');
+  }
+
+  createWindow();
+  createMenu();
+
+  // Handle app activation (macOS)
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+
+  // Auto updater (for production builds)
+  if (!isDev) {
+    autoUpdater.checkForUpdatesAndNotify();
+  }
+});
+
+// Quit when all windows are closed
+app.on('window-all-closed', () => {
+  // Kill Next.js server
+  if (nextServer) {
+    nextServer.kill('SIGTERM');
+  }
+  
+  // Close OAuth server if running
+  if (oauthServer) {
+    oauthServer.close();
+  }
+  
+  // Clean up OAuth process
+  if (currentOAuthProcess) {
+    currentOAuthProcess.reject(new Error('App closing'));
+    currentOAuthProcess = null;
+  }
+  
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+// Security: Prevent new window creation
+app.on('web-contents-created', (event, contents) => {
+  contents.on('new-window', (event, url) => {
+    event.preventDefault();
+    shell.openExternal(url);
+  });
+});
+
+// Handle protocol for OAuth redirects
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  if (url.startsWith('vendai-pos://oauth/callback')) {
+    // Send the OAuth result to the renderer process
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('oauth-callback', url);
+    }
+  }
+});
+
+// Handle protocol on Windows
+app.on('second-instance', (event, commandLine, workingDirectory) => {
+  // Someone tried to run a second instance, focus our window instead
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+  
+  // Check for OAuth callback in command line
+  const url = commandLine.find(arg => arg.startsWith('vendai-pos://'));
+  if (url && url.includes('oauth/callback')) {
+    mainWindow.webContents.send('oauth-callback', url);
+  }
+});
+
+// IPC handlers
+ipcMain.handle('app-version', () => {
+  return app.getVersion();
+});
+
+ipcMain.handle('show-message-box', async (event, options) => {
+  const result = await dialog.showMessageBox(mainWindow, options);
+  return result;
+});
+
+// Window control handlers
+ipcMain.handle('minimize-window', () => {
+  if (mainWindow) {
+    mainWindow.minimize();
+  }
+});
+
+ipcMain.handle('maximize-window', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.restore();
+    } else {
+      mainWindow.maximize();
+    }
+  }
+});
+
+ipcMain.handle('is-maximized', () => {
+  if (mainWindow) {
+    return mainWindow.isMaximized();
+  }
+  return false;
+});
+
+ipcMain.handle('close-window', () => {
+  if (mainWindow) {
+    mainWindow.close();
+  }
+});
+
+// Electron-style OAuth flow (like VSCode, Zoom, etc.)
+ipcMain.handle('google-oauth', async () => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Clean up any existing OAuth process
+      if (currentOAuthProcess) {
+        currentOAuthProcess.reject(new Error('New OAuth process started'));
+      }
+      
+      currentOAuthProcess = { resolve, reject };
+
+      // Use direct Google OAuth with proper redirect to our app
+      const googleClientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+      if (!googleClientId) {
+        const msg = 'Missing GOOGLE_OAUTH_CLIENT_ID. Please create a Google OAuth "Desktop app" client in Google Cloud Console and set GOOGLE_OAUTH_CLIENT_ID in .env.local';
+        console.error(msg);
+        dialog.showErrorBox('Google Sign-in not configured', msg);
+        currentOAuthProcess.reject(new Error(msg));
+        currentOAuthProcess = null;
+        return;
+      }
+
+      // Generate PKCE values (required for installed apps)
+      const codeVerifier = base64URLEncode(crypto.randomBytes(32));
+      const codeChallenge = base64URLEncode(sha256(codeVerifier));
+      
+  // Build Google OAuth URL that redirects to our local server
+      const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+      authUrl.searchParams.set('client_id', googleClientId);
+      authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('scope', 'openid profile email');
+      authUrl.searchParams.set('access_type', 'offline');
+      authUrl.searchParams.set('code_challenge', codeChallenge);
+      authUrl.searchParams.set('code_challenge_method', 'S256');
+      authUrl.searchParams.set('prompt', 'consent');
+
+      // Start local callback server
+      const serverApp = express();
+      
+      oauthServer = serverApp.listen(OAUTH_PORT, () => {
+        console.log(`OAuth callback server listening on port ${OAUTH_PORT}`);
+      });
+
+      serverApp.get('/callback', async (req, res) => {
+        console.log('OAuth callback received:', req.query);
+        
+        const code = req.query.code;
+        const error = req.query.error;
+
+        if (error) {
+          const errorMsg = `Authentication failed: ${error}`;
+          res.send(`
+            <html>
+              <head><title>Authentication Failed</title></head>
+              <body style="font-family: Arial; padding: 40px; text-align: center;">
+                <h2>❌ Authentication Failed</h2>
+                <p>${errorMsg}</p>
+                <p>You can close this window and try again in the app.</p>
+                <script>setTimeout(() => window.close(), 3000);</script>
+              </body>
+            </html>
+          `);
+          oauthServer.close();
+          if (currentOAuthProcess) {
+            currentOAuthProcess.reject(new Error(errorMsg));
+            currentOAuthProcess = null;
+          }
+          return;
+        }
+
+        if (!code) {
+          res.send(`
+            <html>
+              <head><title>Authentication Failed</title></head>
+              <body style="font-family: Arial; padding: 40px; text-align: center;">
+                <h2>❌ No authorization code received</h2>
+                <p>You can close this window and try again in the app.</p>
+                <script>setTimeout(() => window.close(), 3000);</script>
+              </body>
+            </html>
+          `);
+          oauthServer.close();
+          if (currentOAuthProcess) {
+            currentOAuthProcess.reject(new Error('No authorization code received'));
+            currentOAuthProcess = null;
+          }
+          return;
+        }
+
+        try {
+          // Exchange code for tokens (we don't need client_secret for public OAuth apps)
+          const tokenEndpoint = 'https://oauth2.googleapis.com/token';
+          const googleClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET; // Optional: only required for Web clients
+          const tokenBody = new URLSearchParams({
+            client_id: googleClientId,
+            code: code,
+            grant_type: 'authorization_code',
+            redirect_uri: REDIRECT_URI,
+            code_verifier: codeVerifier
+          });
+          if (googleClientSecret) {
+            tokenBody.set('client_secret', googleClientSecret);
+          }
+          const tokenResponse = await fetch(tokenEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: tokenBody
+          });
+
+          const tokens = await tokenResponse.json();
+          console.log('Token response:', tokens);
+
+          if (tokens.error) {
+            const desc = tokens.error_description || tokens.error || 'unknown_error';
+            if (desc.includes('client_secret is missing')) {
+              throw new Error('Token exchange failed: client_secret is missing. This usually means you are using a Web OAuth client ID. For Electron, create a Google OAuth "Desktop app" client and set GOOGLE_OAUTH_CLIENT_ID in .env.local, or set GOOGLE_OAUTH_CLIENT_SECRET as well (not recommended).');
+            }
+            throw new Error(`Token exchange failed: ${desc}`);
+          }
+
+          // Get user info from Google
+          const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+            headers: { 'Authorization': `Bearer ${tokens.access_token}` }
+          });
+          
+          const userInfo = await userResponse.json();
+          console.log('User info:', userInfo);
+
+          // Success page
+          res.send(`
+            <html>
+              <head><title>Login Successful</title></head>
+              <body style="font-family: Arial; padding: 40px; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <h2>✅ Login Successful!</h2>
+                <p>Welcome, ${userInfo.name}!</p>
+                <p>You can now close this window and return to VendAI.</p>
+                <script>setTimeout(() => window.close(), 2000);</script>
+              </body>
+            </html>
+          `);
+          
+          oauthServer.close();
+          
+          if (currentOAuthProcess) {
+            // Return user info to the renderer process
+            currentOAuthProcess.resolve({
+              success: true,
+              user: {
+                id: userInfo.id,
+                email: userInfo.email,
+                name: userInfo.name,
+                picture: userInfo.picture
+              },
+              tokens: {
+                accessToken: tokens.access_token,
+                idToken: tokens.id_token
+              }
+            });
+            currentOAuthProcess = null;
+          }
+
+        } catch (error) {
+          console.error('Token exchange error:', error);
+          res.send(`
+            <html>
+              <head><title>Authentication Failed</title></head>
+              <body style="font-family: Arial; padding: 40px; text-align: center;">
+                <h2>❌ Authentication Failed</h2>
+                <p>Error: ${error.message}</p>
+                <p>You can close this window and try again in the app.</p>
+                <script>setTimeout(() => window.close(), 3000);</script>
+              </body>
+            </html>
+          `);
+          oauthServer.close();
+          if (currentOAuthProcess) {
+            currentOAuthProcess.reject(error);
+            currentOAuthProcess = null;
+          }
+        }
+      });
+
+      console.log('Opening browser for Google OAuth...');
+      console.log('Auth URL:', authUrl.toString());
+      
+      // Open the system browser to Google OAuth
+  // Open the system browser using Electron's shell API (more reliable than 'open')
+  await shell.openExternal(authUrl.toString());
+
+      // Set timeout for OAuth flow (5 minutes)
+      setTimeout(() => {
+        if (oauthServer) {
+          oauthServer.close();
+        }
+        if (currentOAuthProcess) {
+          currentOAuthProcess.reject(new Error('OAuth timeout - please try again'));
+          currentOAuthProcess = null;
+        }
+      }, 300000);
+
+    } catch (error) {
+      console.error('OAuth error:', error);
+      if (oauthServer) {
+        oauthServer.close();
+      }
+      reject(error);
+    }
+  });
+});
+
+// Handle certificate errors (for development)
+app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
+  if (isDev) {
+    // In development, ignore certificate errors
+    event.preventDefault();
+    callback(true);
+  } else {
+    // In production, use default behavior
+    callback(false);
+  }
+});
+
+// Auto updater events
+autoUpdater.on('checking-for-update', () => {
+  console.log('Checking for update...');
+});
+
+autoUpdater.on('update-available', (info) => {
+  console.log('Update available.');
+});
+
+autoUpdater.on('update-not-available', (info) => {
+  console.log('Update not available.');
+});
+
+autoUpdater.on('error', (err) => {
+  console.log('Error in auto-updater. ' + err);
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  let log_message = "Download speed: " + progressObj.bytesPerSecond;
+  log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
+  log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
+  console.log(log_message);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('Update downloaded');
+  autoUpdater.quitAndInstall();
+});

@@ -1,18 +1,24 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from './ui/card'
 import { 
   ShoppingCart, Package, HeartHandshake, Truck, Users,
-  ArrowRightCircle, Bell,
+  ArrowRightCircle,
   Settings, UserCircle, ChevronDown, 
   User, Mail, MapPin, LogOut, X
 } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { onAuthStateChanged, signOut } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
-import { auth, db } from '@/lib/firebase'
+import { signOut } from 'firebase/auth'
+import { auth } from '@/lib/firebase'
+import { useAuth } from '@/contexts/auth-context'
+import { NotificationSystem } from '@/components/notification-system'
+import { OrganizationSettings } from '@/components/organization-settings'
+import { ProfileManagement } from '@/components/profile-management'
+import { hasInventory, POS_PRODUCTS_COL } from '@/lib/pos-operations'
+import { db } from '@/lib/firebase'
+import { collection, getDocs, query, limit } from 'firebase/firestore'
 
 const retailerModules = [
   {
@@ -87,6 +93,7 @@ const distributorModules = [
 ]
 
 export function ModulesDashboard() {
+  const { user, userData, loading } = useAuth();
   const [showChatbot, setShowChatbot] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
@@ -95,68 +102,70 @@ export function ModulesDashboard() {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isFirstTime, setIsFirstTime] = useState(false);
-  const [userRole, setUserRole] = useState<'retailer' | 'distributor' | null>(null);
   const [showTooltip, setShowTooltip] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [showOrgSettings, setShowOrgSettings] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const router = useRouter();
-  
-  // Listen for authentication state and fetch user role
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        try {
-          // Get user data from Firestore
-          const userDocRef = doc(db, 'users', user.uid);
-          const userDoc = await getDoc(userDocRef);
-          
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            const role = userData.role;
-            
-            if (role) {
-              setUser(user);
-              setUserRole(role);
-              setIsLoading(false);
-              
-              // Check if first time user
-              const isNewUser = !userData.onboardingCompleted || localStorage.getItem('vendai-first-login') !== 'false';
-              setIsFirstTime(isNewUser);
-              
-              if (isNewUser) {
-                // Show welcome tooltip
-                setTimeout(() => {
-                  setShowTooltip(role === 'retailer' ? 'Point of Sale' : 'Logistics');
-                }, 2000);
-                
-                // Mark as not first time anymore after showing experience
-                setTimeout(() => {
-                  localStorage.setItem('vendai-first-login', 'false');
-                }, 5000);
-              }
-            } else {
-              // User doesn't have a role - redirect to onboarding
-              console.log('User has no role - redirecting to onboarding');
-              router.push('/onboarding');
-            }
-          } else {
-            // User document doesn't exist - redirect to onboarding
-            console.log('User document not found - redirecting to onboarding');
-            router.push('/onboarding');
-          }
-        } catch (error) {
-          console.error('Error fetching user data:', error);
-          router.push('/onboarding');
-        }
-      } else {
-        // No user authenticated - redirect to welcome page
-        console.log('No user authenticated - redirecting to welcome');
-        router.push('/');
-      }
-    });
+  const [needsInventory, setNeedsInventory] = useState(false)
+  const orgId = useMemo(() => userData?.organizationName || 'default', [userData?.organizationName])
 
-    return () => unsubscribe();
-  }, [router]);
+  // Handle routing based on auth state
+  useEffect(() => {
+    if (!loading) {
+      if (!user) {
+        // No user - redirect to welcome
+        router.push('/');
+      } else if (!userData) {
+        // User exists but no user data - redirect to onboarding
+        router.push('/onboarding');
+      } else if (!userData.onboardingCompleted) {
+        // User data exists but onboarding not completed
+        router.push('/onboarding');
+      } else {
+        // User is properly set up - show dashboard
+        // Check if first time user
+        const isNewUser = localStorage.getItem('vendai-first-login') !== 'false';
+        setIsFirstTime(isNewUser);
+        
+        if (isNewUser) {
+          // Show welcome tooltip
+          setTimeout(() => {
+            setShowTooltip(userData.role === 'retailer' ? 'Point of Sale' : 'Logistics');
+          }, 2000);
+          
+          // Mark as not first time anymore after showing experience
+          setTimeout(() => {
+            localStorage.setItem('vendai-first-login', 'false');
+          }, 5000);
+        }
+      }
+    }
+  }, [user, userData, loading, router]);
+
+  // Check if inventory/products exist; if not, force highlight Inventory and disable others
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      if (!user || !userData) return
+      // Check if there are any products at all (not just inventory records)
+      try {
+        const q = query(collection(db, POS_PRODUCTS_COL), limit(1))
+        const snap = await getDocs(q)
+        const hasProducts = !snap.empty
+        if (active) {
+          setNeedsInventory(!hasProducts)
+          if (!hasProducts) setShowTooltip('Inventory')
+        }
+      } catch (error) {
+        // If we can't check, assume no inventory to be safe
+        if (active) {
+          setNeedsInventory(true)
+          setShowTooltip('Inventory')
+        }
+      }
+    })()
+    return () => { active = false }
+  }, [user, userData])
   
   const toggleBot = useCallback(() => {
     setIsSpinning(true);
@@ -204,6 +213,7 @@ export function ModulesDashboard() {
 
   const handleModuleClick = useCallback((moduleTitle: string) => {
     if (isExiting) return; // Prevent multiple clicks during animation
+    if (needsInventory && moduleTitle !== 'Inventory') return;
     
     setClickedModule(moduleTitle);
     setIsExiting(true);
@@ -226,12 +236,23 @@ export function ModulesDashboard() {
 
   // Get modules based on user role
   const getCurrentModules = () => {
-    if (!userRole) return [];
-    return userRole === 'retailer' ? retailerModules : distributorModules;
+    if (!userData?.role) return [];
+    const base = userData.role === 'retailer' ? retailerModules : distributorModules;
+    
+    // Always ensure inventory is second module (after POS/Logistics)
+    const modules = [...base];
+    const inventoryIndex = modules.findIndex(m => m.title === 'Inventory');
+    if (inventoryIndex > 1) {
+      // Move inventory to second position
+      const inventory = modules.splice(inventoryIndex, 1)[0];
+      modules.splice(1, 0, inventory);
+    }
+    
+    return modules;
   };
 
   // Show loading state while checking authentication
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 flex items-center justify-center">
         <div className="text-center">
@@ -298,16 +319,20 @@ export function ModulesDashboard() {
       )}
       
       {/* Header */}
-      <div className="flex justify-end mb-12">
+      <div className="flex justify-between items-center mb-12">
+        <div className="flex-1" /> {/* Spacer */}
+        
         <div className="flex items-center space-x-4">
-          <button className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.03] via-transparent to-purple-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
-            <Bell className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
-          </button>
-          <button className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105">
+          <NotificationSystem />
+          
+          <button 
+            onClick={() => setShowOrgSettings(true)}
+            className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
+          >
             <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] via-transparent to-blue-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
             <Settings className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
           </button>
+
           <div className="relative profile-dropdown-container">
             <button 
               onClick={toggleProfileDropdown}
@@ -343,8 +368,13 @@ export function ModulesDashboard() {
                         )}
                       </div>
                       <div>
-                        <h3 className="text-white font-semibold text-lg">{user?.displayName || 'User'}</h3>
-                        <p className="text-slate-300 text-sm capitalize">{userRole || 'Loading...'}</p>
+                        <h3 className="text-white font-semibold text-lg">
+                          {userData?.displayName || user?.displayName || user?.email?.split('@')[0] || 'User'}
+                        </h3>
+                        <p className="text-slate-300 text-sm capitalize">{userData?.role || 'Loading...'}</p>
+                        {userData?.organizationName && (
+                          <p className="text-slate-400 text-xs">{userData.organizationName}</p>
+                        )}
                         <div className="flex items-center space-x-2 mt-1">
                           <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                           <span className="text-green-400 text-xs font-medium">Online</span>
@@ -354,7 +384,13 @@ export function ModulesDashboard() {
 
                     {/* Profile Menu Items */}
                     <div className="space-y-2">
-                      <button className="w-full flex items-center space-x-3 p-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.10] border border-white/[0.08] hover:border-white/[0.15] transition-all duration-200 group">
+                      <button 
+                        onClick={() => {
+                          setShowProfile(true);
+                          setShowProfileDropdown(false);
+                        }}
+                        className="w-full flex items-center space-x-3 p-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.10] border border-white/[0.08] hover:border-white/[0.15] transition-all duration-200 group"
+                      >
                         <Mail className="w-4 h-4 text-blue-400 group-hover:text-blue-300" />
                         <div className="text-left">
                           <div className="text-white text-sm font-medium">Account</div>
@@ -362,11 +398,36 @@ export function ModulesDashboard() {
                         </div>
                       </button>
 
-                      <button className="w-full flex items-center space-x-3 p-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.10] border border-white/[0.08] hover:border-white/[0.15] transition-all duration-200 group">
-                        <MapPin className="w-4 h-4 text-orange-400 group-hover:text-orange-300" />
+                      <button 
+                        onClick={() => {
+                          setShowProfile(true);
+                          setShowProfileDropdown(false);
+                        }}
+                        className="w-full flex items-center space-x-3 p-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.10] border border-white/[0.08] hover:border-white/[0.15] transition-all duration-200 group"
+                      >
+                        <User className="w-4 h-4 text-green-400 group-hover:text-green-300" />
                         <div className="text-left">
                           <div className="text-white text-sm font-medium">Role</div>
-                          <div className="text-slate-400 text-xs capitalize">{userRole === 'retailer' ? 'Retail Business' : 'Distribution Business'}</div>
+                          <div className="text-slate-400 text-xs capitalize">
+                            {userData?.role === 'retailer' ? 'Retail Business' : 'Distribution Business'}
+                          </div>
+                        </div>
+                      </button>
+
+                      <button 
+                        onClick={() => {
+                          setShowOrgSettings(true);
+                          setShowProfileDropdown(false);
+                        }}
+                        className="w-full flex items-center space-x-3 p-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.10] border border-white/[0.08] hover:border-white/[0.15] transition-all duration-200 group"
+                      >
+                        <MapPin className="w-4 h-4 text-orange-400 group-hover:text-orange-300" />
+                        <div className="text-left">
+                          <div className="text-white text-sm font-medium">Organization</div>
+                          <div className="text-slate-400 text-xs">
+                            {userData?.organizationName || 'Not set'}
+                            {userData?.isOrganizationCreator && ' (Creator)'}
+                          </div>
                         </div>
                       </button>
                     </div>
@@ -417,7 +478,7 @@ export function ModulesDashboard() {
                   Welcome to VendAI!
                 </h2>
                 <p className="text-slate-300 text-sm">
-                  {userRole === 'retailer' 
+                  {userData?.role === 'retailer' 
                     ? 'Your POS system is ready. Click on "Point of Sale" to process your first transaction!' 
                     : 'Your distribution platform is ready. Click on "Inventory" to start managing your catalog!'
                   }
@@ -440,7 +501,7 @@ export function ModulesDashboard() {
           {getCurrentModules().map((module, index) => {
             const Icon = module.icon
             const isClicked = clickedModule === module.title;
-            const hasTooltip = showTooltip === module.title;
+            const hasTooltip = showTooltip === module.title || (needsInventory && module.title === 'Inventory');
             
             return (
               <motion.div
@@ -454,7 +515,7 @@ export function ModulesDashboard() {
                   transition: { duration: 0.3, ease: "easeOut" }
                 } : {}}
                 onClick={() => handleModuleClick(module.title)}
-                style={{ pointerEvents: isExiting ? 'none' : 'auto' }}
+                style={{ pointerEvents: isExiting ? 'none' : (needsInventory && module.title !== 'Inventory' ? 'none' : 'auto') }}
               >
                 {/* First-time user tooltip */}
                 {hasTooltip && (
@@ -464,9 +525,9 @@ export function ModulesDashboard() {
                     exit={{ opacity: 0, scale: 0.8, y: 10 }}
                     className="absolute -top-16 left-1/2 transform -translate-x-1/2 z-50"
                   >
-                    <div className="relative bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-xl shadow-lg text-sm font-medium whitespace-nowrap">
-                      {userRole === 'retailer' ? '👆 Start here! Process your first sale' : '👆 Start here! Manage your catalog'}
-                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-blue-600"></div>
+                    <div className="relative bg-gradient-to-r from-blue-600 to-green-600 text-white px-4 py-2 rounded-xl shadow-lg text-sm font-medium whitespace-nowrap">
+                      {needsInventory ? 'Add products first to unlock other modules' : (userData?.role === 'retailer' ? '👆 Start here! Process your first sale' : '👆 Start here! Manage your catalog')}
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-green-600"></div>
                     </div>
                     <button
                       onClick={(e) => {
@@ -480,7 +541,7 @@ export function ModulesDashboard() {
                   </motion.div>
                 )}
                 <div 
-                  className={`group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] ${module.hoverBorderColor} transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] ${module.shadowColor} cursor-pointer h-full ${
+                  className={`group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border ${needsInventory && module.title !== 'Inventory' ? 'border-white/[0.04] opacity-60' : 'border-white/[0.08]'} ${module.hoverBorderColor} transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] ${module.shadowColor} cursor-pointer h-full ${
                     isClicked ? 'ring-2 ring-offset-2 ring-offset-slate-900 ' + (
                       module.color === 'text-green-400' ? 'ring-green-400/50' :
                       module.color === 'text-blue-400' ? 'ring-blue-400/50' : 
@@ -493,13 +554,13 @@ export function ModulesDashboard() {
                   }`}
                 >
                   {/* Glassmorphic background overlay */}
-                  <div className={`absolute inset-0 bg-gradient-to-br ${module.bgGradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
+                  <div className={`absolute inset-0 bg-gradient-to-br ${module.bgGradient} ${needsInventory && module.title !== 'Inventory' ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity duration-500`} />
                   
                   <div className="relative flex flex-col items-center justify-center h-full space-y-6 p-8">
                     {/* Icon Container */}
                     <div className="relative">
                       <div className="w-20 h-20 rounded-2xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] flex items-center justify-center group-hover:scale-110 transition-all duration-500 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)]">
-                        <Icon className={`w-10 h-10 ${module.color} ${module.hoverColor} transition-all duration-500`} 
+                        <Icon className={`w-10 h-10 ${module.color} ${module.hoverColor} transition-all duration-500 ${needsInventory && module.title !== 'Inventory' ? 'opacity-60' : ''}`} 
                               style={{
                                 filter: `drop-shadow(0 4px 8px ${
                                   module.color === 'text-green-400' ? 'rgba(34, 197, 94, 0.4)' :
@@ -524,7 +585,7 @@ export function ModulesDashboard() {
                     
                     {/* Content */}
                     <div className="text-center">
-                      <h3 className={`text-xl font-bold ${module.color} ${module.hoverColor} transition-colors duration-300 tracking-tight`}>
+                      <h3 className={`text-xl font-bold ${module.color} ${module.hoverColor} transition-colors duration-300 tracking-tight ${needsInventory && module.title !== 'Inventory' ? 'opacity-60' : ''}`}>
                         {module.title}
                       </h3>
                     </div>
@@ -532,6 +593,11 @@ export function ModulesDashboard() {
                   
                   {/* Top highlight line */}
                   <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  {needsInventory && module.title === 'Inventory' && (
+                    <div className="absolute -right-6 -top-4 rotate-12 animate-bounce">
+                      <ArrowRightCircle className="w-10 h-10 text-green-400 drop-shadow-[0_0_12px_rgba(34,197,94,0.5)]" />
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )
@@ -606,6 +672,18 @@ export function ModulesDashboard() {
           </motion.div>
         </motion.div>
       )}
+
+      {/* Organization Settings Modal */}
+      <OrganizationSettings 
+        isOpen={showOrgSettings}
+        onClose={() => setShowOrgSettings(false)}
+      />
+
+      {/* Profile Management Modal */}
+      <ProfileManagement 
+        isOpen={showProfile}
+        onClose={() => setShowProfile(false)}
+      />
     </motion.div>
   )
 }

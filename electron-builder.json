@@ -76,7 +76,7 @@
   ],
   "asar": true,
   "compression": "maximum",
-  "filesExtraMetadata": {
+  "extraMetadata": {
     "main": "electron/main.js"
   }
 }

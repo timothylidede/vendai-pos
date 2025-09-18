@@ -7,15 +7,11 @@
     "buildResources": "build"
   },
   "files": [
-    {
-      "from": ".",
-      "filter": [
-        "package.json",
-        "electron/**/*",
-        "!**/*.map",
-        "!**/tests/**"
-      ]
-    },
+    "package.json",
+    "electron/**/*",
+    "!.git/**/*",
+    "!**/*.map",
+    "!**/tests/**",
     {
       "from": ".next",
       "to": ".next"
@@ -33,7 +29,7 @@
       { "target": "dmg", "arch": ["x64", "arm64"] },
       { "target": "zip", "arch": ["x64", "arm64"] }
     ],
-    "icon": "build/icon.icns",
+    "icon": "build/icons/icon.icns",
     "entitlements": "build/entitlements.mac.plist",
     "entitlementsInherit": "build/entitlements.mac.plist",
     "minimumSystemVersion": "10.15.0"
@@ -75,8 +71,5 @@
     }
   ],
   "asar": true,
-  "compression": "maximum",
-  "extraMetadata": {
-    "main": "electron/main.js"
-  }
+  "compression": "maximum"
 }

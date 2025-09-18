@@ -1,3 +1,5 @@
+'use client'
+
 import dynamic from 'next/dynamic'
 
 const POSPage = dynamic(() => import('@/components/modules/pos-page').then(m => m.POSPage), {

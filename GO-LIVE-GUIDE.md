@@ -26,7 +26,33 @@ Your VendAI POS app is now ready for production distribution with automated buil
 
 ---
 
-## 🎯 Step 1: Create Your First Release
+## 🎯 Step 1: Deploy to Vercel & Get API URL
+
+### Deploy VendAI POS App
+```bash
+# Option A: Use our script
+cd "c:\Users\lided\Downloads\vendai-pos"
+.\scripts\deploy.bat
+
+# Option B: Manual deployment
+npm install -g vercel
+vercel --prod
+```
+
+### Get Your API URL
+After deployment, Vercel will show you the URL (example):
+```
+✅ Production: https://vendai-pos-abc123def.vercel.app
+```
+
+**Copy this URL** - you'll need it for Step 2!
+
+### Test Your API
+Visit these URLs to verify they work:
+- `https://YOUR-URL.vercel.app/api/releases/latest`
+- `https://YOUR-URL.vercel.app/api/releases/check-update?version=v1.0.0&platform=win32`
+
+## 🎯 Step 2: Create Your First Release
 
 ### Option A: Via GitHub Web Interface (Recommended)
 1. Go to your GitHub repository: `https://github.com/timothylidede/vendai-pos`
@@ -70,7 +96,27 @@ git push origin v1.0.0
 
 ---
 
-## 🌐 Step 2: Integrate with vendai.digital Website
+## 🌐 Step 3: Update vendai-website with Correct API URL
+
+### Update Your Download Page Code
+Replace the API URL in your vendai-website project:
+
+```javascript
+// ❌ Wrong (this was causing the 404)
+const API_URL = 'https://vendai-pos.vercel.app/api/releases/latest';
+
+// ✅ Correct (use your actual deployment URL)
+const API_URL = 'https://YOUR-ACTUAL-URL.vercel.app/api/releases/latest';
+
+// Example:
+const API_URL = 'https://vendai-pos-abc123def.vercel.app/api/releases/latest';
+```
+
+### Test the Integration
+1. Update your vendai-website code
+2. Deploy vendai-website 
+3. Visit the download page
+4. Verify it loads release information correctly
 
 ### For Your Copilot on vendai.digital Project:
 

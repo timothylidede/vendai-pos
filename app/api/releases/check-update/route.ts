@@ -16,8 +16,9 @@ interface UpdateResponse {
 
 async function fetchLatestRelease() {
   try {
+    const repoUrl = process.env.NEXT_PUBLIC_GITHUB_REPO || 'timothylidede/vendai-pos'
     const response = await fetch(
-      'https://api.github.com/repos/timothylidede/vendai-pos/releases/latest',
+      `https://api.github.com/repos/${repoUrl}/releases/latest`,
       {
         headers: {
           'Accept': 'application/vnd.github.v3+json',

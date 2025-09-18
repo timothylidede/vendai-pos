@@ -51,14 +51,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </main>
           </AuthProvider>
           
-          {/* Update Manager */}
+          {/* Update Manager (Electron only) */}
           <UpdateManager />
           
           {/* Vendai Panel */}
           <VendaiPanel />
-          
-          {/* Update Manager (Electron only) */}
-          <UpdateManager />
           
           {/* AI Assistant is hosted by VendaiPanel */}
           <Toaster />

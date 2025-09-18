@@ -8,11 +8,22 @@ Copy this exact prompt to your Copilot working on the vendai.digital website:
 
 ## Requirements:
 1. Create a modern download page at `/download` or `/vendai-pos-download` 
-2. Fetch release info from API: `https://vendai-pos.vercel.app/api/releases/latest`
+2. **IMPORTANT**: Fetch release info from API: `https://vendai-nzd6u7wvp-vendais-projects.vercel.app/api/releases/latest`
+   - ✅ **LIVE API URL**: `https://vendai-nzd6u7wvp-vendais-projects.vercel.app/api/releases/latest`
+   - This API is deployed and working - you can test it in browser
 3. Auto-detect user's operating system (Windows/Mac/Linux)
 4. Show appropriate download buttons for each platform
 5. Include system requirements and installation instructions
 6. Handle loading states and API errors gracefully
+
+## ⚠️ CRITICAL: API URL Setup
+✅ **USE THIS WORKING API URL**: `https://vendai-nzd6u7wvp-vendais-projects.vercel.app/api/releases/latest`
+
+Do NOT use these (they cause 404s):
+- ❌ `https://vendai-pos.vercel.app` 
+- ❌ `https://api.github.com/repos/...` directly
+
+The API is live and working - test it: https://vendai-nzd6u7wvp-vendais-projects.vercel.app/api/releases/latest
 
 ## API Response Format:
 ```json

@@ -1,138 +1,134 @@
 {
-  "main": "electron/main.js",
-  "homepage": "./",
-  "build": {
-    "appId": "com.vendai.pos",
-    "productName": "VendAI POS",
-    "description": "AI-Powered Point of Sale System for Modern Businesses",
-    "copyright": "Copyright © 2024 VendAI. All rights reserved.",
-    "directories": {
-      "out": "dist",
-      "buildResources": "build"
-    },
-    "files": [
-      "out/**/*",
-      "electron/**/*",
-      "node_modules/**/*",
-      "package.json",
-      "!node_modules/@next/swc-*/**/*",
-      "!node_modules/next/dist/compiled/**/*"
-    ],
-    "extraFiles": [
+  "appId": "com.vendai.pos",
+  "productName": "VendAI POS",
+  "description": "AI-Powered Point of Sale System for Modern Businesses",
+  "copyright": "Copyright © 2024 VendAI. All rights reserved.",
+  "directories": {
+    "out": "dist",
+    "buildResources": "build"
+  },
+  "files": [
+    "out/**/*",
+    "electron/**/*",
+    "node_modules/**/*",
+    "package.json",
+    "!node_modules/@next/swc-*/**/*",
+    "!node_modules/next/dist/compiled/**/*"
+  ],
+  "extraFiles": [
+    {
+      "from": ".next",
+      "to": "resources/.next",
+      "filter": ["**/*"]
+    }
+  ],
+  "mac": {
+    "category": "public.app-category.business",
+    "target": [
       {
-        "from": ".next",
-        "to": "resources/.next",
-        "filter": ["**/*"]
-      }
-    ],
-    "mac": {
-      "category": "public.app-category.business",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": ["x64", "arm64"]
-        },
-        {
-          "target": "zip",
-          "arch": ["x64", "arm64"]
-        }
-      ],
-      "icon": "build/icon.icns",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "darkModeSupport": true,
-      "minimumSystemVersion": "10.15.0"
-    },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": ["x64"]
-        },
-        {
-          "target": "portable",
-          "arch": ["x64"]
-        }
-      ],
-      "icon": "build/icon.ico",
-      "publisherName": "VendAI",
-      "requestedExecutionLevel": "asInvoker",
-      "artifactName": "${productName}-${version}-${arch}-Setup.${ext}"
-    },
-    "linux": {
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": ["x64"]
-        },
-        {
-          "target": "deb",
-          "arch": ["x64"]
-        },
-        {
-          "target": "rpm",
-          "arch": ["x64"]
-        }
-      ],
-      "icon": "build/icon.png",
-      "category": "Office",
-      "maintainer": "Timothy Lidede <timothyliidede@gmail.com>"
-    },
-    "dmg": {
-      "title": "VendAI POS ${version}",
-      "background": "build/dmg-background.png",
-      "icon": "build/icon.icns",
-      "iconSize": 100,
-      "window": {
-        "width": 540,
-        "height": 380
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
       },
-      "contents": [
-        {
-          "x": 130,
-          "y": 220,
-          "type": "file"
-        },
-        {
-          "x": 410,
-          "y": 220,
-          "type": "link",
-          "path": "/Applications"
-        }
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "VendAI POS",
-      "uninstallDisplayName": "VendAI POS",
-      "license": "LICENSE.txt",
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico",
-      "deleteAppDataOnUninstall": true,
-      "artifactName": "${productName}-${version}-Setup.${ext}"
-    },
-    "portable": {
-      "artifactName": "${productName}-${version}-Portable.${ext}"
-    },
-    "publish": [
       {
-        "provider": "github",
-        "owner": "timothylidede",
-        "repo": "vendai-pos",
-        "private": false,
-        "releaseType": "release"
+        "target": "zip",
+        "arch": ["x64", "arm64"]
       }
     ],
-    "afterSign": "scripts/notarize.js",
-    "compression": "maximum",
-    "removePackageScripts": true,
-    "nodeGypRebuild": false,
-    "buildDependenciesFromSource": false
-  }
+    "icon": "build/icon.icns",
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false,
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.plist",
+    "darkModeSupport": true,
+    "minimumSystemVersion": "10.15.0"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "build/icon.ico",
+    "publisherName": "VendAI",
+    "requestedExecutionLevel": "asInvoker",
+    "artifactName": "${productName}-${version}-${arch}-Setup.${ext}"
+  },
+  "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": ["x64"]
+      },
+      {
+        "target": "deb",
+        "arch": ["x64"]
+      },
+      {
+        "target": "rpm",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "build/icon.png",
+    "category": "Office",
+    "maintainer": "Timothy Lidede <timothyliidede@gmail.com>"
+  },
+  "dmg": {
+    "title": "VendAI POS ${version}",
+    "background": "build/dmg-background.png",
+    "icon": "build/icon.icns",
+    "iconSize": 100,
+    "window": {
+      "width": 540,
+      "height": 380
+    },
+    "contents": [
+      {
+        "x": 130,
+        "y": 220,
+        "type": "file"
+      },
+      {
+        "x": 410,
+        "y": 220,
+        "type": "link",
+        "path": "/Applications"
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "VendAI POS",
+    "uninstallDisplayName": "VendAI POS",
+    "license": "LICENSE.txt",
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico",
+    "installerHeaderIcon": "build/icon.ico",
+    "deleteAppDataOnUninstall": true,
+    "artifactName": "${productName}-${version}-Setup.${ext}"
+  },
+  "portable": {
+    "artifactName": "${productName}-${version}-Portable.${ext}"
+  },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "timothylidede",
+      "repo": "vendai-pos",
+      "private": false,
+      "releaseType": "release"
+    }
+  ],
+  "afterSign": "scripts/notarize.js",
+  "compression": "maximum",
+  "removePackageScripts": true,
+  "nodeGypRebuild": false,
+  "buildDependenciesFromSource": false
 }

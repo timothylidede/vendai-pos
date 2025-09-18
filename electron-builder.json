@@ -26,19 +26,18 @@
   
   "win": {
     "target": [
-      { "target": "nsis", "arch": ["x64"] }
+      { "target": "zip", "arch": ["x64"] }
     ],
     "icon": "build/icons/icon.ico",
-    "requestedExecutionLevel": "asInvoker",
-    "artifactName": "${productName}-${version}-win-${arch}-Setup.${ext}"
+    "artifactName": "${productName}-${version}-win-${arch}.${ext}"
   },
   "nsis": {
     "oneClick": false,
-    "allowElevation": true,
+    "allowElevation": false,
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "artifactName": "${productName}-${version}-win-${arch}-Setup.${ext}"
+    "runAfterFinish": false
   },
   
   "publish": [

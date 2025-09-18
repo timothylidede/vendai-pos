@@ -1,134 +1,82 @@
 {
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.vendai.pos",
   "productName": "VendAI POS",
-  "description": "AI-Powered Point of Sale System for Modern Businesses",
-  "copyright": "Copyright © 2024 VendAI. All rights reserved.",
   "directories": {
-    "out": "dist",
+    "output": "dist",
     "buildResources": "build"
   },
   "files": [
-    "out/**/*",
-    "electron/**/*",
-    "node_modules/**/*",
-    "package.json",
-    "!node_modules/@next/swc-*/**/*",
-    "!node_modules/next/dist/compiled/**/*"
-  ],
-  "extraFiles": [
+    {
+      "from": ".",
+      "filter": [
+        "package.json",
+        "electron/**/*",
+        "!**/*.map",
+        "!**/tests/**"
+      ]
+    },
     {
       "from": ".next",
-      "to": "resources/.next",
-      "filter": ["**/*"]
+      "to": ".next"
+    }
+  ],
+  "extraResources": [
+    {
+      "from": "public",
+      "to": "public"
     }
   ],
   "mac": {
     "category": "public.app-category.business",
     "target": [
-      {
-        "target": "dmg",
-        "arch": ["x64", "arm64"]
-      },
-      {
-        "target": "zip",
-        "arch": ["x64", "arm64"]
-      }
+      { "target": "dmg", "arch": ["x64", "arm64"] },
+      { "target": "zip", "arch": ["x64", "arm64"] }
     ],
     "icon": "build/icon.icns",
-    "hardenedRuntime": true,
-    "gatekeeperAssess": false,
     "entitlements": "build/entitlements.mac.plist",
     "entitlementsInherit": "build/entitlements.mac.plist",
-    "darkModeSupport": true,
     "minimumSystemVersion": "10.15.0"
+  },
+  "dmg": {
+    "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
   },
   "win": {
     "target": [
-      {
-        "target": "nsis",
-        "arch": ["x64"]
-      },
-      {
-        "target": "portable",
-        "arch": ["x64"]
-      }
+      { "target": "nsis", "arch": ["x64"] },
+      { "target": "portable", "arch": ["x64"] }
     ],
     "icon": "build/icon.ico",
-    "publisherName": "VendAI",
     "requestedExecutionLevel": "asInvoker",
-    "artifactName": "${productName}-${version}-${arch}-Setup.${ext}"
-  },
-  "linux": {
-    "target": [
-      {
-        "target": "AppImage",
-        "arch": ["x64"]
-      },
-      {
-        "target": "deb",
-        "arch": ["x64"]
-      },
-      {
-        "target": "rpm",
-        "arch": ["x64"]
-      }
-    ],
-    "icon": "build/icon.png",
-    "category": "Office",
-    "maintainer": "Timothy Lidede <timothyliidede@gmail.com>"
-  },
-  "dmg": {
-    "title": "VendAI POS ${version}",
-    "background": "build/dmg-background.png",
-    "icon": "build/icon.icns",
-    "iconSize": 100,
-    "window": {
-      "width": 540,
-      "height": 380
-    },
-    "contents": [
-      {
-        "x": 130,
-        "y": 220,
-        "type": "file"
-      },
-      {
-        "x": 410,
-        "y": 220,
-        "type": "link",
-        "path": "/Applications"
-      }
-    ]
+    "artifactName": "${productName}-${version}-win-${arch}-Setup.${ext}"
   },
   "nsis": {
     "oneClick": false,
+    "allowElevation": true,
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "VendAI POS",
-    "uninstallDisplayName": "VendAI POS",
-    "license": "LICENSE.txt",
-    "installerIcon": "build/icon.ico",
-    "uninstallerIcon": "build/icon.ico",
-    "installerHeaderIcon": "build/icon.ico",
-    "deleteAppDataOnUninstall": true,
-    "artifactName": "${productName}-${version}-Setup.${ext}"
+    "artifactName": "${productName}-${version}-win-${arch}-Setup.${ext}"
   },
-  "portable": {
-    "artifactName": "${productName}-${version}-Portable.${ext}"
+  "linux": {
+    "target": [
+      { "target": "AppImage", "arch": ["x64"] },
+      { "target": "deb", "arch": ["x64"] }
+    ],
+    "category": "Office",
+    "icon": "build/icon.png",
+    "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
   },
   "publish": [
     {
       "provider": "github",
       "owner": "timothylidede",
-      "repo": "vendai-pos",
-      "private": false,
-      "releaseType": "release"
+      "repo": "vendai-pos"
     }
   ],
-  "afterSign": "scripts/notarize.js",
+  "asar": true,
   "compression": "maximum",
-  "removePackageScripts": true,
-  "nodeGypRebuild": false,
-  "buildDependenciesFromSource": false
+  "filesExtraMetadata": {
+    "main": "electron/main.js"
+  }
 }

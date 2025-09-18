@@ -16,9 +16,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { NotificationSystem } from '@/components/notification-system'
 import { OrganizationSettings } from '@/components/organization-settings'
 import { ProfileManagement } from '@/components/profile-management'
-import { hasInventory, POS_PRODUCTS_COL } from '@/lib/pos-operations'
-import { db } from '@/lib/firebase'
-import { collection, getDocs, query, limit } from 'firebase/firestore'
+import { hasInventory } from '@/lib/pos-operations'
 
 const retailerModules = [
   {
@@ -142,30 +140,17 @@ export function ModulesDashboard() {
     }
   }, [user, userData, loading, router]);
 
-  // Check if inventory/products exist; if not, force highlight Inventory and disable others
+  // Check if inventory exists for org; if not, force highlight Inventory and disable others
   useEffect(() => {
     let active = true
     ;(async () => {
       if (!user || !userData) return
-      // Check if there are any products at all (not just inventory records)
-      try {
-        const q = query(collection(db, POS_PRODUCTS_COL), limit(1))
-        const snap = await getDocs(q)
-        const hasProducts = !snap.empty
-        if (active) {
-          setNeedsInventory(!hasProducts)
-          if (!hasProducts) setShowTooltip('Inventory')
-        }
-      } catch (error) {
-        // If we can't check, assume no inventory to be safe
-        if (active) {
-          setNeedsInventory(true)
-          setShowTooltip('Inventory')
-        }
-      }
+      const has = await hasInventory(orgId)
+      if (active) setNeedsInventory(!has)
+      if (!has) setShowTooltip('Inventory')
     })()
     return () => { active = false }
-  }, [user, userData])
+  }, [user, userData, orgId])
   
   const toggleBot = useCallback(() => {
     setIsSpinning(true);
@@ -213,7 +198,8 @@ export function ModulesDashboard() {
 
   const handleModuleClick = useCallback((moduleTitle: string) => {
     if (isExiting) return; // Prevent multiple clicks during animation
-    if (needsInventory && moduleTitle !== 'Inventory') return;
+    // Only gate POS and Suppliers when inventory is missing
+    if (needsInventory && (moduleTitle === 'Point of Sale' || moduleTitle === 'Suppliers')) return;
     
     setClickedModule(moduleTitle);
     setIsExiting(true);
@@ -238,17 +224,8 @@ export function ModulesDashboard() {
   const getCurrentModules = () => {
     if (!userData?.role) return [];
     const base = userData.role === 'retailer' ? retailerModules : distributorModules;
-    
-    // Always ensure inventory is second module (after POS/Logistics)
-    const modules = [...base];
-    const inventoryIndex = modules.findIndex(m => m.title === 'Inventory');
-    if (inventoryIndex > 1) {
-      // Move inventory to second position
-      const inventory = modules.splice(inventoryIndex, 1)[0];
-      modules.splice(1, 0, inventory);
-    }
-    
-    return modules;
+    // Keep the defined order; Inventory remains second where defined
+    return base
   };
 
   // Show loading state while checking authentication
@@ -502,6 +479,7 @@ export function ModulesDashboard() {
             const Icon = module.icon
             const isClicked = clickedModule === module.title;
             const hasTooltip = showTooltip === module.title || (needsInventory && module.title === 'Inventory');
+            const gated = needsInventory && (module.title === 'Point of Sale' || module.title === 'Suppliers');
             
             return (
               <motion.div
@@ -515,7 +493,7 @@ export function ModulesDashboard() {
                   transition: { duration: 0.3, ease: "easeOut" }
                 } : {}}
                 onClick={() => handleModuleClick(module.title)}
-                style={{ pointerEvents: isExiting ? 'none' : (needsInventory && module.title !== 'Inventory' ? 'none' : 'auto') }}
+                style={{ pointerEvents: isExiting ? 'none' : (gated ? 'none' : 'auto') }}
               >
                 {/* First-time user tooltip */}
                 {hasTooltip && (
@@ -526,7 +504,13 @@ export function ModulesDashboard() {
                     className="absolute -top-16 left-1/2 transform -translate-x-1/2 z-50"
                   >
                     <div className="relative bg-gradient-to-r from-blue-600 to-green-600 text-white px-4 py-2 rounded-xl shadow-lg text-sm font-medium whitespace-nowrap">
-                      {needsInventory ? 'Add products first to unlock other modules' : (userData?.role === 'retailer' ? '👆 Start here! Process your first sale' : '👆 Start here! Manage your catalog')}
+                      {needsInventory 
+                        ? (userData?.role === 'retailer' 
+                            ? 'Add inventory first to unlock POS and Suppliers' 
+                            : 'Add inventory first to continue') 
+                        : (userData?.role === 'retailer' 
+                            ? '👆 Start here! Process your first sale' 
+                            : '👆 Start here! Manage your catalog')}
                       <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-green-600"></div>
                     </div>
                     <button
@@ -541,7 +525,7 @@ export function ModulesDashboard() {
                   </motion.div>
                 )}
                 <div 
-                  className={`group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border ${needsInventory && module.title !== 'Inventory' ? 'border-white/[0.04] opacity-60' : 'border-white/[0.08]'} ${module.hoverBorderColor} transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] ${module.shadowColor} cursor-pointer h-full ${
+                  className={`group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border ${gated ? 'border-white/[0.04] opacity-60' : 'border-white/[0.08]'} ${module.hoverBorderColor} transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] ${module.shadowColor} cursor-pointer h-full ${
                     isClicked ? 'ring-2 ring-offset-2 ring-offset-slate-900 ' + (
                       module.color === 'text-green-400' ? 'ring-green-400/50' :
                       module.color === 'text-blue-400' ? 'ring-blue-400/50' : 
@@ -554,13 +538,13 @@ export function ModulesDashboard() {
                   }`}
                 >
                   {/* Glassmorphic background overlay */}
-                  <div className={`absolute inset-0 bg-gradient-to-br ${module.bgGradient} ${needsInventory && module.title !== 'Inventory' ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity duration-500`} />
+                  <div className={`absolute inset-0 bg-gradient-to-br ${module.bgGradient} ${gated ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity duration-500`} />
                   
                   <div className="relative flex flex-col items-center justify-center h-full space-y-6 p-8">
                     {/* Icon Container */}
                     <div className="relative">
                       <div className="w-20 h-20 rounded-2xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] flex items-center justify-center group-hover:scale-110 transition-all duration-500 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)]">
-                        <Icon className={`w-10 h-10 ${module.color} ${module.hoverColor} transition-all duration-500 ${needsInventory && module.title !== 'Inventory' ? 'opacity-60' : ''}`} 
+                        <Icon className={`w-10 h-10 ${module.color} ${module.hoverColor} transition-all duration-500 ${gated ? 'opacity-60' : ''}`} 
                               style={{
                                 filter: `drop-shadow(0 4px 8px ${
                                   module.color === 'text-green-400' ? 'rgba(34, 197, 94, 0.4)' :
@@ -585,7 +569,7 @@ export function ModulesDashboard() {
                     
                     {/* Content */}
                     <div className="text-center">
-                      <h3 className={`text-xl font-bold ${module.color} ${module.hoverColor} transition-colors duration-300 tracking-tight ${needsInventory && module.title !== 'Inventory' ? 'opacity-60' : ''}`}>
+                      <h3 className={`text-xl font-bold ${module.color} ${module.hoverColor} transition-colors duration-300 tracking-tight ${gated ? 'opacity-60' : ''}`}>
                         {module.title}
                       </h3>
                     </div>

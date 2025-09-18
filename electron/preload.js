@@ -11,8 +11,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
   maximizeWindow: () => ipcRenderer.invoke('maximize-window'),
   closeWindow: () => ipcRenderer.invoke('close-window'),
-  isMaximized: () => ipcRenderer.invoke('is-maximized'),
-  onWindowStateChanged: (callback) => ipcRenderer.on('window-state-changed', callback),
   
   // OAuth
   googleOAuth: () => ipcRenderer.invoke('google-oauth'),
@@ -36,7 +34,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
     node: process.versions.node,
     chrome: process.versions.chrome,
     electron: process.versions.electron
-  }
+  },
+  
+  // Update management
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  
+  // Update event listeners
+  onUpdateChecking: (callback) => ipcRenderer.on('update-checking', callback),
+  offUpdateChecking: (callback) => ipcRenderer.removeListener('update-checking', callback),
+  
+  onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (event, info) => callback(info)),
+  offUpdateAvailable: (callback) => ipcRenderer.removeListener('update-available', callback),
+  
+  onUpdateNotAvailable: (callback) => ipcRenderer.on('update-not-available', callback),
+  offUpdateNotAvailable: (callback) => ipcRenderer.removeListener('update-not-available', callback),
+  
+  onUpdateError: (callback) => ipcRenderer.on('update-error', (event, error) => callback(error)),
+  offUpdateError: (callback) => ipcRenderer.removeListener('update-error', callback),
+  
+  onUpdateDownloadProgress: (callback) => ipcRenderer.on('update-download-progress', (event, progress) => callback(progress)),
+  offUpdateDownloadProgress: (callback) => ipcRenderer.removeListener('update-download-progress', callback),
+  
+  onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (event, info) => callback(info)),
+  offUpdateDownloaded: (callback) => ipcRenderer.removeListener('update-downloaded', callback)
 });
 
 // Expose a limited API for the renderer

@@ -165,19 +165,6 @@ async function createWindow() {
     }
   });
 
-  // Handle window maximize/unmaximize events
-  mainWindow.on('maximize', () => {
-    if (mainWindow) {
-      mainWindow.webContents.send('window-state-changed', { isMaximized: true });
-    }
-  });
-
-  mainWindow.on('unmaximize', () => {
-    if (mainWindow) {
-      mainWindow.webContents.send('window-state-changed', { isMaximized: false });
-    }
-  });
-
   // Handle external links
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -411,13 +398,6 @@ ipcMain.handle('maximize-window', () => {
   }
 });
 
-ipcMain.handle('is-maximized', () => {
-  if (mainWindow) {
-    return mainWindow.isMaximized();
-  }
-  return false;
-});
-
 ipcMain.handle('close-window', () => {
   if (mainWindow) {
     mainWindow.close();
@@ -647,31 +627,103 @@ app.on('certificate-error', (event, webContents, url, error, certificate, callba
   }
 });
 
-// Auto updater events
+// Enhanced Auto Updater Configuration
+autoUpdater.autoDownload = false; // Don't auto-download, ask user first
+autoUpdater.autoInstallOnAppQuit = true;
+
+// IPC handlers for update management
+ipcMain.handle('check-for-updates', async () => {
+  if (isDev) {
+    return { available: false, message: 'Updates not available in development mode' };
+  }
+  
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { available: !!result?.updateInfo, updateInfo: result?.updateInfo };
+  } catch (error) {
+    console.error('Update check error:', error);
+    return { available: false, error: error.message };
+  }
+});
+
+ipcMain.handle('download-update', async () => {
+  if (isDev) {
+    return { success: false, message: 'Updates not available in development mode' };
+  }
+  
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error) {
+    console.error('Update download error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('install-update', () => {
+  if (isDev) {
+    return false;
+  }
+  autoUpdater.quitAndInstall(false, true);
+  return true;
+});
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
+// Auto updater events with enhanced UI feedback
 autoUpdater.on('checking-for-update', () => {
   console.log('Checking for update...');
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('update-checking');
+  }
 });
 
 autoUpdater.on('update-available', (info) => {
-  console.log('Update available.');
+  console.log('Update available:', info.version);
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('update-available', {
+      version: info.version,
+      releaseNotes: info.releaseNotes,
+      releaseDate: info.releaseDate
+    });
+  }
 });
 
 autoUpdater.on('update-not-available', (info) => {
   console.log('Update not available.');
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('update-not-available');
+  }
 });
 
 autoUpdater.on('error', (err) => {
-  console.log('Error in auto-updater. ' + err);
+  console.log('Error in auto-updater:', err);
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('update-error', err.message);
+  }
 });
 
 autoUpdater.on('download-progress', (progressObj) => {
-  let log_message = "Download speed: " + progressObj.bytesPerSecond;
-  log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
-  log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
-  console.log(log_message);
+  const percent = Math.round(progressObj.percent);
+  console.log(`Download progress: ${percent}%`);
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('update-download-progress', {
+      percent: percent,
+      transferred: progressObj.transferred,
+      total: progressObj.total,
+      bytesPerSecond: progressObj.bytesPerSecond
+    });
+  }
 });
 
 autoUpdater.on('update-downloaded', (info) => {
-  console.log('Update downloaded');
-  autoUpdater.quitAndInstall();
+  console.log('Update downloaded, ready to install');
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('update-downloaded', {
+      version: info.version,
+      releaseNotes: info.releaseNotes
+    });
+  }
 });

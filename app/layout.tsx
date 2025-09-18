@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/contexts/auth-context'
 import { VendaiPanel } from '@/components/vendai-panel'
 import { WindowControls } from '@/components/window-controls'
+import UpdateManager from '@/components/update-manager'
 import { Toaster } from '@/components/ui/toaster'
 import './globals.css'
 
@@ -50,8 +51,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </main>
           </AuthProvider>
           
+          {/* Update Manager */}
+          <UpdateManager />
+          
           {/* Vendai Panel */}
           <VendaiPanel />
+          
+          {/* Update Manager (Electron only) */}
+          <UpdateManager />
           
           {/* AI Assistant is hosted by VendaiPanel */}
           <Toaster />

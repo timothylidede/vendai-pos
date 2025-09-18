@@ -6,7 +6,7 @@ import { Card } from '../ui/card'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { ScrollArea } from '../ui/scroll-area'
-import { ScanBarcode, ShoppingCart, Trash2, Plus, ChevronDown, X, Search, Package, ArrowLeft } from 'lucide-react'
+import { ScanBarcode, ShoppingCart, Trash2, Plus, ChevronDown, X, Search, Package, ArrowLeft, Minus, Square } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { POSProduct, POSOrderLine, POSOrderDoc } from '@/lib/types'
 import { listPOSProducts, addPosOrder, listRecentOrders, getInventory } from '@/lib/pos-operations'
@@ -21,6 +21,14 @@ interface CartLine {
   image?: string
 }
 
+interface OrderTab {
+  id: string
+  number: string
+  cart: CartLine[]
+  total: number
+  createdAt: Date
+}
+
 interface OrderRow {
   id: string
   number: string
@@ -30,21 +38,24 @@ interface OrderRow {
   status: 'Ongoing' | 'Payment'
 }
 
+interface OrderTab {
+  id: string
+  number: string
+  cart: CartLine[]
+  total: number
+  createdAt: Date
+}
+
 export function POSPage() {
   const [headerCollapsed, setHeaderCollapsed] = useState(true)
   const [cart, setCart] = useState<CartLine[]>([])
   const [activeTab, setActiveTab] = useState<'register' | 'orders'>('register')
   const [showOrderModal, setShowOrderModal] = useState(false)
-  const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mpesa' | 'card'>('cash')
-  const [paymentAmount, setPaymentAmount] = useState('')
-  const [mpesaPhone, setMpesaPhone] = useState('')
-  const [processingPayment, setProcessingPayment] = useState(false)
-  const [selectedOrder, setSelectedOrder] = useState('045')
+  const [selectedOrder, setSelectedOrder] = useState('001')
   const [isEntering, setIsEntering] = useState(true)
   const [isExiting, setIsExiting] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const searchRef = useRef<HTMLInputElement | null>(null)
   const router = useRouter()
   const { toast } = useToast()
@@ -53,13 +64,104 @@ export function POSPage() {
   const [products, setProducts] = useState<POSProduct[]>([])
 
   const [recentOrders, setRecentOrders] = useState<POSOrderDoc[]>([])
+  
+  // Enhanced persistent order tabs
+  const [orderTabs, setOrderTabs] = useState<Map<string, OrderTab>>(new Map())
+  const [activeOrderId, setActiveOrderId] = useState<string>('001')
 
-  const availableOrderNumbers = ['040', '041', '042', '043', '044', '045']
+  // Generate next available order number
+  const getNextOrderNumber = () => {
+    const existingNumbers = Array.from(orderTabs.keys()).map(id => parseInt(id)).filter(n => !isNaN(n))
+    const maxNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0
+    return String(maxNumber + 1).padStart(3, '0')
+  }
+
+  // Initialize with first order tab
+  useEffect(() => {
+    const firstTab: OrderTab = {
+      id: '001',
+      number: '001',
+      cart: [],
+      total: 0,
+      createdAt: new Date()
+    }
+    setOrderTabs(new Map([['001', firstTab]]))
+    setActiveOrderId('001')
+  }, [])
+
+  // Load persistent order tabs from localStorage
+  useEffect(() => {
+    const savedTabs = localStorage.getItem('pos-order-tabs')
+    if (savedTabs) {
+      try {
+        const tabData = JSON.parse(savedTabs)
+        const restoredTabs = new Map<string, OrderTab>()
+        tabData.forEach((tab: any) => {
+          restoredTabs.set(tab.id, {
+            ...tab,
+            createdAt: new Date(tab.createdAt)
+          })
+        })
+        if (restoredTabs.size > 0) {
+          setOrderTabs(restoredTabs)
+          const firstTabId = Array.from(restoredTabs.keys())[0]
+          setActiveOrderId(firstTabId)
+          setCart(restoredTabs.get(firstTabId)?.cart || [])
+        }
+      } catch (e) {
+        console.warn('Failed to restore order tabs:', e)
+      }
+    }
+  }, [])
+
+  // Save order tabs to localStorage whenever they change
+  useEffect(() => {
+    if (orderTabs.size > 0) {
+      const tabsArray = Array.from(orderTabs.values())
+      localStorage.setItem('pos-order-tabs', JSON.stringify(tabsArray))
+    }
+  }, [orderTabs])
+
+  // Update current tab's cart whenever cart changes (FIXED - removed orderTabs dependency)
+  useEffect(() => {
+    if (activeOrderId) {
+      setOrderTabs(prev => {
+        const currentTab = prev.get(activeOrderId)
+        if (currentTab) {
+          const updatedTab: OrderTab = {
+            ...currentTab,
+            cart: cart,
+            total: cart.reduce((sum, l) => sum + l.price * l.quantity, 0)
+          }
+          return new Map(prev.set(activeOrderId, updatedTab))
+        }
+        return prev
+      })
+    }
+  }, [cart, activeOrderId]) // Removed orderTabs from dependencies
 
   const addNewOrder = () => {
-    const nextNumber = String(parseInt(selectedOrder) + 1).padStart(3, '0')
+    const nextNumber = getNextOrderNumber()
+    const newTab: OrderTab = {
+      id: nextNumber,
+      number: nextNumber,
+      cart: [],
+      total: 0,
+      createdAt: new Date()
+    }
+    
+    setOrderTabs(prev => new Map(prev.set(nextNumber, newTab)))
+    setActiveOrderId(nextNumber)
+    setCart([])
     setSelectedOrder(nextNumber)
-    // Here you would typically add logic to create a new order
+  }
+
+  const switchToOrder = (orderId: string) => {
+    if (orderTabs.has(orderId)) {
+      setActiveOrderId(orderId)
+      setSelectedOrder(orderId)
+      setCart(orderTabs.get(orderId)?.cart || [])
+    }
   }
 
   // Handle entrance animation
@@ -88,6 +190,12 @@ export function POSPage() {
     return () => { active = false }
   }, [userData?.organizationName])
 
+  // Debounce search to avoid firing a request on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm), 300)
+    return () => clearTimeout(t)
+  }, [searchTerm])
+
   const handleBackClick = () => {
     if (isExiting) return
     setIsExiting(true)
@@ -100,57 +208,46 @@ export function POSPage() {
   const formatMoney = (ksh: number) => `KSh ${ksh.toFixed(2)}`
 
   const addProductToCart = async (p: POSProduct) => {
-    console.log('Adding product to cart:', p.name, p.id)
+    console.log('Adding product to cart:', p.name)
+    
+    // Prevent rapid multiple clicks
+    if (loading) return
     
     // inventory check
     const orgId = userData?.organizationName || 'default'
     try {
       const inv = await getInventory(orgId, p.id)
-      console.log('Inventory check:', inv)
+      const totalPieces = inv ? inv.qtyBase * inv.unitsPerBase + inv.qtyLoose : 0
       
-      if (inv) {
-        const totalPieces = inv.qtyBase * inv.unitsPerBase + inv.qtyLoose
-        console.log('Total pieces available:', totalPieces)
-        
-        if (totalPieces <= 0) {
-          toast({ title: 'Out of stock', description: `${p.name} is not available in inventory`, variant: 'destructive' as any })
-          return
-        }
-        if (totalPieces <= 3) {
-          toast({ title: 'Low stock', description: `${p.name}: Only ${totalPieces} units left` })
-        }
-      } else {
-        // Allow adding to cart even without inventory record for demo purposes
-        console.log('No inventory record found, allowing cart addition for demo')
+      // Skip inventory check if no inventory record exists (allow for testing)
+      if (inv && totalPieces <= 0) {
+        toast({ title: 'Out of stock', description: `${p.name} is not available in inventory`, variant: 'destructive' as any })
+        return
+      }
+      if (inv && totalPieces <= 3) {
+        toast({ title: 'Low stock', description: `${p.name}: ${totalPieces} ${p.retailUom} left` })
       }
     } catch (e) {
-      console.warn('Inventory check failed', e)
-      // Don't block cart addition if inventory check fails
+      console.warn('Inventory check failed, proceeding without stock validation:', e)
+      // Continue to add to cart even if inventory check fails
     }
 
-    console.log('Current cart before addition:', cart)
     setCart(prev => {
+      console.log('Current cart before update:', prev)
       const idx = prev.findIndex(line => line.productId === p.id)
-      console.log('Existing item index:', idx)
-      
       if (idx >= 0) {
         const next = [...prev]
         next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 }
-        console.log('Updated existing item:', next[idx])
+        console.log('Updated existing item in cart:', next)
         return next
       }
-      
-      const newItem = { 
-        productId: p.id, 
-        name: p.name, 
-        price: p.piecePrice, 
-        quantity: 1, 
-        image: p.image 
-      }
-      console.log('Adding new item to cart:', newItem)
-      return [...prev, newItem]
+      const newCart = [
+        ...prev,
+        { productId: p.id, name: p.name, price: p.piecePrice, quantity: 1, image: p.image },
+      ]
+      console.log('Added new item to cart:', newCart)
+      return newCart
     })
-    
     toast({ title: 'Added to cart', description: p.name })
   }
 
@@ -167,25 +264,54 @@ export function POSPage() {
 
   const cartTotal = useMemo(() => cart.reduce((sum, l) => sum + l.price * l.quantity, 0), [cart])
 
-  // Load products from Firestore
+  // Load products from Firestore with better error handling and caching
   useEffect(() => {
     let active = true
+    const controller = new AbortController()
+    
     ;(async () => {
-      setLoading(true)
+      // Show loading state immediately
+      if (active) setLoading(true)
+      
       try {
-        const res = await listPOSProducts(userData?.organizationName || 'default', searchTerm)
-        if (active) setProducts(res)
+        const res = await listPOSProducts(userData?.organizationName || 'default', debouncedSearch, 100) // Increased limit for better UX
+        console.log('DEBUG: Loaded products:', res.length, 'products')
+        if (active && !controller.signal.aborted) {
+          setProducts(res)
+        }
       } catch (e) {
-        console.error(e)
-        toast({ title: 'Failed to load products', description: String(e) })
+        if (active && !controller.signal.aborted) {
+          console.error('ERROR: Failed to load products:', e)
+          toast({ 
+            title: 'Failed to load products', 
+            description: e instanceof Error ? e.message : String(e),
+            variant: 'destructive' 
+          })
+        }
       } finally {
-        if (active) setLoading(false)
+        if (active && !controller.signal.aborted) {
+          setLoading(false)
+        }
       }
     })()
+    
     return () => {
       active = false
+      controller.abort()
     }
-  }, [searchTerm, userData?.organizationName])
+  }, [debouncedSearch, userData?.organizationName, toast])
+
+  // Warm product cache on mount for faster initial grid paint
+  useEffect(() => {
+    (async () => {
+      try {
+        const orgId = userData?.organizationName || 'default'
+        await listPOSProducts(orgId, undefined, 100)
+      } catch {}
+    })()
+    // run once intentionally
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const filteredProducts = products
 
@@ -211,8 +337,8 @@ export function POSPage() {
       transition={{ duration: 0.15, ease: [0.4, 0.0, 0.2, 1] }}
     >
       {/* Header */}
-  <div className="bg-slate-900/40 backdrop-blur-sm">
-        <div className="flex items-center justify-between px-4 py-3">
+  <div className="bg-slate-900/40 backdrop-blur-sm" style={{WebkitAppRegion: 'drag'} as React.CSSProperties}>
+        <div className="flex items-center justify-between px-4 py-3" style={{WebkitAppRegion: 'no-drag'} as React.CSSProperties}>
           <div className="flex items-center space-x-4">
             {/* Back Button */}
             <button 
@@ -276,19 +402,32 @@ export function POSPage() {
               </Button>
             </div>
             <div className={`flex items-center space-x-1 ml-4 ${headerCollapsed ? 'hidden' : ''}`}> 
-              {availableOrderNumbers.map((num) => (
-                <motion.button
-                  key={num}
-                  whileHover={{ scale: 1.08, backgroundColor: 'rgba(16,185,129,0.18)' }}
-                  whileTap={{ scale: 0.97 }}
-                  transition={{ type: 'spring', stiffness: 300 }}
-                  type="button"
-                  className={`px-3 py-1 text-sm rounded ${selectedOrder === num ? 'bg-green-600 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}
-                  onClick={() => setSelectedOrder(num)}
-                >
-                  {num}
-                </motion.button>
-              ))}
+              {Array.from(orderTabs.keys()).map((orderId) => {
+                const tab = orderTabs.get(orderId)!
+                const isActive = orderId === activeOrderId
+                return (
+                  <motion.button
+                    key={orderId}
+                    whileHover={{ scale: 1.08, backgroundColor: 'rgba(16,185,129,0.18)' }}
+                    whileTap={{ scale: 0.97 }}
+                    transition={{ type: 'spring', stiffness: 300 }}
+                    type="button"
+                    className={`px-3 py-1 text-sm rounded relative ${
+                      isActive 
+                        ? 'bg-green-600 text-white' 
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                    }`}
+                    onClick={() => switchToOrder(orderId)}
+                  >
+                    {tab.number}
+                    {tab.cart.length > 0 && (
+                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full text-xs flex items-center justify-center text-white">
+                        {tab.cart.reduce((sum, item) => sum + item.quantity, 0)}
+                      </span>
+                    )}
+                  </motion.button>
+                )
+              })}
             </div>
             <button
               type="button"
@@ -325,7 +464,7 @@ export function POSPage() {
               </div>
             </div>
             <button 
-              onClick={() => setShowBarcodeScanner(true)}
+              onClick={() => searchRef.current?.focus()}
               className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
             >
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] via-transparent to-blue-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
@@ -361,20 +500,29 @@ export function POSPage() {
               </Button>
             </div>
             <div className="grid grid-cols-6 gap-2 mb-6">
-              {availableOrderNumbers.map((num) => (
+              {Array.from(orderTabs.entries()).map(([orderId, tab]) => (
                 <motion.button
-                  key={num}
+                  key={orderId}
                   whileHover={{ scale: 1.08, backgroundColor: 'rgba(16,185,129,0.18)' }}
                   whileTap={{ scale: 0.97 }}
                   transition={{ type: 'spring', stiffness: 300 }}
                   type="button"
-                  className={`h-12 ${selectedOrder === num ? 'bg-green-600 text-white border-green-600' : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'}`}
+                  className={`h-12 relative ${
+                    activeOrderId === orderId 
+                      ? 'bg-green-600 text-white border-green-600' 
+                      : 'bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800'
+                  }`}
                   onClick={() => {
-                    setSelectedOrder(num);
+                    switchToOrder(orderId);
                     setShowOrderModal(false);
                   }}
                 >
-                  {num}
+                  {tab.number}
+                  {tab.cart.length > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full text-xs flex items-center justify-center text-white">
+                      {tab.cart.reduce((sum, item) => sum + item.quantity, 0)}
+                    </span>
+                  )}
                 </motion.button>
               ))}
             </div>
@@ -385,17 +533,34 @@ export function POSPage() {
                 transition={{ type: 'spring', stiffness: 300 }}
                 type="button"
                 className="h-12 bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800"
+                onClick={() => {
+                  addNewOrder();
+                  setShowOrderModal(false);
+                }}
               >
-                046
+                + New Order
               </motion.button>
               <motion.button
-                whileHover={{ scale: 1.08, backgroundColor: 'rgba(16,185,129,0.18)' }}
+                whileHover={{ scale: 1.08, backgroundColor: 'rgba(239,68,68,0.18)' }}
                 whileTap={{ scale: 0.97 }}
                 transition={{ type: 'spring', stiffness: 300 }}
                 type="button"
-                className="h-12 bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800"
+                className="h-12 bg-slate-900 text-slate-300 border-slate-700 hover:bg-red-800 hover:text-red-300"
+                onClick={() => {
+                  if (orderTabs.size > 1 && activeOrderId) {
+                    const newTabs = new Map(orderTabs)
+                    newTabs.delete(activeOrderId)
+                    setOrderTabs(newTabs)
+                    const remainingIds = Array.from(newTabs.keys())
+                    if (remainingIds.length > 0) {
+                      switchToOrder(remainingIds[0])
+                    }
+                  }
+                  setShowOrderModal(false);
+                }}
+                disabled={orderTabs.size <= 1}
               >
-                047
+                Delete Order
               </motion.button>
             </div>
           </motion.div>
@@ -489,12 +654,59 @@ export function POSPage() {
                     whileTap={{ scale: 0.97 }}
                     transition={{ type: 'spring', stiffness: 300 }}
                     className="w-full bg-gradient-to-r from-green-300 via-green-400 to-slate-800 text-white font-semibold text-lg py-3 rounded-lg"
-                    onClick={() => {
-                      setPaymentAmount(cartTotal.toString())
-                      setShowPaymentModal(true)
+                    onClick={async () => {
+                      const orgId = userData?.organizationName || 'default'
+                      const userId = userData?.uid || 'anonymous'
+                      const lines: POSOrderLine[] = cart.map(l => ({
+                        productId: l.productId,
+                        name: l.name,
+                        quantityPieces: l.quantity,
+                        unitPrice: l.price,
+                        lineTotal: l.quantity * l.price,
+                      }))
+                      
+                      // Add order ID to the order
+                      const orderNumber = activeOrderId || selectedOrder
+                      
+                      try {
+                        const id = await addPosOrder(orgId, userId, lines)
+                        const itemsCount = cart.reduce((n, l) => n + l.quantity, 0)
+                        toast({ 
+                          title: 'Order completed!', 
+                          description: `Order #${orderNumber} • ${itemsCount} item(s) • ${formatMoney(cartTotal)}` 
+                        })
+                        
+                        // Clear current tab and create new one if this was the last tab
+                        setCart([])
+                        if (orderTabs.size === 1) {
+                          // Create a new order tab
+                          addNewOrder()
+                        } else {
+                          // Just clear current tab
+                          if (activeOrderId && orderTabs.has(activeOrderId)) {
+                            const clearedTab: OrderTab = {
+                              ...orderTabs.get(activeOrderId)!,
+                              cart: [],
+                              total: 0
+                            }
+                            setOrderTabs(prev => new Map(prev.set(activeOrderId, clearedTab)))
+                          }
+                        }
+                        
+                        // Refresh recent orders list
+                        const { orders } = await listRecentOrders(orgId, 30)
+                        setRecentOrders(orders as any)
+                      } catch (e) {
+                        console.error('Order failed:', e)
+                        toast({ 
+                          title: 'Failed to complete order', 
+                          description: e instanceof Error ? e.message : String(e),
+                          variant: 'destructive'
+                        })
+                      }
                     }}
                   >
-                    Complete Order
+                    Complete Order #{activeOrderId}
                   </motion.button>
                 </div>
               )}
@@ -502,7 +714,15 @@ export function POSPage() {
           </div>
 
           {/* Right Side - Product Grid */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden relative">
+            {loading && (
+              <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-10">
+                <div className="text-center text-white">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-400 mx-auto mb-4"></div>
+                  <p>Loading products...</p>
+                </div>
+              </div>
+            )}
             <div className="h-full overflow-y-auto thin-scroll">
               <div className="p-6">
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -559,7 +779,7 @@ export function POSPage() {
           {/* Orders List */}
           <div className="flex-1 flex flex-col">
             {/* Orders Header */}
-            <div className="bg-blue-900/40 backdrop-blur-sm px-6 py-4 border-b border-green-500/30">
+            <div className="bg-slate-900/40 backdrop-blur-sm px-6 py-4 border-b border-slate-500/30">
               <div className="flex items-center justify-between">
                 <div className="relative flex-1 max-w-lg">
                   <Input 
@@ -584,7 +804,7 @@ export function POSPage() {
             {/* Orders Content */}
             <div className="flex-1 overflow-y-auto thin-scroll">
               {recentOrders.map((order) => (
-                <div key={order.id} className="flex items-center justify-between px-6 py-4 border-b border-green-500/30 hover:bg-slate-800/50 cursor-pointer">
+                <div key={order.id} className="flex items-center justify-between px-6 py-4 border-b border-slate-500/30 hover:bg-slate-800/50 cursor-pointer">
                   <div className="flex items-center space-x-6">
                     <div className="text-left">
                       <div className="text-slate-300 text-sm">{new Date(order.createdAt).toLocaleDateString()}</div>
@@ -599,7 +819,7 @@ export function POSPage() {
                     {formatMoney(order.total || 0)}
                   </div>
                   <div className="flex items-center space-x-3">
-                    <span className={`px-3 py-1 rounded text-sm ${order.status === 'paid' ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'}`}>
+                    <span className={`px-3 py-1 rounded text-sm ${order.status === 'paid' ? 'bg-green-600 text-white' : 'bg-slate-600 text-white'}`}>
                       {order.status}
                     </span>
                     <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
@@ -612,287 +832,12 @@ export function POSPage() {
           </div>
 
           {/* Right Side - Order Selection */}
-          <div className="w-1/3 border-l border-green-500/30 bg-blue-900/30 backdrop-blur-sm flex items-center justify-center">
+          <div className="w-1/3 border-l border-slate-500/30 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center">
             <div className="text-center text-slate-400">
               <ShoppingCart className="w-16 h-16 mx-auto mb-4 text-slate-600" />
               <p className="text-lg">Select an order or scan QR code</p>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Barcode Scanner Modal */}
-      {showBarcodeScanner && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 300 }}
-            className="bg-slate-900 rounded-2xl p-8 max-w-md w-full mx-4 border border-green-500/30"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-white">Barcode Scanner</h3>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setShowBarcodeScanner(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
-            
-            <div className="text-center">
-              <div className="w-32 h-32 mx-auto mb-6 rounded-2xl bg-slate-800 border-2 border-dashed border-green-500/50 flex items-center justify-center">
-                <ScanBarcode className="w-16 h-16 text-green-400" />
-              </div>
-              
-              <p className="text-slate-300 mb-4">
-                To use a barcode scanner:
-              </p>
-              
-              <div className="text-left space-y-2 text-sm text-slate-400 mb-6">
-                <p>• Connect a USB barcode scanner</p>
-                <p>• Scan directly into the search box</p>
-                <p>• Or manually type the barcode</p>
-              </div>
-              
-              <div className="mb-4">
-                <Input
-                  placeholder="Scan or type barcode here..."
-                  className="bg-slate-800 border-slate-600 text-white text-center"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const barcode = e.currentTarget.value.trim()
-                      if (barcode) {
-                        const product = products.find(p => 
-                          p.pieceBarcode === barcode || 
-                          p.cartonBarcode === barcode ||
-                          p.id === barcode
-                        )
-                        if (product) {
-                          addProductToCart(product)
-                          setShowBarcodeScanner(false)
-                        } else {
-                          toast({ 
-                            title: 'Product not found', 
-                            description: `No product found with barcode: ${barcode}`,
-                            variant: 'destructive' as any
-                          })
-                        }
-                        e.currentTarget.value = ''
-                      }
-                    }
-                  }}
-                  autoFocus
-                />
-              </div>
-              
-              <Button
-                onClick={() => setShowBarcodeScanner(false)}
-                className="w-full bg-slate-700 hover:bg-slate-600 text-white"
-              >
-                Close Scanner
-              </Button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Payment Modal */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 300 }}
-            className="bg-slate-900 rounded-2xl p-8 max-w-md w-full mx-4 border border-green-500/30"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-white">Complete Payment</h3>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setShowPaymentModal(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
-            
-            <div className="mb-6">
-              <div className="flex justify-between text-lg mb-4">
-                <span className="text-slate-300">Total Amount:</span>
-                <span className="text-white font-semibold">{formatMoney(cartTotal)}</span>
-              </div>
-              
-              {/* Payment Method Selection */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-300 mb-2">Payment Method</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => setPaymentMethod('cash')}
-                    className={`p-3 rounded-lg border text-sm font-medium transition-all ${
-                      paymentMethod === 'cash' 
-                        ? 'bg-green-500/20 border-green-500/50 text-green-300' 
-                        : 'bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-500'
-                    }`}
-                  >
-                    Cash
-                  </button>
-                  <button
-                    onClick={() => {
-                      setPaymentMethod('mpesa')
-                      setPaymentAmount(cartTotal.toString()) // M-Pesa requires exact amount
-                    }}
-                    className={`p-3 rounded-lg border text-sm font-medium transition-all ${
-                      paymentMethod === 'mpesa' 
-                        ? 'bg-green-500/20 border-green-500/50 text-green-300' 
-                        : 'bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-500'
-                    }`}
-                  >
-                    M-Pesa
-                  </button>
-                  <button
-                    onClick={() => {
-                      setPaymentMethod('card')
-                      setPaymentAmount(cartTotal.toString()) // Card requires exact amount
-                    }}
-                    className={`p-3 rounded-lg border text-sm font-medium transition-all ${
-                      paymentMethod === 'card' 
-                        ? 'bg-green-500/20 border-green-500/50 text-green-300' 
-                        : 'bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-500'
-                    }`}
-                  >
-                    Card
-                  </button>
-                </div>
-              </div>
-
-              {/* Amount Input */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-300 mb-2">Amount Received</label>
-                <Input
-                  type="number"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  placeholder="Enter amount"
-                  className="bg-slate-800 border-slate-600 text-white"
-                />
-                {parseFloat(paymentAmount) > cartTotal && paymentMethod === 'cash' && (
-                  <p className="text-green-400 text-sm mt-2">
-                    Change: {formatMoney(parseFloat(paymentAmount) - cartTotal)}
-                  </p>
-                )}
-              </div>
-
-              {/* M-Pesa Phone Number */}
-              {paymentMethod === 'mpesa' && (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">M-Pesa Phone Number</label>
-                  <Input
-                    type="tel"
-                    value={mpesaPhone}
-                    onChange={(e) => setMpesaPhone(e.target.value)}
-                    placeholder="254700000000"
-                    className="bg-slate-800 border-slate-600 text-white"
-                  />
-                  <p className="text-slate-400 text-xs mt-1">Format: 254XXXXXXXXX</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setShowPaymentModal(false)}
-                className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-800"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={async () => {
-                  setProcessingPayment(true)
-                  const orgId = userData?.organizationName || 'default'
-                  const userId = userData?.uid || 'anonymous'
-                  const lines: POSOrderLine[] = cart.map(l => ({
-                    productId: l.productId,
-                    name: l.name,
-                    quantityPieces: l.quantity,
-                    unitPrice: l.price,
-                    lineTotal: l.quantity * l.price,
-                  }))
-
-                  try {
-                    // Handle M-Pesa payment simulation
-                    if (paymentMethod === 'mpesa') {
-                      if (!mpesaPhone || !/^254\d{9}$/.test(mpesaPhone)) {
-                        toast({ 
-                          title: 'Invalid phone number', 
-                          description: 'Please enter a valid M-Pesa phone number (254XXXXXXXXX)',
-                          variant: 'destructive' as any
-                        })
-                        return
-                      }
-                      
-                      // Simulate M-Pesa STK push
-                      toast({ 
-                        title: 'M-Pesa Request Sent', 
-                        description: `Please check your phone ${mpesaPhone} for payment prompt`,
-                      })
-                      
-                      // Simulate processing delay
-                      await new Promise(resolve => setTimeout(resolve, 3000))
-                      
-                      // Simulate successful payment (in real implementation, this would be webhook-driven)
-                      toast({ 
-                        title: 'M-Pesa Payment Received', 
-                        description: `KSh ${cartTotal} received from ${mpesaPhone}`,
-                      })
-                    }
-
-                    const id = await addPosOrder(orgId, userId, lines)
-                    const itemsCount = cart.reduce((n, l) => n + l.quantity, 0)
-                    const change = paymentMethod === 'cash' ? (parseFloat(paymentAmount) - cartTotal) : 0
-                    
-                    let paymentDetails = ''
-                    if (paymentMethod === 'mpesa') {
-                      paymentDetails = ` • M-Pesa: ${mpesaPhone}`
-                    } else if (change > 0) {
-                      paymentDetails = ` • Change: ${formatMoney(change)}`
-                    }
-                    
-                    toast({ 
-                      title: 'Payment Complete', 
-                      description: `Order #${id} • ${itemsCount} item(s) • ${formatMoney(cartTotal)}${paymentDetails}` 
-                    })
-                    
-                    setCart([])
-                    setShowPaymentModal(false)
-                    setPaymentAmount('')
-                    setMpesaPhone('')
-                    
-                  } catch (e) {
-                    toast({ title: 'Failed to complete payment', description: String(e), variant: 'destructive' as any })
-                  } finally {
-                    setProcessingPayment(false)
-                  }
-                }}
-                disabled={
-                  processingPayment || 
-                  !paymentAmount || 
-                  (paymentMethod === 'cash' && parseFloat(paymentAmount) < cartTotal) ||
-                  (paymentMethod === 'mpesa' && (!mpesaPhone || !parseFloat(paymentAmount))) ||
-                  (paymentMethod !== 'cash' && parseFloat(paymentAmount) !== cartTotal)
-                }
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
-              >
-                {processingPayment ? 'Processing...' : 'Complete Payment'}
-              </Button>
-            </div>
-          </motion.div>
         </div>
       )}
     </motion.div>

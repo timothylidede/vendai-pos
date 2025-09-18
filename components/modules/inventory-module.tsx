@@ -61,6 +61,17 @@ export function InventoryModule() {
   const [invMap, setInvMap] = useState<Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }>>({})
   const [hasPricelist, setHasPricelist] = useState<boolean>(false)
   const [showMissingStockAlert, setShowMissingStockAlert] = useState<boolean>(false)
+  const [processingStats, setProcessingStats] = useState({
+    totalProducts: 0,
+    productsAdded: 0,
+    productsUpdated: 0,
+    duplicatesFound: 0,
+    estimatedTimeRemaining: 0,
+    suppliersAnalyzed: 0,
+    locationMatches: 0
+  })
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | undefined>()
+  const newTabHighlighted = !loadingProducts && products.length === 0
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -221,11 +232,38 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
     setProcessingError('')
     setIsProcessingModalOpen(true)
 
+    // Initialize stats
+    setProcessingStats({
+      totalProducts: 0,
+      productsAdded: 0,
+      productsUpdated: 0,
+      duplicatesFound: 0,
+      estimatedTimeRemaining: 0,
+      suppliersAnalyzed: 0,
+      locationMatches: 0
+    })
+
+    // Get user location if available
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          })
+        },
+        () => {
+          // Fallback to default location (Nairobi)
+          setUserLocation({ lat: -1.2921, lng: 36.8219 })
+        }
+      )
+    }
+
     try {
       // Step 1: File validation
       updateStepStatus('file_validation', 'processing', 0)
       
-      await new Promise(resolve => setTimeout(resolve, 500)) // Visual delay
+      await new Promise(resolve => setTimeout(resolve, 500))
       updateStepStatus('file_validation', 'completed', 100)
 
       // Step 2: Text extraction
@@ -233,37 +271,73 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
       
       const formData = new FormData()
       formData.append('file', file)
+      formData.append('orgId', orgId)
 
       await new Promise(resolve => setTimeout(resolve, 800))
       updateStepStatus('text_extraction', 'completed', 100)
 
-      // Step 3: Process & save into Firestore (CSV supported now)
+      // Step 3: Enhanced AI processing with analytics
       updateStepStatus('ai_extraction', 'processing', 0)
       const ext = (file.name.split('.').pop() || '').toLowerCase()
+      
       if (ext === 'csv') {
-        formData.append('orgId', orgId)
-        const response = await fetch('/api/inventory/upload', { method: 'POST', body: formData })
+        // Use enhanced processing API
+        const response = await fetch('/api/inventory/process-enhanced', { method: 'POST', body: formData })
         const result = await response.json().catch(() => ({} as any))
-        if (!response.ok || !result?.ok) {
-          setProcessingError(result?.error || 'Upload failed')
+        
+        if (!response.ok || !result?.success) {
+          setProcessingError(result?.error || 'Enhanced processing failed')
           updateStepStatus('ai_extraction', 'error')
           return
         }
+
+        // Update statistics from enhanced processing
+        if (result.stats) {
+          setProcessingStats(prevStats => ({
+            ...prevStats,
+            totalProducts: result.stats.totalProducts,
+            productsAdded: result.stats.productsAdded,
+            productsUpdated: result.stats.productsUpdated,
+            duplicatesFound: result.stats.duplicatesFound,
+            suppliersAnalyzed: result.stats.suppliersAnalyzed,
+            locationMatches: result.stats.locationMatches,
+            estimatedTimeRemaining: Math.max(0, (result.stats.totalProducts - result.stats.productsAdded - result.stats.productsUpdated) * 0.1)
+          }))
+        }
+
         updateStepStatus('ai_extraction', 'completed', 100)
       } else {
-        setProcessingError('Currently, only CSV uploads are saved to inventory. PDF/Excel support is coming soon.')
+        setProcessingError('Currently, only CSV uploads are supported with full analytics. PDF/Excel support coming soon.')
         updateStepStatus('ai_extraction', 'error')
         return
       }
 
-      // Step 4: Data validation
+      // Step 4: Data validation with progress updates
       updateStepStatus('data_validation', 'processing', 0)
-      await new Promise(resolve => setTimeout(resolve, 600))
+      const currentStats = processingStats
+      
+      // Simulate validation progress
+      for (let i = 0; i <= 100; i += 20) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+        updateStepStatus('data_validation', 'processing', i)
+        
+        // Update step with product count
+        setProcessingSteps(prev => prev.map(step => 
+          step.id === 'data_validation' ? { 
+            ...step, 
+            productsProcessed: Math.round(currentStats.productsAdded * i / 100),
+            totalProducts: currentStats.totalProducts
+          } : step
+        ))
+      }
       updateStepStatus('data_validation', 'completed', 100)
 
-      // Step 5: Image generation
+      // Step 5: Image generation (show progress)
       updateStepStatus('image_generation', 'processing', 0)
-      await new Promise(resolve => setTimeout(resolve, 1200))
+      for (let i = 0; i <= 100; i += 25) {
+        await new Promise(resolve => setTimeout(resolve, 300))
+        updateStepStatus('image_generation', 'processing', i)
+      }
       updateStepStatus('image_generation', 'completed', 100)
 
       // Step 6: Finalization
@@ -291,11 +365,12 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
       } finally {
         setLoadingProducts(false)
       }
+      
       setProcessedProducts([])
       setTimeout(() => setIsProcessingModalOpen(false), 1200)
 
     } catch (error) {
-      console.error('Upload error:', error)
+      console.error('Enhanced upload error:', error)
       setProcessingError('Network error occurred. Please check your connection and try again.')
       updateStepStatus(currentStep || 'ai_extraction', 'error')
     } finally {
@@ -330,6 +405,8 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
         currentStep={currentStep}
         error={processingError}
         onRetry={handleRetryProcessing}
+        stats={processingStats}
+        userLocation={userLocation}
       />
 
   {/* Header */}
@@ -366,13 +443,16 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                 className={`px-4 py-2 font-semibold text-base rounded-lg transition-all duration-300 relative
                   ${activeTab === 'new' 
                     ? 'text-blue-400 backdrop-blur-md bg-gradient-to-r from-blue-500/[0.15] to-blue-500/[0.08] border border-blue-500/30 shadow-[0_4px_16px_-8px_rgba(59,130,246,0.3)]' 
-                    : 'text-slate-200 hover:text-blue-400 hover:bg-white/[0.05] backdrop-blur-sm'}`}
+                    : `text-slate-200 hover:text-blue-400 hover:bg-white/[0.05] backdrop-blur-sm ${newTabHighlighted ? 'ring-2 ring-blue-400/40' : ''}`}`}
                 onClick={() => setActiveTab('new')}
               >
                 <span className="relative">
                   New
                   {activeTab === 'new' && (
                     <span className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-blue-400 via-blue-200 to-blue-400 rounded-full blur-sm animate-pulse"></span>
+                  )}
+                  {newTabHighlighted && activeTab !== 'new' && (
+                    <span className="ml-2 inline-block text-[10px] text-blue-300 align-middle">Start here →</span>
                   )}
                 </span>
               </button>
@@ -391,28 +471,11 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
               </div>
             )}
             {!loadingProducts && products.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-32 text-center">
-                <div className="relative mb-8">
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-blue-500/20 rounded-full blur-3xl animate-pulse"></div>
-                  <div className="relative w-32 h-32 rounded-3xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] flex items-center justify-center shadow-[0_8px_32px_-12px_rgba(0,0,0,0.4)]">
-                    <Package className="w-16 h-16 text-blue-400" />
-                  </div>
-                </div>
-                <h3 className="text-3xl font-bold text-white mb-4 bg-gradient-to-r from-white via-blue-100 to-white bg-clip-text text-transparent">
-                  No products yet
-                </h3>
-                <p className="text-slate-300 text-lg mb-8 max-w-md leading-relaxed">
-                  Get started by adding your first products through the New tab. Upload a price list or add products manually.
-                </p>
-                <button 
-                  onClick={() => setActiveTab('new')} 
-                  className="group relative overflow-hidden rounded-xl backdrop-blur-md bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-400/30 hover:border-blue-400/50 px-8 py-4 transition-all duration-300 shadow-[0_8px_24px_-8px_rgba(59,130,246,0.3)] hover:shadow-[0_12px_32px_-8px_rgba(59,130,246,0.4)] hover:scale-105"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/[0.08] to-purple-500/[0.08] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                  <span className="relative font-semibold text-blue-200 group-hover:text-white transition-colors duration-300">
-                    Add Your First Products
-                  </span>
-                </button>
+              <div className="flex flex-col items-center justify-center py-16 text-center rounded-2xl border border-white/10 bg-white/5 backdrop-blur">
+                <Package className="w-12 h-12 text-slate-400 mb-3" />
+                <h4 className="text-white font-semibold">No products yet</h4>
+                <p className="text-slate-400 text-sm mt-1">Add products from the New tab to get started.</p>
+                <button onClick={() => setActiveTab('new')} className="mt-4 px-4 py-2 rounded-lg bg-blue-500/20 text-blue-200 border border-blue-500/30 hover:bg-blue-500/30">Go to New</button>
               </div>
             )}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
@@ -509,6 +572,58 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                   <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
                 </div>
               </div>
+
+              {hasPricelist && (
+                <div className="group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] hover:border-white/[0.15] transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_48px_-12px_rgba(59,130,246,0.15)]">
+                  <div className="relative p-10">
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.03] via-transparent to-purple-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="relative text-center">
+                      <div className="w-24 h-24 mx-auto mb-6 rounded-2xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] flex items-center justify-center group-hover:scale-105 transition-all duration-500 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)]">
+                        <Upload className="w-12 h-12 text-slate-300 group-hover:text-blue-300 transition-all duration-500" />
+                      </div>
+                      <h4 className="text-slate-100 font-semibold text-xl mb-3 group-hover:text-white transition-colors duration-300">Re-upload price list</h4>
+                      <p className="text-slate-400 text-sm leading-relaxed group-hover:text-slate-300 transition-colors duration-300">Re-upload a CSV to update products; include orgId to create inventory stubs for unlocking modules.</p>
+                      <form className="space-y-3 mt-4" onSubmit={(e) => e.preventDefault()}>
+                        <div className="flex items-center space-x-2">
+                          <input className="flex-1 bg-slate-800/60 border border-white/10 rounded-lg px-3 py-2 text-slate-200" placeholder="Organization ID" value={orgId} onChange={e => setOrgId(e.target.value)} />
+                        </div>
+                        <div>
+                          <input id="csv-reupload" type="file" className="hidden" accept=".csv" onChange={async (ev) => {
+                            const f = ev.target.files?.[0]; if (!f) return;
+                            const fd = new FormData(); fd.append('file', f); fd.append('orgId', orgId);
+                            const res = await fetch('/api/inventory/upload', { method: 'POST', body: fd });
+                            ev.currentTarget.value = ''
+                            if (res.ok) {
+                              setLoadingProducts(true)
+                              try {
+                                const qy = query(collection(db, POS_PRODUCTS_COL), orderBy('updatedAt', 'desc'))
+                                const snap = await getDocs(qy)
+                                const prods = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                                const invQ = query(collection(db, INVENTORY_COL), where('orgId', '==', orgId), limit(1000))
+                                const invSnap = await getDocs(invQ)
+                                const map: Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }> = {}
+                                invSnap.docs.forEach(d => { const v: any = d.data(); if (v?.productId) map[v.productId] = { qtyBase: v.qtyBase || 0, qtyLoose: v.qtyLoose || 0, unitsPerBase: v.unitsPerBase || 1 } })
+                                const augmented = prods.map((p: any) => {
+                                  const inv = map[p.id]; const unitsPerBase = inv?.unitsPerBase || p.unitsPerBase || p.wholesaleQuantity || 1; const stockPieces: number = inv ? inv.qtyBase * unitsPerBase + inv.qtyLoose : 0; const status = inv ? (stockPieces === 0 ? 'out' : (stockPieces < (p.minStock || unitsPerBase) ? 'low' : 'good')) : 'unknown'; return { ...p, stock: stockPieces, status, unitsPerBase }
+                                })
+                                setProducts(augmented)
+                                setInvMap(map)
+                                setHasPricelist(augmented.length > 0)
+                                setShowMissingStockAlert(augmented.length > 0 && invSnap.size === 0)
+                              } finally { setLoadingProducts(false) }
+                            }
+                          }} />
+                          <label htmlFor="csv-reupload" className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-all duration-300 cursor-pointer"><Upload className="w-4 h-4" /><span>Upload CSV</span></label>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-500/[0.02] to-blue-500/[0.05]" />
+                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-6">

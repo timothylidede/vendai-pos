@@ -1,0 +1,33 @@
+VendAI POS - End User License Agreement (EULA)
+
+Copyright (c) 2024 VendAI. All rights reserved.
+
+IMPORTANT - READ CAREFULLY: This End-User License Agreement ("EULA") is a legal agreement between you (either an individual or a single entity) and VendAI for the VendAI POS software product identified above, which includes computer software and may include associated media, printed materials, and "online" or electronic documentation ("SOFTWARE PRODUCT").
+
+By installing, copying, or otherwise using the SOFTWARE PRODUCT, you agree to be bound by the terms of this EULA. If you do not agree to the terms of this EULA, do not install or use the SOFTWARE PRODUCT.
+
+SOFTWARE PRODUCT LICENSE
+The SOFTWARE PRODUCT is protected by copyright laws and international copyright treaties, as well as other intellectual property laws and treaties. The SOFTWARE PRODUCT is licensed, not sold.
+
+GRANT OF LICENSE
+VendAI grants you the following rights provided that you comply with all terms and conditions of this EULA:
+- You may install and use the SOFTWARE PRODUCT on a single computer.
+- You may make one backup copy of the SOFTWARE PRODUCT for archival purposes.
+
+DESCRIPTION OF OTHER RIGHTS AND LIMITATIONS
+- You may not reverse engineer, decompile, or disassemble the SOFTWARE PRODUCT.
+- You may not rent, lease, or lend the SOFTWARE PRODUCT.
+- You may permanently transfer all of your rights under this EULA provided the recipient agrees to the terms of this EULA.
+
+TERMINATION
+Without prejudice to any other rights, VendAI may terminate this EULA if you fail to comply with the terms and conditions of this EULA.
+
+DISCLAIMER OF WARRANTIES
+VendAI expressly disclaims any warranty for the SOFTWARE PRODUCT. The SOFTWARE PRODUCT is provided 'As Is' without any express or implied warranty of any kind.
+
+LIMITATION OF LIABILITY
+In no event shall VendAI be liable for any damages (including, without limitation, lost profits, business interruption, or lost information) arising out of 'Authorized Users' use of or inability to use the SOFTWARE PRODUCT.
+
+This EULA shall be construed in accordance with the laws of Kenya.
+
+For support, contact: support@vendai.digital

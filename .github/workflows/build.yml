@@ -1,0 +1,238 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on version tags like v1.0.0
+  release:
+    types: [published]
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            arch: x64
+          - os: macos-latest
+            platform: mac
+            arch: x64
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: |
+        npm ci --legacy-peer-deps
+
+    - name: Build Next.js app
+      run: |
+        npm run build
+      env:
+        NODE_ENV: production
+
+    # Windows build
+    - name: Build Windows app
+      if: matrix.platform == 'win'
+      run: |
+        npm run dist:win
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        NODE_ENV: production
+
+    # Mac Intel build
+    - name: Build Mac Intel app
+      if: matrix.platform == 'mac' && matrix.arch == 'x64'
+      run: |
+        npm run pack:mac
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        NODE_ENV: production
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_ID_PASS: ${{ secrets.APPLE_ID_PASS }}
+        CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
+        CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+
+    # Mac Apple Silicon build
+    - name: Build Mac Apple Silicon app
+      if: matrix.platform == 'mac' && matrix.arch == 'arm64'
+      run: |
+        npm run pack:mac
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        NODE_ENV: production
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_ID_PASS: ${{ secrets.APPLE_ID_PASS }}
+        CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
+        CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+
+    # Linux build
+    - name: Build Linux app
+      if: matrix.platform == 'linux'
+      run: |
+        npm run dist:linux
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        NODE_ENV: production
+
+    # Upload artifacts for each platform
+    - name: Upload Windows artifacts
+      if: matrix.platform == 'win'
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-build
+        path: |
+          dist/*.exe
+          dist/*.exe.blockmap
+        retention-days: 5
+
+    - name: Upload Mac artifacts
+      if: matrix.platform == 'mac'
+      uses: actions/upload-artifact@v4
+      with:
+        name: mac-build-${{ matrix.arch }}
+        path: |
+          dist/*.dmg
+          dist/*.dmg.blockmap
+          dist/*.zip
+          dist/*-mac.zip
+        retention-days: 5
+
+    - name: Upload Linux artifacts
+      if: matrix.platform == 'linux'
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-build
+        path: |
+          dist/*.AppImage
+          dist/*.deb
+          dist/*.rpm
+        retention-days: 5
+
+  # Release job - runs after all builds complete
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Display structure of downloaded files
+      run: ls -la
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: VendAI POS ${{ github.ref_name }}
+        body: |
+          ## VendAI POS ${{ github.ref_name }}
+          
+          ### Downloads
+          
+          **Windows:**
+          - `VendAI POS-*-Setup.exe` - Windows installer
+          - `VendAI POS-*-Portable.exe` - Portable executable
+          
+          **macOS:**
+          - `VendAI POS-*.dmg` - macOS disk image
+          - `VendAI POS-*-mac.zip` - macOS archive
+          
+          **Linux:**
+          - `VendAI POS-*.AppImage` - Universal Linux executable
+          - `VendAI POS-*.deb` - Ubuntu/Debian package
+          - `VendAI POS-*.rpm` - RedHat/Fedora package
+          
+          ### Installation Notes
+          
+          - **Windows**: Run the Setup.exe file. Windows Defender may show a warning for unsigned apps.
+          - **macOS**: Open the .dmg file and drag VendAI POS to Applications. You may need to allow apps from unidentified developers.
+          - **Linux**: Make the .AppImage executable and run it, or install the .deb/.rpm package.
+          
+          ### System Requirements
+          - Windows 10 or later
+          - macOS 10.15 (Catalina) or later
+          - Ubuntu 18.04+ / Recent Linux distributions
+          
+          ---
+          **Full changelog:** https://github.com/timothylidede/vendai-pos/compare/v${{ github.event.release.tag_name }}
+        draft: false
+        prerelease: false
+
+    # Upload Windows files
+    - name: Upload Windows Setup
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: windows-build/VendAI POS-${{ github.ref_name }}-x64-Setup.exe
+        asset_name: VendAI-POS-${{ github.ref_name }}-Windows-Setup.exe
+        asset_content_type: application/octet-stream
+
+    - name: Upload Windows Portable
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: windows-build/VendAI POS-${{ github.ref_name }}-Portable.exe
+        asset_name: VendAI-POS-${{ github.ref_name }}-Windows-Portable.exe
+        asset_content_type: application/octet-stream
+
+    # Upload Mac files
+    - name: Upload Mac DMG
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: mac-build-x64/VendAI POS-${{ github.ref_name }}.dmg
+        asset_name: VendAI-POS-${{ github.ref_name }}-macOS-Intel.dmg
+        asset_content_type: application/octet-stream
+
+    - name: Upload Mac ZIP
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: mac-build-x64/VendAI POS-${{ github.ref_name }}-mac.zip
+        asset_name: VendAI-POS-${{ github.ref_name }}-macOS-Intel.zip
+        asset_content_type: application/zip
+
+    # Upload Linux files
+    - name: Upload Linux AppImage
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: linux-build/VendAI POS-${{ github.ref_name }}.AppImage
+        asset_name: VendAI-POS-${{ github.ref_name }}-Linux.AppImage
+        asset_content_type: application/octet-stream

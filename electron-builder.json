@@ -23,20 +23,7 @@
       "to": "public"
     }
   ],
-  "mac": {
-    "category": "public.app-category.business",
-    "target": [
-      { "target": "dmg", "arch": ["x64", "arm64"] },
-      { "target": "zip", "arch": ["x64", "arm64"] }
-    ],
-    "icon": "build/icons/icon.icns",
-    "entitlements": "build/entitlements.mac.plist",
-    "entitlementsInherit": "build/entitlements.mac.plist",
-    "minimumSystemVersion": "10.15.0"
-  },
-  "dmg": {
-    "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
-  },
+  
   "win": {
     "target": [
       { "target": "nsis", "arch": ["x64"] },
@@ -54,15 +41,7 @@
     "createStartMenuShortcut": true,
     "artifactName": "${productName}-${version}-win-${arch}-Setup.${ext}"
   },
-  "linux": {
-    "target": [
-      { "target": "AppImage", "arch": ["x64"] },
-      { "target": "deb", "arch": ["x64"] }
-    ],
-    "category": "Office",
-    "icon": "build/icon.png",
-    "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
-  },
+  
   "publish": [
     {
       "provider": "github",

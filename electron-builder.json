@@ -9,18 +9,21 @@
   "files": [
     "package.json",
     "electron/**/*",
-    "!.git/**/*",
     "!**/*.map",
     "!**/tests/**",
+    "!**/.git/**",
+    "!**/node_modules/.cache/**",
     {
       "from": ".next",
-      "to": ".next"
+      "to": ".next",
+      "filter": ["**/*", "!**/*.map"]
     }
   ],
   "extraResources": [
     {
       "from": "public",
-      "to": "public"
+      "to": "public",
+      "filter": ["**/*", "!**/*.psd", "!**/*.sketch"]
     }
   ],
   
@@ -48,5 +51,7 @@
     }
   ],
   "asar": true,
-  "compression": "maximum"
+  "compression": "normal",
+  "nodeGypRebuild": false,
+  "buildDependenciesFromSource": false
 }

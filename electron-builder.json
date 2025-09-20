@@ -73,7 +73,6 @@
     }
   ],
   
-  "afterSign": "electron-builder-notarize",
   "asar": true,
   "compression": "maximum",
   "nodeGypRebuild": false,

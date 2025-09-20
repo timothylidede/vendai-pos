@@ -60,7 +60,8 @@ jobs:
     - name: List built files (Debug)
       run: |
         echo "Contents of dist directory:"
-        ls -la dist/ || dir dist\
+        if (Test-Path "dist") { Get-ChildItem dist -Recurse } else { echo "No dist directory found" }
+      shell: powershell
         
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -86,7 +87,7 @@ jobs:
     - name: Display artifacts structure (Debug)
       run: |
         echo "Downloaded artifacts:"
-        find artifacts/ -type f -name "*.exe" -o -name "*.dmg" || echo "No executables found"
+        find artifacts/ -type f -name "*.exe" || echo "No executables found"
         ls -la artifacts/ || echo "No artifacts directory"
         
     - name: Prepare release assets
@@ -97,6 +98,8 @@ jobs:
         if find artifacts/ -name "*.exe" -type f | head -1 | read exe_file; then
           echo "Found Windows exe: $exe_file"
           cp "$exe_file" "release-assets/VendAI-POS-Windows-Setup.exe"
+        else
+          echo "No .exe files found in artifacts"
         fi
         
         echo "Release assets prepared:"

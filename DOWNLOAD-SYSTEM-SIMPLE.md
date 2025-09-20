@@ -67,3 +67,15 @@ When developers want to update:
 ```
 
 That's it! The system is fully automated and handles everything else.
+
+## Troubleshooting
+
+If you encounter build issues:
+
+1. **Check GitHub Actions logs**: Go to your repo → Actions tab → Click on failed workflow
+2. **Common issues**:
+   - Missing icon files (remove icon references from electron-builder.json)
+   - Wrong file paths in artifacts (check dist/ directory contents)
+   - PowerShell vs Unix command conflicts (use PowerShell syntax on Windows runners)
+3. **Test locally first**: Run `npm run dist:win` to verify build works locally
+4. **Debug artifacts**: Check what files are actually being uploaded in GitHub Actions

@@ -57,17 +57,27 @@ jobs:
         # Apple notarization (removed - Windows only)
       run: npm run ${{ matrix.build_script }}
 
-    - name: List built files (Debug)
+    - name: Debug - Show what was built
       run: |
         echo "Contents of dist directory:"
-        if (Test-Path "dist") { Get-ChildItem dist -Recurse } else { echo "No dist directory found" }
+        if (Test-Path "dist") { 
+          Get-ChildItem dist -Recurse | Format-Table Name, Length, FullName
+          echo "Looking specifically for .exe files:"
+          Get-ChildItem dist -Recurse -Filter "*.exe" | Format-Table Name, Length, FullName
+        } else { 
+          echo "No dist directory found" 
+        }
       shell: powershell
         
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.platform }}-build
-        path: ${{ matrix.artifact_path }}
+        path: |
+          dist/**/*.exe
+          dist/**/*.msi
+          dist/*.exe
+          dist/*.msi
         retention-days: 5
 
   release:
@@ -94,12 +104,25 @@ jobs:
       run: |
         mkdir -p release-assets/
         
-        # Find and rename Windows executable
-        if find artifacts/ -name "*.exe" -type f | head -1 | read exe_file; then
-          echo "Found Windows exe: $exe_file"
-          cp "$exe_file" "release-assets/VendAI-POS-Windows-Setup.exe"
+        echo "Debug: Searching for executable files in artifacts..."
+        find artifacts/ -type f -name "*.exe" | while read exe_file; do
+          echo "Found exe file: $exe_file"
+        done
+        
+        echo "Debug: All files in artifacts directory:"
+        find artifacts/ -type f | head -10
+        
+        # Find and rename Windows executable with better error handling
+        EXE_FILE=$(find artifacts/ -type f -name "*.exe" | head -1)
+        if [ -n "$EXE_FILE" ] && [ -f "$EXE_FILE" ]; then
+          echo "Found Windows exe: $EXE_FILE"
+          cp "$EXE_FILE" "release-assets/VendAI-POS-Windows-Setup.exe"
+          echo "Successfully copied to release-assets/"
         else
-          echo "No .exe files found in artifacts"
+          echo "ERROR: No .exe files found in artifacts"
+          echo "Available files:"
+          find artifacts/ -type f -name "*" | head -20
+          exit 1
         fi
         
         echo "Release assets prepared:"

@@ -28,12 +28,6 @@ jobs:
             build_script: "dist:win"
             artifact_path: "dist/*.exe"
             artifact_name: "VendAI-POS-Windows-Setup.exe"
-            
-          - platform: macOS
-            os: macos-latest
-            build_script: "dist:mac"
-            artifact_path: "dist/*.dmg"
-            artifact_name: "VendAI-POS-macOS.dmg"
         
     steps:
     - name: Check out Git repository
@@ -60,12 +54,7 @@ jobs:
         NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'dummy-project.appspot.com' }}
         NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '123456789' }}
         NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID || '1:123456789:web:dummy' }}
-        # Apple notarization (Mac only)
-        APPLE_ID: ${{ secrets.APPLE_ID }}
-        APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        CSC_LINK: ${{ secrets.CSC_LINK }}
-        CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        # Apple notarization (removed - Windows only)
       run: npm run ${{ matrix.build_script }}
 
     - name: List built files (Debug)
@@ -110,21 +99,6 @@ jobs:
           cp "$exe_file" "release-assets/VendAI-POS-Windows-Setup.exe"
         fi
         
-        # Find and rename macOS DMG files
-        find artifacts/ -name "*.dmg" -type f | while read dmg_file; do
-          if [[ "$dmg_file" == *"x64"* ]]; then
-            echo "Found macOS Intel dmg: $dmg_file"
-            cp "$dmg_file" "release-assets/VendAI-POS-macOS-Intel.dmg"
-          elif [[ "$dmg_file" == *"arm64"* ]]; then
-            echo "Found macOS Apple Silicon dmg: $dmg_file"
-            cp "$dmg_file" "release-assets/VendAI-POS-macOS-AppleSilicon.dmg"
-          else
-            # Fallback for universal or unspecified
-            echo "Found macOS dmg: $dmg_file"
-            cp "$dmg_file" "release-assets/VendAI-POS-macOS.dmg"
-          fi
-        done
-        
         echo "Release assets prepared:"
         ls -la release-assets/
         
@@ -145,13 +119,6 @@ jobs:
           - Download `VendAI-POS-Windows-Setup.exe`
           - Run the installer and follow the setup wizard
           - Windows may show a security warning - click "More info" → "Run anyway"
-          
-          **macOS Users:**
-          - **Intel Macs**: Download `VendAI-POS-macOS-Intel.dmg`
-          - **Apple Silicon Macs (M1/M2/M3)**: Download `VendAI-POS-macOS-AppleSilicon.dmg`
-          - If you're not sure which Mac you have, try the Apple Silicon version first
-          - Open the DMG file and drag VendAI POS to Applications folder
-          - You may need to allow the app in System Preferences → Security & Privacy
           
           ### What's New:
           - Latest features and bug fixes

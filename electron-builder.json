@@ -52,17 +52,7 @@
     "license": "LICENSE.txt"
   },
   
-  "mac": {
-    "target": [
-      { "target": "dmg", "arch": ["x64", "arm64"] }
-    ],
-    "icon": "build/icons/icon.icns",
-    "artifactName": "${productName}-${version}-macOS-${arch}.${ext}",
-    "category": "public.app-category.business",
-    "entitlements": "build/entitlements.mac.plist",
-    "hardenedRuntime": true,
-    "gatekeeperAssess": false
-  },
+
   
   "linux": {
     "target": [

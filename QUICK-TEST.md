@@ -1,6 +1,6 @@
-# 🚀 Quick Release Test
+# 🚀 Quick Release Test - Windows Only
 
-To test your new release system:
+To test your new Windows-only release system:
 
 ## 1. Create a Test Release
 
@@ -22,7 +22,6 @@ Visit: https://github.com/timothylidede/vendai-pos/actions
 
 You should see:
 - ✅ Windows build (creates .exe)
-- ✅ macOS build (creates .dmg files)
 - ✅ Release creation with downloadable assets
 
 ## 3. Test Downloads
@@ -31,23 +30,34 @@ Visit: https://github.com/timothylidede/vendai-pos/releases
 
 You should find:
 - `VendAI-POS-Windows-Setup.exe` (Windows installer)
-- `VendAI-POS-macOS-Intel.dmg` (Intel Macs)
-- `VendAI-POS-macOS-AppleSilicon.dmg` (M1/M2/M3 Macs)
 
-## 4. Integration URLs
+## 4. Website Integration
 
-Use these in your website:
+Use this URL in your website:
 
 **Always Latest (Recommended):**
 ```html
 <a href="https://github.com/timothylidede/vendai-pos/releases/latest/download/VendAI-POS-Windows-Setup.exe">
-  Download Windows
-</a>
-
-<a href="https://github.com/timothylidede/vendai-pos/releases/latest/download/VendAI-POS-macOS-AppleSilicon.dmg">
-  Download macOS
+  Download for Windows
 </a>
 ```
+
+**Direct Download JavaScript:**
+```javascript
+const handleDownload = () => {
+  const downloadUrl = "https://github.com/timothylidede/vendai-pos/releases/latest/download/VendAI-POS-Windows-Setup.exe";
+  window.open(downloadUrl, '_blank');
+};
+```
+
+## 5. Verify Success
+
+- Click download button → .exe file downloads immediately
+- No zip files, just clean Windows installer
+- Professional NSIS installer with shortcuts
+- Windows-only, simplified system
+
+🎉 Your Windows-only release system is ready!
 
 **Dynamic (Best UX):**
 Use the JavaScript code from `website-download-template.html`

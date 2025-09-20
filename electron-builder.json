@@ -4,8 +4,7 @@
   "productName": "VendAI POS",
   "copyright": "Copyright © 2024 Timothy Lidede",
   "directories": {
-    "output": "dist",
-    "buildResources": "build"
+    "output": "dist"
   },
   "files": [
     "package.json",
@@ -44,8 +43,7 @@
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "runAfterFinish": false,
-    "license": "LICENSE.txt"
+    "runAfterFinish": false
   },
   
   "publish": [

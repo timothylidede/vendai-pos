@@ -6,6 +6,7 @@ import { VendaiPanel } from '@/components/vendai-panel'
 import { WindowControls } from '@/components/window-controls'
 import UpdateManager from '@/components/update-manager'
 import { Toaster } from '@/components/ui/toaster'
+import { ErrorBoundary } from '@/components/error-boundary'
 import './globals.css'
 
 export const metadata = {
@@ -46,9 +47,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
           {/* Main content */}
           <AuthProvider>
-            <main className="pt-10">
-              {children}
-            </main>
+            <ErrorBoundary>
+              <main className="pt-10">
+                {children}
+              </main>
+            </ErrorBoundary>
           </AuthProvider>
           
           {/* Update Manager (Electron only) */}

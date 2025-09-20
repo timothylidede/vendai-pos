@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, X, Check, Mail, Users, AlertCircle, Clock, CheckCircle } from 'lucide-react';
+import { Bell, X, Check, Mail, Users, AlertCircle, Clock, CheckCircle, ShoppingCart, Package, DollarSign } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { 
   collection, 
@@ -11,20 +11,30 @@ import {
   doc,
   updateDoc,
   deleteDoc,
-  Timestamp
+  Timestamp,
+  addDoc,
+  serverTimestamp
 } from 'firebase/firestore';
 import { useAuth } from '@/contexts/auth-context';
+import { useToast } from '@/hooks/use-toast';
+import logger from '@/lib/logger';
 
 export interface NotificationData {
   id: string;
-  type: 'invitation_received' | 'invitation_accepted' | 'member_joined' | 'organization_update' | 'system';
+  type: 'order_received' | 'order_confirmed' | 'order_delivered' | 'payment_due' | 'stock_alert' | 'settlement_due' | 'invitation_received' | 'invitation_accepted' | 'member_joined' | 'organization_update' | 'system';
   title: string;
   message: string;
   read: boolean;
   userId: string;
   organizationName?: string;
   actionUrl?: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
   metadata?: {
+    orderId?: string;
+    settlementId?: string;
+    invoiceId?: string;
+    amount?: number;
+    productId?: string;
     invitationId?: string;
     inviterName?: string;
     memberName?: string;
@@ -32,6 +42,7 @@ export interface NotificationData {
   };
   createdAt: Timestamp;
   readAt?: Timestamp;
+  expiresAt?: Timestamp;
 }
 
 interface NotificationSystemProps {

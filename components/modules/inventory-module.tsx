@@ -92,8 +92,13 @@ export function InventoryModule() {
     const load = async () => {
       try {
         setLoadingProducts(true)
-        // Load products (most recent first)
-        const qy = query(collection(db, POS_PRODUCTS_COL), orderBy('updatedAt', 'desc'))
+        // Load products for specific organization ONLY
+        const qy = query(
+          collection(db, POS_PRODUCTS_COL), 
+          where('orgId', '==', orgId),
+          orderBy('updatedAt', 'desc'),
+          limit(1000)
+        )
         const snap = await getDocs(qy)
         const prods = snap.docs.map(d => ({ id: d.id, ...d.data() }))
 
@@ -348,7 +353,13 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
       // Success: reload products from Firestore for Products tab
       try {
         setLoadingProducts(true)
-        const qy = query(collection(db, POS_PRODUCTS_COL), orderBy('updatedAt', 'desc'))
+        // Load products for specific organization ONLY
+        const qy = query(
+          collection(db, POS_PRODUCTS_COL), 
+          where('orgId', '==', orgId),
+          orderBy('updatedAt', 'desc'),
+          limit(1000)
+        )
         const snap = await getDocs(qy)
         const prods = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         const invQ = query(collection(db, INVENTORY_COL), where('orgId', '==', orgId), limit(1000))
@@ -596,7 +607,13 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                             if (res.ok) {
                               setLoadingProducts(true)
                               try {
-                                const qy = query(collection(db, POS_PRODUCTS_COL), orderBy('updatedAt', 'desc'))
+                                // Load products for specific organization ONLY  
+                                const qy = query(
+                                  collection(db, POS_PRODUCTS_COL), 
+                                  where('orgId', '==', orgId),
+                                  orderBy('updatedAt', 'desc'),
+                                  limit(1000)
+                                )
                                 const snap = await getDocs(qy)
                                 const prods = snap.docs.map(d => ({ id: d.id, ...d.data() }))
                                 const invQ = query(collection(db, INVENTORY_COL), where('orgId', '==', orgId), limit(1000))
@@ -702,7 +719,13 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
               onSaved={() => { setIsModalOpen(false); setEditingProduct(null); /* reload */ (async () => {
                 setLoadingProducts(true)
                 try {
-                  const qy = query(collection(db, POS_PRODUCTS_COL), orderBy('updatedAt', 'desc'))
+                  // Load products for specific organization ONLY
+                  const qy = query(
+                    collection(db, POS_PRODUCTS_COL), 
+                    where('orgId', '==', orgId),
+                    orderBy('updatedAt', 'desc'),
+                    limit(1000)
+                  )
                   const snap = await getDocs(qy)
                   const prods = snap.docs.map(d => ({ id: d.id, ...d.data() }))
                   const invQ = query(collection(db, INVENTORY_COL), where('orgId', '==', orgId), limit(1000))
@@ -719,7 +742,13 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
               onDeleted={() => { setIsModalOpen(false); setEditingProduct(null); /* trigger reload via saved */ (async () => {
                 setLoadingProducts(true)
                 try {
-                  const qy = query(collection(db, POS_PRODUCTS_COL), orderBy('updatedAt', 'desc'))
+                  // Load products for specific organization ONLY
+                  const qy = query(
+                    collection(db, POS_PRODUCTS_COL), 
+                    where('orgId', '==', orgId),
+                    orderBy('updatedAt', 'desc'),
+                    limit(1000)
+                  )
                   const snap = await getDocs(qy)
                   const prods = snap.docs.map(d => ({ id: d.id, ...d.data() }))
                   const invQ = query(collection(db, INVENTORY_COL), where('orgId', '==', orgId), limit(1000))

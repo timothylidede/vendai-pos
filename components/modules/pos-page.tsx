@@ -1,6 +1,4 @@
-'use client'
-
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
@@ -12,6 +10,7 @@ import type { POSProduct, POSOrderLine, POSOrderDoc } from '@/lib/types'
 import { listPOSProducts, addPosOrder, listRecentOrders, getInventory } from '@/lib/pos-operations'
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/hooks/use-toast'
+import { useGlassmorphicToast } from '../ui/glassmorphic-toast'
 
 interface CartLine {
   productId: string
@@ -59,9 +58,11 @@ export function POSPage() {
   const searchRef = useRef<HTMLInputElement | null>(null)
   const router = useRouter()
   const { toast } = useToast()
+  const { showToast: showGlassToast, ToastContainer } = useGlassmorphicToast()
   const { userData } = useAuth()
   const [loading, setLoading] = useState(false)
   const [products, setProducts] = useState<POSProduct[]>([])
+  const [addingToCart, setAddingToCart] = useState<string | null>(null) // Track which product is being added
 
   const [recentOrders, setRecentOrders] = useState<POSOrderDoc[]>([])
   
@@ -207,11 +208,16 @@ export function POSPage() {
   // Helpers
   const formatMoney = (ksh: number) => `KSh ${ksh.toFixed(2)}`
 
-  const addProductToCart = async (p: POSProduct) => {
+  // Add product to cart with duplicate prevention  
+  const addProductToCart = useCallback(async (p: POSProduct) => {
     console.log('Adding product to cart:', p.name)
     
-    // Prevent rapid multiple clicks
-    if (loading) return
+    // Prevent multiple rapid clicks
+    if (addingToCart === p.id) {
+      console.log('Already adding this product, ignoring duplicate click')
+      return
+    }
+    setAddingToCart(p.id)
     
     // inventory check
     const orgId = userData?.organizationName || 'default'
@@ -221,17 +227,18 @@ export function POSPage() {
       
       // Skip inventory check if no inventory record exists (allow for testing)
       if (inv && totalPieces <= 0) {
-        toast({ title: 'Out of stock', description: `${p.name} is not available in inventory`, variant: 'destructive' as any })
+        showGlassToast('Out of stock', `${p.name} is not available in inventory`)
+        setAddingToCart(null)
         return
       }
       if (inv && totalPieces <= 3) {
-        toast({ title: 'Low stock', description: `${p.name}: ${totalPieces} ${p.retailUom} left` })
+        showGlassToast('Low stock warning', `${p.name}: ${totalPieces} ${p.retailUom} left`)
       }
     } catch (e) {
       console.warn('Inventory check failed, proceeding without stock validation:', e)
-      // Continue to add to cart even if inventory check fails
     }
 
+    // Update cart atomically
     setCart(prev => {
       console.log('Current cart before update:', prev)
       const idx = prev.findIndex(line => line.productId === p.id)
@@ -248,8 +255,13 @@ export function POSPage() {
       console.log('Added new item to cart:', newCart)
       return newCart
     })
-    toast({ title: 'Added to cart', description: p.name })
-  }
+    
+    // Show glassmorphic success toast
+    showGlassToast('Added to cart', p.name)
+    
+    // Reset adding state after a short delay
+    setTimeout(() => setAddingToCart(null), 500)
+  }, [addingToCart, userData?.organizationName, showGlassToast])
 
   const incrementLine = (productId: string) => {
     setCart(prev => prev.map(l => (l.productId === productId ? { ...l, quantity: l.quantity + 1 } : l)))
@@ -840,6 +852,9 @@ export function POSPage() {
           </div>
         </div>
       )}
+      
+      {/* Glassmorphic Toast Container */}
+      <ToastContainer />
     </motion.div>
   )
 }

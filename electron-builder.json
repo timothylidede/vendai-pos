@@ -2,6 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.vendai.pos",
   "productName": "VendAI POS",
+  "copyright": "Copyright © 2024 Timothy Lidede",
   "directories": {
     "output": "dist",
     "buildResources": "build"
@@ -9,6 +10,9 @@
   "files": [
     "package.json",
     "electron/**/*",
+    ".env.local",
+    ".env",
+    ".env.production",
     "!**/*.map",
     "!**/tests/**",
     "!**/.git/**",
@@ -29,10 +33,11 @@
   
   "win": {
     "target": [
-      { "target": "zip", "arch": ["x64"] }
+      { "target": "nsis", "arch": ["x64"] }
     ],
     "icon": "build/icons/icon.ico",
-    "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+    "artifactName": "${productName}-${version}-Windows-Setup.${ext}",
+    "requestedExecutionLevel": "asInvoker"
   },
   "nsis": {
     "oneClick": false,
@@ -40,7 +45,34 @@
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "runAfterFinish": false
+    "runAfterFinish": false,
+    "installerIcon": "build/icons/icon.ico",
+    "uninstallerIcon": "build/icons/icon.ico",
+    "installerHeaderIcon": "build/icons/icon.ico",
+    "license": "LICENSE.txt"
+  },
+  
+  "mac": {
+    "target": [
+      { "target": "dmg", "arch": ["x64", "arm64"] }
+    ],
+    "icon": "build/icons/icon.icns",
+    "artifactName": "${productName}-${version}-macOS-${arch}.${ext}",
+    "category": "public.app-category.business",
+    "entitlements": "build/entitlements.mac.plist",
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false
+  },
+  
+  "linux": {
+    "target": [
+      { "target": "AppImage", "arch": ["x64"] },
+      { "target": "deb", "arch": ["x64"] },
+      { "target": "rpm", "arch": ["x64"] }
+    ],
+    "icon": "build/icons",
+    "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
+    "category": "Office"
   },
   
   "publish": [
@@ -50,8 +82,17 @@
       "repo": "vendai-pos"
     }
   ],
+  
+  "afterSign": "electron-builder-notarize",
   "asar": true,
-  "compression": "normal",
+  "compression": "maximum",
   "nodeGypRebuild": false,
-  "buildDependenciesFromSource": false
+  "buildDependenciesFromSource": false,
+  
+  "protocols": [
+    {
+      "name": "VendAI",
+      "schemes": ["vendai"]
+    }
+  ]
 }

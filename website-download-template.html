@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VendAI POS - Download</title>
+    <style>
+        .download-section {
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 2rem;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        
+        .download-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        
+        .download-btn {
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+        
+        .download-btn span {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .download-btn small {
+            opacity: 0.8;
+            font-size: 0.9rem;
+        }
+        
+        .windows-btn {
+            background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%);
+        }
+        
+        .macos-btn {
+            background: linear-gradient(135deg, #007aff 0%, #5856d6 100%);
+        }
+        
+        .download-info {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+        
+        .download-info h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        
+        .platform-instructions {
+            margin: 1rem 0;
+        }
+        
+        .platform-instructions h4 {
+            color: #6c757d;
+            margin-bottom: 0.5rem;
+        }
+        
+        .platform-instructions ul {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+        }
+        
+        .platform-instructions li {
+            margin-bottom: 0.25rem;
+        }
+
+        @media (min-width: 768px) {
+            .download-buttons {
+                flex-direction: row;
+                gap: 1.5rem;
+            }
+            
+            .download-btn {
+                flex: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="download-section">
+        <h1>Download VendAI POS</h1>
+        <p>Get the latest version of VendAI POS for your operating system. The download will start immediately when you click the button.</p>
+        
+        <!-- Download buttons will be populated by JavaScript -->
+        <div class="download-buttons" id="downloadButtons">
+            <div style="text-align: center; padding: 2rem; color: #6c757d;">
+                Loading download options...
+            </div>
+        </div>
+        
+        <div class="download-info">
+            <h3>📥 Installation Instructions</h3>
+            
+            <div class="platform-instructions">
+                <h4>🪟 Windows</h4>
+                <ul>
+                    <li>Download the .exe installer file</li>
+                    <li>Double-click to run the installer</li>
+                    <li>If Windows shows a security warning, click "More info" → "Run anyway"</li>
+                    <li>Follow the installation wizard</li>
+                    <li>Launch VendAI POS from the Start menu</li>
+                </ul>
+            </div>
+            
+            <div class="platform-instructions">
+                <h4>🍎 macOS</h4>
+                <ul>
+                    <li>Download the appropriate .dmg file:
+                        <ul>
+                            <li><strong>Apple Silicon</strong> for M1/M2/M3 Macs</li>
+                            <li><strong>Intel</strong> for older Intel-based Macs</li>
+                        </ul>
+                    </li>
+                    <li>Double-click the .dmg file to mount it</li>
+                    <li>Drag VendAI POS to the Applications folder</li>
+                    <li>You may need to allow the app in System Preferences → Security & Privacy</li>
+                    <li>Launch from Applications or Launchpad</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const GITHUB_REPO = 'timothylidede/vendai-pos';
+        const LATEST_RELEASE_API = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+
+        async function loadDownloadButtons() {
+            try {
+                const response = await fetch(LATEST_RELEASE_API);
+                const release = await response.json();
+                
+                if (!release || !release.assets) {
+                    throw new Error('No release data found');
+                }
+
+                const downloadButtonsContainer = document.getElementById('downloadButtons');
+                downloadButtonsContainer.innerHTML = '';
+
+                // Find Windows executable
+                const windowsAsset = release.assets.find(asset => 
+                    asset.name.includes('Windows') && asset.name.endsWith('.exe')
+                );
+
+                // Find macOS executables
+                const macAssets = release.assets.filter(asset => 
+                    asset.name.includes('macOS') && asset.name.endsWith('.dmg')
+                );
+
+                // Create Windows download button
+                if (windowsAsset) {
+                    const windowsBtn = createDownloadButton({
+                        platform: 'Windows',
+                        icon: '🪟',
+                        asset: windowsAsset,
+                        className: 'windows-btn'
+                    });
+                    downloadButtonsContainer.appendChild(windowsBtn);
+                }
+
+                // Create macOS download button(s)
+                if (macAssets.length > 0) {
+                    // Prefer Apple Silicon, then Universal, then Intel
+                    const preferredMacAsset = macAssets.find(asset => asset.name.includes('AppleSilicon')) ||
+                                            macAssets.find(asset => !asset.name.includes('Intel') && !asset.name.includes('AppleSilicon')) ||
+                                            macAssets[0];
+
+                    const macBtn = createDownloadButton({
+                        platform: 'macOS',
+                        icon: '🍎',
+                        asset: preferredMacAsset,
+                        className: 'macos-btn'
+                    });
+                    downloadButtonsContainer.appendChild(macBtn);
+                }
+
+                // Add version info
+                const versionInfo = document.createElement('div');
+                versionInfo.style.textAlign = 'center';
+                versionInfo.style.marginTop = '1rem';
+                versionInfo.style.color = '#6c757d';
+                versionInfo.innerHTML = `<small>Version ${release.tag_name} • Released ${new Date(release.published_at).toLocaleDateString()}</small>`;
+                downloadButtonsContainer.appendChild(versionInfo);
+
+            } catch (error) {
+                console.error('Error loading download buttons:', error);
+                document.getElementById('downloadButtons').innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: #dc3545;">
+                        <p>Unable to load download options.</p>
+                        <p><small>Please visit <a href="https://github.com/${GITHUB_REPO}/releases/latest">GitHub Releases</a> to download manually.</small></p>
+                    </div>
+                `;
+            }
+        }
+
+        function createDownloadButton({ platform, icon, asset, className }) {
+            const btn = document.createElement('a');
+            btn.href = asset.browser_download_url;
+            btn.download = asset.name;
+            btn.className = `download-btn ${className}`;
+            
+            btn.innerHTML = `
+                <span>${icon} Download for ${platform}</span>
+                <small>${asset.name} (${formatFileSize(asset.size)})</small>
+            `;
+
+            // Add click tracking (optional)
+            btn.addEventListener('click', () => {
+                console.log(`Download started: ${platform} - ${asset.name}`);
+                // Add analytics tracking here if needed
+            });
+
+            return btn;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        // Load download buttons when page loads
+        document.addEventListener('DOMContentLoaded', loadDownloadButtons);
+    </script>
+</body>
+</html>

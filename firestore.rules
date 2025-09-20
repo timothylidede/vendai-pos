@@ -1,7 +1,74 @@
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+    // Users can only read/write their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Distributors collection - only authenticated users with distributor role
+    match /distributors/{distributorId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (resource.data.ownerId == request.auth.uid || 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+    
+    // Products - distributors can manage their own products, retailers can read
+    match /products/{productId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (resource.data.distributorId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distributor');
+    }
+    
+    // Orders - retailers can create, distributors can read their orders
+    match /orders/{orderId} {
+      allow read: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         resource.data.distributorId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId);
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+      allow update: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         resource.data.distributorId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId);
+    }
+    
+    // Retailers - distributors can read their retailers, retailers can read/update themselves
+    match /retailers/{retailerId} {
+      allow read: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || 
+         resource.data.distributorId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId);
+      allow write: if request.auth != null && 
+        resource.data.userId == request.auth.uid;
+    }
+    
+    // Invoices - distributors can manage their invoices, retailers can read invoices sent to them
+    match /invoices/{invoiceId} {
+      allow read: if request.auth != null && 
+        (resource.data.supplierId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId ||
+         resource.data.clientId == request.auth.uid);
+      allow write: if request.auth != null && 
+        resource.data.supplierId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId;
+    }
+    
+    // Settlements - only distributors can read their own settlements
+    match /settlements/{settlementId} {
+      allow read, write: if request.auth != null && 
+        resource.data.distributorId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId;
+    }
+    
+    // Invitations - users can read invitations sent to them
+    match /invitations/{invitationId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (request.auth.uid == resource.data.inviterId || 
+         request.auth.email == resource.data.inviteeEmail);
+    }
+    
+    // Notifications - users can read their own notifications
+    match /notifications/{notificationId} {
+      allow read, write: if request.auth != null && 
+        resource.data.userId == request.auth.uid;
     }
   }
 }

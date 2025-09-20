@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { GoogleMapsWrapper } from '@/components/ui/google-maps-wrapper';
-import { LocationPickerWithMap } from '@/components/ui/location-picker-with-map';
-import { Store, Truck, MapPin, Building, CheckCircle, ArrowRight, ArrowLeft, Phone, Sparkles, Users, Mail } from 'lucide-react';
+import { SimpleLocationPicker } from '@/components/ui/simple-location-picker';
+import { Store, Truck, MapPin, Building, CheckCircle, ArrowRight, ArrowLeft, Phone, Sparkles, Users, Mail, AlertCircle, Loader2 } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -32,6 +31,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [data, setData] = useState<OnboardingData>({
@@ -115,6 +115,8 @@ export default function OnboardingPage() {
   }, [router]);
 
   const handleNext = async () => {
+    setError(null); // Clear any previous errors
+    
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     } else {
@@ -124,12 +126,12 @@ export default function OnboardingPage() {
 
   const handleCompleteOnboarding = async () => {
     if (!user) {
-      console.error('No user logged in');
-      router.push('/signup');
+      setError('Authentication error. Please try signing in again.');
       return;
     }
 
     setIsSubmitting(true);
+    setError(null);
     
     try {
       if (data.isJoiningExisting && data.invitationId) {
@@ -138,6 +140,7 @@ export default function OnboardingPage() {
         await setDoc(userDocRef, {
           uid: user.uid,
           email: user.email,
+          displayName: user.displayName || user.email?.split('@')[0] || 'User',
           role: data.role,
           organizationName: data.organizationName,
           contactNumber: data.contactNumber,
@@ -151,46 +154,51 @@ export default function OnboardingPage() {
         }, { merge: true });
 
         // Mark invitation as accepted
-        const acceptResult = await acceptInvitation(data.invitationId, user.uid);
-        if (!acceptResult.success) {
-          console.error('Failed to accept invitation:', acceptResult.error);
+        try {
+          const acceptResult = await acceptInvitation(data.invitationId, user.uid);
+          if (!acceptResult.success) {
+            console.error('Failed to accept invitation:', acceptResult.error);
+            // Don't fail the whole process for this
+          }
+        } catch (inviteError) {
+          console.error('Error accepting invitation:', inviteError);
+          // Continue with onboarding even if invitation acceptance fails
         }
 
-        // Send notifications
+        // Send notifications (non-blocking)
         try {
-          // Get invitation details for notifications
           const invitationResult = await getInvitation(data.invitationId);
           if (invitationResult.success && invitationResult.invitation) {
             const invitation = invitationResult.invitation;
             
-            // Notify the inviter that their invitation was accepted
-            await notifyInvitationAccepted(
-              invitation.inviterUid,
-              user.displayName || user.email?.split('@')[0] || 'New Member',
-              user.email || '',
-              data.organizationName
-            );
-
-            // Notify all organization members about the new member
-            await notifyMemberJoined(
-              data.organizationName,
-              user.displayName || user.email?.split('@')[0] || 'New Member',
-              user.email || '',
-              user.uid
-            );
+            await Promise.all([
+              notifyInvitationAccepted(
+                invitation.inviterUid,
+                user.displayName || user.email?.split('@')[0] || 'New Member',
+                user.email || '',
+                data.organizationName
+              ),
+              notifyMemberJoined(
+                data.organizationName,
+                user.displayName || user.email?.split('@')[0] || 'New Member',
+                user.email || '',
+                user.uid
+              )
+            ]);
           }
-        } catch (error) {
-          console.error('Error sending notifications:', error);
+        } catch (notificationError) {
+          console.error('Error sending notifications:', notificationError);
           // Don't fail the onboarding process if notifications fail
         }
 
-        console.log('Invitation accepted and user joined organization');
+        console.log('Successfully joined organization');
       } else {
         // Create new organization
         const userDocRef = doc(db, 'users', user.uid);
         await setDoc(userDocRef, {
           uid: user.uid,
           email: user.email,
+          displayName: user.displayName || user.email?.split('@')[0] || 'User',
           role: data.role,
           organizationName: data.organizationName,
           contactNumber: data.contactNumber,
@@ -202,13 +210,15 @@ export default function OnboardingPage() {
           updatedAt: new Date().toISOString()
         }, { merge: true });
 
-        console.log('New organization created');
+        console.log('Successfully created new organization');
       }
       
+      // Success - redirect to modules
       router.push('/modules');
+      
     } catch (error) {
-      console.error('Error saving user data:', error);
-      router.push('/modules');
+      console.error('Error completing onboarding:', error);
+      setError(error instanceof Error ? error.message : 'Failed to complete onboarding. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -224,14 +234,16 @@ export default function OnboardingPage() {
   const canProceed = () => {
     if (data.isJoiningExisting) {
       // Only need contact number for invited users
-      return data.contactNumber.trim() !== '';
+      return data.contactNumber.trim() !== '' && data.contactNumber.length >= 10;
     } else {
       switch (currentStep) {
         case 1:
           return data.role !== null;
         case 2:
           return data.organizationName.trim() !== '' && 
+                 data.organizationName.length >= 2 &&
                  data.contactNumber.trim() !== '' && 
+                 data.contactNumber.length >= 10 &&
                  data.location.trim() !== '';
         default:
           return false;
@@ -239,28 +251,31 @@ export default function OnboardingPage() {
     }
   };
 
-  return (
-    <GoogleMapsWrapper apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''}>
-      {/* Debug info */}
-      {process.env.NODE_ENV === 'development' && !process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && (
-        <div className="fixed top-4 right-4 z-50 bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 p-2 rounded text-xs">
-          Google Maps API Key Missing
-        </div>
-      )}
+  const validateContactNumber = (number: string) => {
+    // Basic validation for phone numbers
+    const cleaned = number.replace(/\D/g, '');
+    return cleaned.length >= 9; // At least 9 digits
+  };
 
+  const validateOrganizationName = (name: string) => {
+    return name.trim().length >= 2 && name.trim().length <= 100;
+  };
+
+  return (
+    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900">
       {/* Loading state */}
       {loading && (
-        <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900 flex items-center justify-center">
+        <div className="min-h-screen w-full flex items-center justify-center">
           <div className="text-center">
-            <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-slate-400">Loading...</p>
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-400" />
+            <p className="text-slate-400">Setting up your workspace...</p>
           </div>
         </div>
       )}
 
       {/* Main onboarding flow */}
       {!loading && user && (
-        <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900 flex items-center justify-center p-6">
+        <div className="min-h-screen w-full flex items-center justify-center p-6">
           <div className="max-w-lg w-full">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -282,6 +297,21 @@ export default function OnboardingPage() {
                   />
                 </div>
               </div>
+
+              {/* Error Display */}
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center space-x-3"
+                >
+                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-red-300 text-sm font-medium">Error</p>
+                    <p className="text-red-400 text-xs">{error}</p>
+                  </div>
+                </motion.div>
+              )}
 
               {/* Onboarding Card */}
               <Card className="backdrop-blur-xl bg-slate-900/80 border border-slate-600/50 rounded-2xl p-8 shadow-[0_20px_48px_-12px_rgba(0,0,0,0.8)] relative overflow-hidden">
@@ -337,9 +367,16 @@ export default function OnboardingPage() {
                             value={data.contactNumber}
                             onChange={(e) => setData({ ...data, contactNumber: e.target.value })}
                             placeholder="e.g. +254 700 000 000"
-                            className="w-full p-4 text-sm rounded-xl bg-slate-800/20 border border-slate-600/40 hover:border-slate-500/60 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25 text-white placeholder-slate-500 transition-all duration-200"
+                            className={`w-full p-4 text-sm rounded-xl bg-slate-800/20 border transition-all duration-200 text-white placeholder-slate-500 ${
+                              data.contactNumber && !validateContactNumber(data.contactNumber)
+                                ? 'border-red-500/50 focus:border-red-500/70 focus:ring-1 focus:ring-red-500/25'
+                                : 'border-slate-600/40 hover:border-slate-500/60 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25'
+                            }`}
                             autoFocus
                           />
+                          {data.contactNumber && !validateContactNumber(data.contactNumber) && (
+                            <p className="text-red-400 text-xs mt-1">Please enter a valid phone number (at least 9 digits)</p>
+                          )}
                         </div>
                       </motion.div>
                     )}
@@ -442,9 +479,16 @@ export default function OnboardingPage() {
                               value={data.organizationName}
                               onChange={(e) => setData({ ...data, organizationName: e.target.value })}
                               placeholder={data.role === 'retailer' ? 'e.g. Mambo Retail Group' : 'e.g. Fresh Foods Distribution'}
-                              className="w-full p-4 text-sm rounded-xl bg-slate-800/20 border border-slate-600/40 hover:border-slate-500/60 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25 text-white placeholder-slate-500 transition-all duration-200"
+                              className={`w-full p-4 text-sm rounded-xl bg-slate-800/20 border transition-all duration-200 text-white placeholder-slate-500 ${
+                                data.organizationName && !validateOrganizationName(data.organizationName)
+                                  ? 'border-red-500/50 focus:border-red-500/70 focus:ring-1 focus:ring-red-500/25'
+                                  : 'border-slate-600/40 hover:border-slate-500/60 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25'
+                              }`}
                               autoFocus
                             />
+                            {data.organizationName && !validateOrganizationName(data.organizationName) && (
+                              <p className="text-red-400 text-xs mt-1">Organization name must be at least 2 characters long</p>
+                            )}
                           </div>
 
                           {/* Contact Number */}
@@ -472,7 +516,7 @@ export default function OnboardingPage() {
                               </div>
                               <label className="text-sm text-slate-300 font-medium">Organization Location</label>
                             </div>
-                            <LocationPickerWithMap
+                            <SimpleLocationPicker
                               value={data.location}
                               onLocationSelect={(location, coordinates) => 
                                 setData({ ...data, location, coordinates })
@@ -538,6 +582,6 @@ export default function OnboardingPage() {
           </div>
         </div>
       )}
-    </GoogleMapsWrapper>
+    </div>
   );
 }

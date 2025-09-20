@@ -14,8 +14,9 @@ import { onAuthStateChanged } from 'firebase/auth';
 export default function OnboardingCompletePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [userRole] = useState<'retailer' | 'distributor'>('retailer'); // This would come from state/props
-  const [businessName] = useState('Mambo Grocers'); // This would come from state/props
+  const [userRole, setUserRole] = useState<'retailer' | 'distributor'>('retailer');
+  const [businessName, setBusinessName] = useState('');
+  const [error, setError] = useState<string | null>(null);
   
   // Check if user has already completed onboarding
   useEffect(() => {
@@ -25,19 +26,32 @@ export default function OnboardingCompletePage() {
           const userDocRef = doc(db, 'users', user.uid);
           const userDoc = await getDoc(userDocRef);
           
-          if (userDoc.exists() && userDoc.data().onboardingCompleted) {
-            // User has already completed onboarding, redirect to modules
-            console.log('User has already completed onboarding, redirecting from complete to modules');
-            router.push('/modules');
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            if (userData.onboardingCompleted) {
+              // Get user data for display
+              setUserRole(userData.role || 'retailer');
+              setBusinessName(userData.organizationName || 'Your Business');
+              setLoading(false);
+            } else {
+              // User hasn't completed onboarding, redirect back to onboarding
+              console.log('User has not completed onboarding, redirecting to onboarding');
+              router.push('/onboarding');
+              return;
+            }
+          } else {
+            // No user document, redirect to onboarding
+            console.log('No user document found, redirecting to onboarding');
+            router.push('/onboarding');
             return;
           }
-          
-          setLoading(false);
         } catch (error) {
           console.error('Error checking onboarding status:', error);
+          setError('Failed to load user data. Please try again.');
           setLoading(false);
         }
       } else {
+        console.log('No user logged in, redirecting to signup');
         router.push('/signup');
       }
     });

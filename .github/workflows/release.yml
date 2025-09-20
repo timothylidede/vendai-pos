@@ -1,21 +1,39 @@
-name: Build and Release
+name: Build and Release VendAI POS
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
 
 permissions:
   contents: write
   packages: write
 
 jobs:
-  release:
+  build:
+    name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     
     strategy:
       matrix:
-        os: [windows-latest]
+        include:
+          - platform: Windows
+            os: windows-latest
+            build_script: "dist:win"
+            artifact_path: "dist/*.exe"
+            artifact_name: "VendAI-POS-Windows-Setup.exe"
+            
+          - platform: macOS
+            os: macos-latest
+            build_script: "dist:mac"
+            artifact_path: "dist/*.dmg"
+            artifact_name: "VendAI-POS-macOS.dmg"
         
     steps:
     - name: Check out Git repository
@@ -30,44 +48,117 @@ jobs:
     - name: Install dependencies
       run: npm install --legacy-peer-deps
 
-    - name: Build Windows Electron app
+    - name: Build Next.js app
+      run: npm run build
+
+    - name: Build Electron app for ${{ matrix.platform }}
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        NEXT_PUBLIC_FIREBASE_API_KEY: "dummy-key"
-        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "dummy-domain.firebaseapp.com"
-        NEXT_PUBLIC_FIREBASE_PROJECT_ID: "dummy-project"
-        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "dummy-project.appspot.com"
-        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "123456789"
-        NEXT_PUBLIC_FIREBASE_APP_ID: "1:123456789:web:dummy"
-      run: npm run dist:win
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY || 'dummy-key' }}
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'dummy-domain.firebaseapp.com' }}
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'dummy-project' }}
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'dummy-project.appspot.com' }}
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '123456789' }}
+        NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID || '1:123456789:web:dummy' }}
+        # Apple notarization (Mac only)
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        CSC_LINK: ${{ secrets.CSC_LINK }}
+        CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      run: npm run ${{ matrix.build_script }}
 
-    - name: Upload artifacts
+    - name: List built files (Debug)
+      run: |
+        echo "Contents of dist directory:"
+        ls -la dist/ || dir dist\
+        
+    - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.os }}-build
-        path: dist/
+        name: ${{ matrix.platform }}-build
+        path: ${{ matrix.artifact_path }}
+        retention-days: 5
 
-  create-release:
-    needs: release
+  release:
+    name: Create Release
+    needs: build
     runs-on: ubuntu-latest
     
     steps:
     - name: Check out Git repository
       uses: actions/checkout@v4
       
-    - name: Download all artifacts
+    - name: Download all build artifacts
       uses: actions/download-artifact@v4
-      
-    - name: Display structure
-      run: ls -la
-      
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
       with:
-        files: |
-          **/*.exe
+        path: artifacts/
+        
+    - name: Display artifacts structure (Debug)
+      run: |
+        echo "Downloaded artifacts:"
+        find artifacts/ -type f -name "*.exe" -o -name "*.dmg" || echo "No executables found"
+        ls -la artifacts/ || echo "No artifacts directory"
+        
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets/
+        
+        # Find and rename Windows executable
+        if find artifacts/ -name "*.exe" -type f | head -1 | read exe_file; then
+          echo "Found Windows exe: $exe_file"
+          cp "$exe_file" "release-assets/VendAI-POS-Windows-Setup.exe"
+        fi
+        
+        # Find and rename macOS DMG files
+        find artifacts/ -name "*.dmg" -type f | while read dmg_file; do
+          if [[ "$dmg_file" == *"x64"* ]]; then
+            echo "Found macOS Intel dmg: $dmg_file"
+            cp "$dmg_file" "release-assets/VendAI-POS-macOS-Intel.dmg"
+          elif [[ "$dmg_file" == *"arm64"* ]]; then
+            echo "Found macOS Apple Silicon dmg: $dmg_file"
+            cp "$dmg_file" "release-assets/VendAI-POS-macOS-AppleSilicon.dmg"
+          else
+            # Fallback for universal or unspecified
+            echo "Found macOS dmg: $dmg_file"
+            cp "$dmg_file" "release-assets/VendAI-POS-macOS.dmg"
+          fi
+        done
+        
+        echo "Release assets prepared:"
+        ls -la release-assets/
+        
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: release-assets/*
         generate_release_notes: true
         draft: false
         prerelease: false
+        name: "VendAI POS ${{ github.ref_name }}"
+        body: |
+          ## 🚀 VendAI POS ${{ github.ref_name }}
+          
+          ### Download Instructions:
+          
+          **Windows Users:**
+          - Download `VendAI-POS-Windows-Setup.exe`
+          - Run the installer and follow the setup wizard
+          - Windows may show a security warning - click "More info" → "Run anyway"
+          
+          **macOS Users:**
+          - **Intel Macs**: Download `VendAI-POS-macOS-Intel.dmg`
+          - **Apple Silicon Macs (M1/M2/M3)**: Download `VendAI-POS-macOS-AppleSilicon.dmg`
+          - If you're not sure which Mac you have, try the Apple Silicon version first
+          - Open the DMG file and drag VendAI POS to Applications folder
+          - You may need to allow the app in System Preferences → Security & Privacy
+          
+          ### What's New:
+          - Latest features and bug fixes
+          - Performance improvements
+          - Enhanced user interface
+          
+          ---
+          *Built automatically with GitHub Actions*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

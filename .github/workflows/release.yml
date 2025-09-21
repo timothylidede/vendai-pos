@@ -118,6 +118,15 @@ jobs:
           echo "Found Windows exe: $EXE_FILE"
           cp "$EXE_FILE" "release-assets/VendAI-POS-Windows-Setup.exe"
           echo "Successfully copied to release-assets/"
+
+          echo "Creating ZIP fallback and checksums..."
+          pushd release-assets > /dev/null
+          # Create a zip with just the installer inside (better compatibility with browsers/networks that block .exe)
+          zip -9 VendAI-POS-Windows-Setup.zip VendAI-POS-Windows-Setup.exe
+          # Generate SHA256 checksums for verification
+          sha256sum VendAI-POS-Windows-Setup.exe > VendAI-POS-Windows-Setup.exe.sha256 || shasum -a 256 VendAI-POS-Windows-Setup.exe > VendAI-POS-Windows-Setup.exe.sha256
+          sha256sum VendAI-POS-Windows-Setup.zip > VendAI-POS-Windows-Setup.zip.sha256 || shasum -a 256 VendAI-POS-Windows-Setup.zip > VendAI-POS-Windows-Setup.zip.sha256
+          popd > /dev/null
         else
           echo "ERROR: No .exe files found in artifacts"
           echo "Available files:"

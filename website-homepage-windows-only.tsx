@@ -34,6 +34,14 @@ export default function HomePage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+
+    // Provide a fallback hint after a short delay in case browser blocks .exe
+    setTimeout(() => {
+      // If user reports failure, suggest the /download page with ZIP fallback
+      // We can't detect browser download failure reliably, so we show a gentle hint instead
+      const hint = document.getElementById('download-fallback-hint');
+      if (hint) hint.classList.remove('hidden');
+    }, 2000);
   };
 
   return (
@@ -147,9 +155,12 @@ export default function HomePage() {
       
       {/* Note: Add a simple download status feedback */}
       {isWindows && (
-        <div className="fixed bottom-4 right-4 z-50">
-          <div className="bg-black/80 text-white px-3 py-2 rounded-lg text-sm opacity-0 hover:opacity-100 transition-opacity">
+        <div className="fixed bottom-4 right-4 z-50 space-y-2">
+          <div className="bg-black/80 text-white px-3 py-2 rounded-lg text-sm opacity-80">
             Windows detected - optimized download ready
+          </div>
+          <div id="download-fallback-hint" className="hidden bg-yellow-500/90 text-black px-3 py-2 rounded-lg text-sm">
+            Trouble downloading? Try the ZIP alternative on the <a href="/download" className="underline font-semibold">downloads page</a>.
           </div>
         </div>
       )}

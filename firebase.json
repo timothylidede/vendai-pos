@@ -4,5 +4,31 @@
     "location": "nam5",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "download-hosting",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "source": "**/*.exe",
+        "headers": [
+          { "key": "Content-Type", "value": "application/octet-stream" },
+          { "key": "Content-Disposition", "value": "attachment" },
+          { "key": "Cache-Control", "value": "public, max-age=3600" }
+        ]
+      },
+      {
+        "source": "**/*.zip",
+        "headers": [
+          { "key": "Content-Type", "value": "application/zip" },
+          { "key": "Content-Disposition", "value": "attachment" },
+          { "key": "Cache-Control", "value": "public, max-age=3600" }
+        ]
+      }
+    ]
   }
 }

@@ -1,14 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { SimpleLocationPicker } from '@/components/ui/simple-location-picker';
+// Removed SimpleLocationPicker in favor of full map picker
+// import { SimpleLocationPicker } from '@/components/ui/simple-location-picker';
+import { GoogleMapsWrapper } from '@/components/ui/google-maps-wrapper';
+import { LocationPickerWithMap } from '@/components/ui/location-picker-with-map';
 import { Store, Truck, MapPin, Building, CheckCircle, ArrowRight, ArrowLeft, Phone, Sparkles, Users, Mail, AlertCircle, Loader2 } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { getInvitation, acceptInvitation } from '@/lib/invitation-operations';
 import { notifyInvitationAccepted, notifyMemberJoined } from '@/lib/notification-operations';
@@ -32,7 +35,9 @@ export default function OnboardingPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentStep, setCurrentStep] = useState(1);
+  // Switch to 0-based step index for Typeform-style flow
+  const [currentStep, setCurrentStep] = useState(0);
+  const [direction, setDirection] = useState<1 | -1>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [data, setData] = useState<OnboardingData>({
     role: null,
@@ -46,19 +51,24 @@ export default function OnboardingPage() {
     inviterOrganization: ''
   });
 
-  const totalSteps = data.isJoiningExisting ? 1 : 2; // Fewer steps if joining existing organization
-  const progress = (currentStep / totalSteps) * 100;
+  // When joining existing org, show a single confirm/contact screen
+  const totalSteps = data.isJoiningExisting ? 1 : 4;
+  const progress = ((Math.min(currentStep, totalSteps - 1) + 1) / totalSteps) * 100;
+
+  // Slide variants for left-right animation
+  const slideVariants = {
+    enter: (dir: number) => ({ x: dir > 0 ? 60 : -60, opacity: 0 }),
+    center: { x: 0, opacity: 1 },
+    exit: (dir: number) => ({ x: dir > 0 ? -60 : 60, opacity: 0 })
+  } as const;
 
   // Listen for auth state changes and check invitation/onboarding status
   useEffect(() => {
     const checkInvitation = async () => {
-      // Check for invitation ID in URL params
       const urlParams = new URLSearchParams(window.location.search);
       const invitationId = urlParams.get('invite');
-      
       if (invitationId) {
         try {
-          // Use the invitation operations utility
           const result = await getInvitation(invitationId);
           if (result.success && result.invitation) {
             const invitation = result.invitation;
@@ -73,10 +83,9 @@ export default function OnboardingPage() {
               location: invitation.organizationLocation || '',
               coordinates: invitation.organizationCoordinates
             }));
-            setCurrentStep(1);
+            setCurrentStep(0);
           } else {
             console.error('Invalid invitation:', result.error);
-            // Invalid invitation, proceed with normal flow
             setData(prev => ({ ...prev, isJoiningExisting: false }));
           }
         } catch (error) {
@@ -90,15 +99,10 @@ export default function OnboardingPage() {
         try {
           const userDocRef = doc(db, 'users', user.uid);
           const userDoc = await getDoc(userDocRef);
-          
-          if (userDoc.exists() && userDoc.data().onboardingCompleted) {
-            // User has already completed onboarding, redirect to modules
-            console.log('User has already completed onboarding, redirecting from onboarding to modules');
+          if (userDoc.exists() && (userDoc.data() as any).onboardingCompleted) {
             router.push('/modules');
             return;
           }
-          
-          // Check for invitations after setting user
           await checkInvitation();
           setUser(user);
           setLoading(false);
@@ -115,12 +119,25 @@ export default function OnboardingPage() {
   }, [router]);
 
   const handleNext = async () => {
-    setError(null); // Clear any previous errors
-    
-    if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1);
+    setError(null);
+    if (data.isJoiningExisting) {
+      // Single screen for invited users
+      await handleCompleteOnboarding();
+      return;
+    }
+    if (currentStep < totalSteps - 1) {
+      setDirection(1);
+      setCurrentStep(s => s + 1);
     } else {
       await handleCompleteOnboarding();
+    }
+  };
+
+  const handleBack = () => {
+    if (data.isJoiningExisting) return; // no back for invited one-screen
+    if (currentStep > 0) {
+      setDirection(-1);
+      setCurrentStep(s => s - 1);
     }
   };
 
@@ -129,13 +146,10 @@ export default function OnboardingPage() {
       setError('Authentication error. Please try signing in again.');
       return;
     }
-
     setIsSubmitting(true);
     setError(null);
-    
     try {
       if (data.isJoiningExisting && data.invitationId) {
-        // Accept invitation and join existing organization
         const userDocRef = doc(db, 'users', user.uid);
         await setDoc(userDocRef, {
           uid: user.uid,
@@ -153,24 +167,19 @@ export default function OnboardingPage() {
           updatedAt: new Date().toISOString()
         }, { merge: true });
 
-        // Mark invitation as accepted
         try {
           const acceptResult = await acceptInvitation(data.invitationId, user.uid);
           if (!acceptResult.success) {
             console.error('Failed to accept invitation:', acceptResult.error);
-            // Don't fail the whole process for this
           }
         } catch (inviteError) {
           console.error('Error accepting invitation:', inviteError);
-          // Continue with onboarding even if invitation acceptance fails
         }
 
-        // Send notifications (non-blocking)
         try {
           const invitationResult = await getInvitation(data.invitationId);
           if (invitationResult.success && invitationResult.invitation) {
             const invitation = invitationResult.invitation;
-            
             await Promise.all([
               notifyInvitationAccepted(
                 invitation.inviterUid,
@@ -188,12 +197,8 @@ export default function OnboardingPage() {
           }
         } catch (notificationError) {
           console.error('Error sending notifications:', notificationError);
-          // Don't fail the onboarding process if notifications fail
         }
-
-        console.log('Successfully joined organization');
       } else {
-        // Create new organization
         const userDocRef = doc(db, 'users', user.uid);
         await setDoc(userDocRef, {
           uid: user.uid,
@@ -209,13 +214,8 @@ export default function OnboardingPage() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }, { merge: true });
-
-        console.log('Successfully created new organization');
       }
-      
-      // Success - redirect to modules
       router.push('/modules');
-      
     } catch (error) {
       console.error('Error completing onboarding:', error);
       setError(error instanceof Error ? error.message : 'Failed to complete onboarding. Please try again.');
@@ -224,42 +224,28 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
-    // Remove the ability to go back to home page - users must complete onboarding
-  };
+  const validateContactNumber = (number: string) => number.replace(/\D/g, '').length >= 9;
+  const validateOrganizationName = (name: string) => name.trim().length >= 2 && name.trim().length <= 100;
 
   const canProceed = () => {
     if (data.isJoiningExisting) {
-      // Only need contact number for invited users
-      return data.contactNumber.trim() !== '' && data.contactNumber.length >= 10;
-    } else {
-      switch (currentStep) {
-        case 1:
-          return data.role !== null;
-        case 2:
-          return data.organizationName.trim() !== '' && 
-                 data.organizationName.length >= 2 &&
-                 data.contactNumber.trim() !== '' && 
-                 data.contactNumber.length >= 10 &&
-                 data.location.trim() !== '';
-        default:
-          return false;
-      }
+      return data.contactNumber.trim() !== '' && validateContactNumber(data.contactNumber);
+    }
+    switch (currentStep) {
+      case 0:
+        return data.role !== null;
+      case 1:
+        return validateOrganizationName(data.organizationName);
+      case 2:
+        return data.contactNumber.trim() !== '' && validateContactNumber(data.contactNumber);
+      case 3:
+        return data.location.trim() !== '' && !!data.coordinates;
+      default:
+        return false;
     }
   };
 
-  const validateContactNumber = (number: string) => {
-    // Basic validation for phone numbers
-    const cleaned = number.replace(/\D/g, '');
-    return cleaned.length >= 9; // At least 9 digits
-  };
-
-  const validateOrganizationName = (name: string) => {
-    return name.trim().length >= 2 && name.trim().length <= 100;
-  };
+  const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900">
@@ -285,7 +271,7 @@ export default function OnboardingPage() {
               {/* Progress Bar */}
               <div className="mb-8">
                 <div className="flex justify-between text-xs text-slate-400 mb-2">
-                  <span>{data.isJoiningExisting ? 'Accepting Invitation' : `Step ${currentStep} of ${totalSteps}`}</span>
+                  <span>{data.isJoiningExisting ? 'Accepting Invitation' : `Step ${Math.min(currentStep, totalSteps - 1) + 1} of ${totalSteps}`}</span>
                   <span>{Math.round(progress)}% complete</span>
                 </div>
                 <div className="w-full bg-slate-800/40 rounded-full h-2">
@@ -318,14 +304,16 @@ export default function OnboardingPage() {
                 <div className="absolute inset-0 bg-gradient-to-br from-slate-700/10 via-transparent to-slate-800/20 pointer-events-none"></div>
               
                 <div className="relative z-10">
-                  <AnimatePresence mode="wait">
-                    {/* Invitation Acceptance Screen */}
+                  <AnimatePresence mode="wait" custom={direction}>
+                    {/* Invitation screen */}
                     {data.isJoiningExisting && (
                       <motion.div
-                        key="invitation-acceptance"
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
+                        key="invited"
+                        variants={slideVariants}
+                        custom={direction}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
                         transition={{ duration: 0.3 }}
                         className="space-y-6"
                       >
@@ -338,30 +326,13 @@ export default function OnboardingPage() {
                             {data.inviterName} has invited you to join {data.inviterOrganization}
                           </p>
                         </div>
-
                         <div className="bg-slate-800/30 rounded-xl p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <span className="text-sm text-slate-400">Organization</span>
-                            <span className="text-sm text-white font-medium">{data.inviterOrganization}</span>
-                          </div>
-                          <div className="flex items-center justify-between mb-3">
-                            <span className="text-sm text-slate-400">Role</span>
-                            <span className="text-sm text-white font-medium capitalize">{data.role}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-slate-400">Invited by</span>
-                            <span className="text-sm text-white font-medium">{data.inviterName}</span>
-                          </div>
+                          <div className="flex items-center justify-between mb-3"><span className="text-sm text-slate-400">Organization</span><span className="text-sm text-white font-medium">{data.inviterOrganization}</span></div>
+                          <div className="flex items-center justify-between mb-3"><span className="text-sm text-slate-400">Role</span><span className="text-sm text-white font-medium capitalize">{data.role}</span></div>
+                          <div className="flex items-center justify-between"><span className="text-sm text-slate-400">Invited by</span><span className="text-sm text-white font-medium">{data.inviterName}</span></div>
                         </div>
-
-                        {/* Contact Number for invited users */}
                         <div>
-                          <div className="flex items-center space-x-3 mb-3">
-                            <div className="w-8 h-8 rounded-lg bg-slate-700/30 flex items-center justify-center">
-                              <Phone className="w-4 h-4 text-slate-400" />
-                            </div>
-                            <label className="text-sm text-slate-300 font-medium">Your Contact Number</label>
-                          </div>
+                          <div className="flex items-center space-x-3 mb-3"><div className="w-8 h-8 rounded-lg bg-slate-700/30 flex items-center justify-center"><Phone className="w-4 h-4 text-slate-400" /></div><label className="text-sm text-slate-300 font-medium">Your Contact Number</label></div>
                           <input
                             type="tel"
                             value={data.contactNumber}
@@ -372,7 +343,6 @@ export default function OnboardingPage() {
                                 ? 'border-red-500/50 focus:border-red-500/70 focus:ring-1 focus:ring-red-500/25'
                                 : 'border-slate-600/40 hover:border-slate-500/60 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25'
                             }`}
-                            autoFocus
                           />
                           {data.contactNumber && !validateContactNumber(data.contactNumber) && (
                             <p className="text-red-400 text-xs mt-1">Please enter a valid phone number (at least 9 digits)</p>
@@ -381,13 +351,15 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 1: Role Selection (only for new organizations) */}
-                    {!data.isJoiningExisting && currentStep === 1 && (
+                    {/* Step 0: Role */}
+                    {!data.isJoiningExisting && currentStep === 0 && (
                       <motion.div
-                        key="role-selection"
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
+                        key="role"
+                        variants={slideVariants}
+                        custom={direction}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
                         transition={{ duration: 0.3 }}
                         className="space-y-6"
                       >
@@ -395,7 +367,6 @@ export default function OnboardingPage() {
                           <h2 className="text-xl font-semibold text-white mb-2">What type of organization are you creating?</h2>
                           <p className="text-slate-400 text-sm">This helps us customize your experience</p>
                         </div>
-
                         <div className="space-y-4">
                           <button
                             onClick={() => setData({ ...data, role: 'retailer' })}
@@ -420,7 +391,6 @@ export default function OnboardingPage() {
                               )}
                             </div>
                           </button>
-
                           <button
                             onClick={() => setData({ ...data, role: 'distributor' })}
                             className={`w-full p-4 rounded-xl border transition-all duration-200 text-left ${
@@ -448,82 +418,97 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 2: Organization Details & Location (only for new organizations) */}
-                    {!data.isJoiningExisting && currentStep === 2 && (
+                    {/* Step 1: Organization Name */}
+                    {!data.isJoiningExisting && currentStep === 1 && (
                       <motion.div
-                        key="organization-details"
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -20 }}
+                        key="org-name"
+                        variants={slideVariants}
+                        custom={direction}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
                         transition={{ duration: 0.3 }}
                         className="space-y-6"
                       >
                         <div className="text-center">
-                          <h2 className="text-xl font-semibold text-white mb-2">Tell us about your organization</h2>
-                          <p className="text-slate-400 text-sm">
-                            {data.role === 'retailer' ? 'Your retail organization details' : 'Your distribution organization details'}
-                          </p>
+                          <h2 className="text-xl font-semibold text-white mb-2">What’s your organization name?</h2>
+                          <p className="text-slate-400 text-sm">We’ll show this in your workspace</p>
                         </div>
+                        <div>
+                          <div className="flex items-center space-x-3 mb-3"><div className="w-8 h-8 rounded-lg bg-slate-700/30 flex items-center justify-center"><Building className="w-4 h-4 text-slate-400" /></div><label className="text-sm text-slate-300 font-medium">Organization Name</label></div>
+                          <input
+                            type="text"
+                            value={data.organizationName}
+                            onChange={(e) => setData({ ...data, organizationName: e.target.value })}
+                            placeholder={data.role === 'retailer' ? 'e.g. Mambo Retail Group' : 'e.g. Fresh Foods Distribution'}
+                            className={`w-full p-4 text-sm rounded-xl bg-slate-800/20 border transition-all duration-200 text-white placeholder-slate-500 ${
+                              data.organizationName && !validateOrganizationName(data.organizationName)
+                                ? 'border-red-500/50 focus:border-red-500/70 focus:ring-1 focus:ring-red-500/25'
+                                : 'border-slate-600/40 hover:border-slate-500/60 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25'
+                            }`}
+                            autoFocus
+                          />
+                          {data.organizationName && !validateOrganizationName(data.organizationName) && (
+                            <p className="text-red-400 text-xs mt-1">Organization name must be at least 2 characters long</p>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
 
-                        <div className="space-y-6">
-                          {/* Organization Name */}
-                          <div>
-                            <div className="flex items-center space-x-3 mb-3">
-                              <div className="w-8 h-8 rounded-lg bg-slate-700/30 flex items-center justify-center">
-                                <Building className="w-4 h-4 text-slate-400" />
-                              </div>
-                              <label className="text-sm text-slate-300 font-medium">Organization Name</label>
-                            </div>
-                            <input
-                              type="text"
-                              value={data.organizationName}
-                              onChange={(e) => setData({ ...data, organizationName: e.target.value })}
-                              placeholder={data.role === 'retailer' ? 'e.g. Mambo Retail Group' : 'e.g. Fresh Foods Distribution'}
-                              className={`w-full p-4 text-sm rounded-xl bg-slate-800/20 border transition-all duration-200 text-white placeholder-slate-500 ${
-                                data.organizationName && !validateOrganizationName(data.organizationName)
-                                  ? 'border-red-500/50 focus:border-red-500/70 focus:ring-1 focus:ring-red-500/25'
-                                  : 'border-slate-600/40 hover:border-slate-500/60 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25'
-                              }`}
-                              autoFocus
-                            />
-                            {data.organizationName && !validateOrganizationName(data.organizationName) && (
-                              <p className="text-red-400 text-xs mt-1">Organization name must be at least 2 characters long</p>
-                            )}
-                          </div>
+                    {/* Step 2: Contact Number */}
+                    {!data.isJoiningExisting && currentStep === 2 && (
+                      <motion.div
+                        key="contact"
+                        variants={slideVariants}
+                        custom={direction}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3 }}
+                        className="space-y-6"
+                      >
+                        <div className="text-center">
+                          <h2 className="text-xl font-semibold text-white mb-2">What’s your contact number?</h2>
+                          <p className="text-slate-400 text-sm">We may use this for account verification</p>
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-3 mb-3"><div className="w-8 h-8 rounded-lg bg-slate-700/30 flex items-center justify-center"><Phone className="w-4 h-4 text-slate-400" /></div><label className="text-sm text-slate-300 font-medium">Contact Number</label></div>
+                          <input
+                            type="tel"
+                            value={data.contactNumber}
+                            onChange={(e) => setData({ ...data, contactNumber: e.target.value })}
+                            placeholder="e.g. +254 700 000 000"
+                            className="w-full p-4 text-sm rounded-xl bg-slate-800/20 border border-slate-600/40 hover:border-slate-500/60 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25 text-white placeholder-slate-500 transition-all duration-200"
+                          />
+                        </div>
+                      </motion.div>
+                    )}
 
-                          {/* Contact Number */}
-                          <div>
-                            <div className="flex items-center space-x-3 mb-3">
-                              <div className="w-8 h-8 rounded-lg bg-slate-700/30 flex items-center justify-center">
-                                <Phone className="w-4 h-4 text-slate-400" />
-                              </div>
-                              <label className="text-sm text-slate-300 font-medium">Contact Number</label>
-                            </div>
-                            <input
-                              type="tel"
-                              value={data.contactNumber}
-                              onChange={(e) => setData({ ...data, contactNumber: e.target.value })}
-                              placeholder="e.g. +254 700 000 000"
-                              className="w-full p-4 text-sm rounded-xl bg-slate-800/20 border border-slate-600/40 hover:border-slate-500/60 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25 text-white placeholder-slate-500 transition-all duration-200"
-                            />
-                          </div>
-
-                          {/* Location */}
-                          <div>
-                            <div className="flex items-center space-x-3 mb-3">
-                              <div className="w-8 h-8 rounded-lg bg-slate-700/30 flex items-center justify-center">
-                                <MapPin className="w-4 h-4 text-slate-400" />
-                              </div>
-                              <label className="text-sm text-slate-300 font-medium">Organization Location</label>
-                            </div>
-                            <SimpleLocationPicker
+                    {/* Step 3: Location with Map */}
+                    {!data.isJoiningExisting && currentStep === 3 && (
+                      <motion.div
+                        key="location"
+                        variants={slideVariants}
+                        custom={direction}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3 }}
+                        className="space-y-6"
+                      >
+                        <div className="text-center">
+                          <h2 className="text-xl font-semibold text-white mb-2">Where is your business located?</h2>
+                          <p className="text-slate-400 text-sm">Search or pick on the map</p>
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-3 mb-3"><div className="w-8 h-8 rounded-lg bg-slate-700/30 flex items-center justify-center"><MapPin className="w-4 h-4 text-slate-400" /></div><label className="text-sm text-slate-300 font-medium">Organization Location</label></div>
+                          <GoogleMapsWrapper apiKey={mapsApiKey}>
+                            <LocationPickerWithMap
                               value={data.location}
-                              onLocationSelect={(location, coordinates) => 
-                                setData({ ...data, location, coordinates })
-                              }
-                              placeholder={data.role === 'retailer' ? 'Search for your main location...' : 'Search for your distribution center...'}
+                              onLocationSelect={(location: string, coordinates?: { lat: number; lng: number }) => setData({ ...data, location, coordinates })}
+                              placeholder={data.role === 'retailer' ? 'Search your main location…' : 'Search your distribution center…'}
                             />
-                          </div>
+                          </GoogleMapsWrapper>
                         </div>
                       </motion.div>
                     )}
@@ -531,7 +516,7 @@ export default function OnboardingPage() {
 
                   {/* Navigation Buttons */}
                   <div className="flex justify-between mt-8">
-                    {(!data.isJoiningExisting && currentStep > 1) ? (
+                    {!data.isJoiningExisting && currentStep > 0 ? (
                       <Button
                         onClick={handleBack}
                         variant="outline"
@@ -542,7 +527,7 @@ export default function OnboardingPage() {
                         Back
                       </Button>
                     ) : (
-                      <div></div> 
+                      <div></div>
                     )}
 
                     <Button
@@ -561,14 +546,14 @@ export default function OnboardingPage() {
                         </>
                       ) : (
                         <>
-                          {(data.isJoiningExisting || currentStep === totalSteps) ? (
+                          {data.isJoiningExisting || currentStep === totalSteps - 1 ? (
                             <>
                               <Sparkles className="w-4 h-4 mr-2" />
                               {data.isJoiningExisting ? 'Join Organization' : 'Create Organization'}
                             </>
                           ) : (
                             <>
-                              Next Step
+                              Next
                               <ArrowRight className="w-4 h-4 ml-2" />
                             </>
                           )}

@@ -305,3 +305,28 @@ export const deleteInvitation = async (
     return { success: false, error: 'Failed to delete invitation' };
   }
 };
+
+/**
+ * Get invitations received by a user (by email)
+ */
+export const getInvitationsForEmail = async (
+  email: string
+): Promise<{ success: boolean; invitations?: (InvitationData & { id: string })[]; error?: string }> => {
+  try {
+    const invitationsQuery = query(
+      collection(db, 'invitations'),
+      where('inviteeEmail', '==', email),
+      where('accepted', '==', false),
+      where('cancelled', '==', false)
+    );
+    const snapshot = await getDocs(invitationsQuery);
+    const now = Date.now();
+    const invitations = snapshot.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter((inv: any) => !inv.expiresAt || new Date(inv.expiresAt).getTime() > now) as (InvitationData & { id: string })[];
+    return { success: true, invitations };
+  } catch (error) {
+    console.error('Error fetching received invitations:', error);
+    return { success: false, error: 'Failed to fetch invitations' };
+  }
+};

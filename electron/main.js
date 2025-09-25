@@ -81,28 +81,29 @@ function startNextServer() {
       return;
     }
 
-    nextServer = spawn('npm', ['start'], {
-      cwd: path.join(__dirname, '..'),
-      shell: true,
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
+    // In production, start Next.js programmatically (no npm/cmd.exe)
+    try {
+      const next = require('next');
+      const app = next({ dev: false, dir: path.join(__dirname, '..') });
+      const handle = app.getRequestHandler();
 
-    let output = '';
-    nextServer.stdout.on('data', (data) => {
-      output += data.toString();
-      if (output.includes('Ready') || output.includes('started server')) {
-        resolve('http://localhost:3000');
-      }
-    });
-
-    nextServer.stderr.on('data', (data) => {
-      console.error('Next.js error:', data.toString());
-    });
-
-    // Fallback timeout
-    setTimeout(() => {
-      resolve('http://localhost:3000');
-    }, 10000);
+      app.prepare().then(() => {
+        const server = express();
+        server.all('*', (req, res) => handle(req, res));
+        const port = process.env.PORT ? Number(process.env.PORT) : 3000;
+        nextServer = server;
+        server.listen(port, () => {
+          console.log(`Next.js server started on http://localhost:${port}`);
+          resolve(`http://localhost:${port}`);
+        });
+      }).catch((err) => {
+        console.error('Failed to prepare Next app:', err);
+        reject(err);
+      });
+    } catch (err) {
+      console.error('Unable to require Next. Is it installed?', err);
+      reject(err);
+    }
   });
 }
 
@@ -159,9 +160,9 @@ async function createWindow() {
   // Handle window closed
   mainWindow.on('closed', () => {
     mainWindow = null;
-    // Kill Next.js server when window closes
-    if (nextServer) {
-      nextServer.kill('SIGTERM');
+    // Stop Next.js server when window closes
+    if (nextServer && typeof nextServer.close === 'function') {
+      try { nextServer.close(); } catch (e) { /* ignore */ }
     }
   });
 

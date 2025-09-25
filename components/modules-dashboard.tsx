@@ -111,27 +111,18 @@ export function ModulesDashboard() {
   useEffect(() => {
     if (!loading) {
       if (!user) {
-        // No user - redirect to welcome
         router.push('/');
       } else if (!userData) {
-        // User exists but no user data - redirect to onboarding
-        router.push('/onboarding');
+        router.push('/onboarding/choose');
       } else if (!userData.onboardingCompleted) {
-        // User data exists but onboarding not completed
-        router.push('/onboarding');
+        router.push('/onboarding/choose');
       } else {
-        // User is properly set up - show dashboard
-        // Check if first time user
         const isNewUser = localStorage.getItem('vendai-first-login') !== 'false';
         setIsFirstTime(isNewUser);
-        
         if (isNewUser) {
-          // Show welcome tooltip
           setTimeout(() => {
             setShowTooltip(userData.role === 'retailer' ? 'Point of Sale' : 'Logistics');
           }, 2000);
-          
-          // Mark as not first time anymore after showing experience
           setTimeout(() => {
             localStorage.setItem('vendai-first-login', 'false');
           }, 5000);
@@ -198,13 +189,10 @@ export function ModulesDashboard() {
 
   const handleModuleClick = useCallback((moduleTitle: string) => {
     if (isExiting) return; // Prevent multiple clicks during animation
-    // Only gate POS and Suppliers when inventory is missing
-    if (needsInventory && (moduleTitle === 'Point of Sale' || moduleTitle === 'Suppliers')) return;
-    
+    // Gate all modules except Inventory until inventory exists
+    if (needsInventory && moduleTitle !== 'Inventory') return;
     setClickedModule(moduleTitle);
     setIsExiting(true);
-    
-    // Navigate after animation completes
     setTimeout(() => {
       if (moduleTitle === 'Point of Sale') {
         router.push('/modules/pos');
@@ -218,7 +206,7 @@ export function ModulesDashboard() {
         router.push('/modules/retailers');
       }
     }, 200); // Wait for exit animation to complete
-  }, [isExiting, router]);
+  }, [isExiting, router, needsInventory]);
 
   // Get modules based on user role
   const getCurrentModules = () => {
@@ -338,8 +326,8 @@ export function ModulesDashboard() {
                     {/* Profile Header */}
                     <div className="flex items-center space-x-4 mb-6">
                       <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-400/30 flex items-center justify-center overflow-hidden">
-                        {user?.photoURL ? (
-                          <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                        {(user?.photoURL || userData?.photoURL) ? (
+                          <img src={(user?.photoURL || userData?.photoURL) as string} alt="Profile" className="w-full h-full object-cover" />
                         ) : (
                           <User className="w-7 h-7 text-purple-300" />
                         )}
@@ -479,7 +467,7 @@ export function ModulesDashboard() {
             const Icon = module.icon
             const isClicked = clickedModule === module.title;
             const hasTooltip = showTooltip === module.title || (needsInventory && module.title === 'Inventory');
-            const gated = needsInventory && (module.title === 'Point of Sale' || module.title === 'Suppliers');
+            const gated = needsInventory && module.title !== 'Inventory';
             
             return (
               <motion.div
@@ -506,7 +494,7 @@ export function ModulesDashboard() {
                     <div className="relative bg-gradient-to-r from-blue-600 to-green-600 text-white px-4 py-2 rounded-xl shadow-lg text-sm font-medium whitespace-nowrap">
                       {needsInventory 
                         ? (userData?.role === 'retailer' 
-                            ? 'Add inventory first to unlock POS and Suppliers' 
+                            ? 'Add inventory first to unlock all modules' 
                             : 'Add inventory first to continue') 
                         : (userData?.role === 'retailer' 
                             ? '👆 Start here! Process your first sale' 

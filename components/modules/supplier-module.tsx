@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { DollarSign, FileText, Package, Wallet, AlertCircle, Plus, Search, Filter, ChevronDown, Clock, MoreVertical, ArrowLeft, X } from "lucide-react"
 import { motion } from "framer-motion"
 import { Card } from "../ui/card"
+import { LazyImage } from "@/lib/performance-utils"
 import { Button } from "../ui/button"
 import { Input } from "../ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog"
@@ -1087,6 +1088,25 @@ export function SupplierModule() {
                           {/* Background orb */}
                           <div className="absolute -top-8 -right-8 w-20 h-20 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-400/15 transition-colors duration-500"></div>
                           
+                          {/* Product Image (if available) */}
+                          <div className="relative z-10">
+                            { (product as any).imageUrl ? (
+                              <div className="w-full h-24 mb-3 rounded-xl overflow-hidden border border-white/10 bg-black/20">
+                                {/* Using a simple img for external URLs to avoid Next/Image domain config */}
+                                <img
+                                  src={(product as any).imageUrl}
+                                  alt={product.name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="w-full h-24 mb-3 rounded-xl border border-dashed border-white/10 flex items-center justify-center text-[10px] text-slate-400">
+                                No image yet
+                              </div>
+                            )}
+                          </div>
+
                           {/* Product Info */}
                           <div className="relative z-10 h-full flex flex-col">
                             {/* Header */}

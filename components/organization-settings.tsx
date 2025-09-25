@@ -399,7 +399,16 @@ export const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({ isOp
                   <div className="space-y-6">
                     {/* Send New Invitation */}
                     <div className="bg-slate-800/20 rounded-xl p-4">
-                      <h3 className="text-lg font-medium text-white mb-4">Send New Invitation</h3>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-medium text-white">Send New Invitation</h3>
+                        <Button
+                          onClick={() => { window.location.href = '/onboarding/choose'; }}
+                          variant="outline"
+                          className="border-slate-600 text-slate-300 hover:text-white"
+                        >
+                          View Invites Page
+                        </Button>
+                      </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm text-slate-400 mb-2">Email Address</label>

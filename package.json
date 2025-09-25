@@ -32,7 +32,8 @@
     "release:win": "npm run build && electron-builder --win --x64 --publish=always",
     "release:mac": "npm run build && electron-builder --mac --x64 --arm64 --publish=always",
     "release:info": "node scripts/create-release.js info",
-    "release:help": "node scripts/create-release.js help"
+    "release:help": "node scripts/create-release.js help",
+    "images:generate": "node scripts/generate-product-images.cjs"
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^1.16.10",

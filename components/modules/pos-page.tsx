@@ -12,6 +12,25 @@ import { useToast } from '@/hooks/use-toast'
 import { useGlassmorphicToast } from '../ui/glassmorphic-toast'
 import { LoadingSpinner } from '../loading-spinner'
 
+type LegacyImageField = 'imageUrl' | 'image_url' | 'imageURL'
+
+const legacyImageFields: LegacyImageField[] = ['imageUrl', 'image_url', 'imageURL']
+
+const resolveProductImage = (product: POSProduct): string | undefined => {
+  if (typeof product.image === 'string' && product.image.trim().length > 0) {
+    return product.image
+  }
+
+  const legacyProduct = product as POSProduct & Partial<Record<LegacyImageField, unknown>>
+  for (const field of legacyImageFields) {
+    const raw = legacyProduct[field]
+    if (typeof raw === 'string' && raw.trim().length > 0) {
+      return raw
+    }
+  }
+  return undefined
+}
+
 interface CartLine {
   productId: string
   name: string
@@ -710,7 +729,7 @@ export function POSPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
                   {/* Real Products */}
                   {filteredProducts.map((p) => {
-                    const productImage = p.image || (p as any)?.imageUrl || (p as any)?.image_url || (p as any)?.imageURL
+                    const productImage = resolveProductImage(p)
 
                     return (
                       <motion.div

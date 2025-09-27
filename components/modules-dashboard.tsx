@@ -19,6 +19,7 @@ import { ProfileManagement } from '@/components/profile-management'
 import { hasInventory } from '@/lib/pos-operations'
 import { getOrgSettings } from '@/lib/org-operations'
 import { LoadingSpinner } from './loading-spinner'
+import { UniversalLoading } from './universal-loading'
 
 const retailerModules = [
   {
@@ -163,6 +164,7 @@ export function ModulesDashboard() {
   const [showTooltip, setShowTooltip] = useState<string | null>(null);
   const [showOrgSettings, setShowOrgSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const router = useRouter();
   const [needsInventory, setNeedsInventory] = useState(false)
   const orgId = useMemo(() => userData?.organizationName || 'default', [userData?.organizationName])
@@ -254,6 +256,7 @@ export function ModulesDashboard() {
   const handleLogout = useCallback(async () => {
     setShowLogoutModal(false);
     setShowProfileDropdown(false);
+    setIsSigningOut(true);
     try {
   await signOut(auth);
   localStorage.removeItem('vendai-user-role');
@@ -261,6 +264,7 @@ export function ModulesDashboard() {
   router.push('/login');
     } catch (error) {
       console.error('Error signing out:', error);
+      setIsSigningOut(false);
     }
   }, [router]);
 
@@ -734,6 +738,12 @@ export function ModulesDashboard() {
         isOpen={showProfile}
         onClose={() => setShowProfile(false)}
       />
+
+      {isSigningOut && (
+        <div className="fixed inset-0 z-[200]">
+          <UniversalLoading message="Signing you out..." type="auth" />
+        </div>
+      )}
     </motion.div>
   )
 }

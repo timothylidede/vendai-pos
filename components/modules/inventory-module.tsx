@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation"
 import { Package, AlertTriangle, TrendingUp, Upload, FileText, PlusCircle, Download, Check, ArrowLeft, Wand2 } from "lucide-react"
 import { motion } from "framer-motion"
 import { AIProcessingModal } from "../ai-processing-modal"
+import { LoadingSpinner } from "../loading-spinner"
 import { db } from "@/lib/firebase"
-import { collection, getDocs, query, where, limit, orderBy, doc, setDoc, addDoc, deleteDoc, getDoc } from "firebase/firestore"
+import { collection, getDocs, query, where, limit, doc, setDoc, addDoc, deleteDoc, getDoc } from "firebase/firestore"
 import { POS_PRODUCTS_COL, INVENTORY_COL } from "@/lib/pos-operations"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -50,6 +51,8 @@ const INVENTORY_CACHE_TTL_MS = 60_000
 
 const getCacheKey = (orgId: string) => `${INVENTORY_CACHE_PREFIX}:${orgId}`
 
+const DEFAULT_IMAGE_PROMPT = `Photorealistic product photo; single centered product on a floating glass shelf; uniform slate background (#1f2937) matching the Vendai dashboard; cool teal-accent studio lighting; high detail; no text, props, hands, or accessories; background color must remain constant.`
+
 export function InventoryModule() {
   const [activeTab, setActiveTab] = useState<'products' | 'new'>('products')
   const [orgId, setOrgId] = useState<string>('')
@@ -65,7 +68,6 @@ export function InventoryModule() {
   const [isEntering, setIsEntering] = useState(true)
   const [isExiting, setIsExiting] = useState(false)
   const [invMap, setInvMap] = useState<Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }>>({})
-  const [generatingId, setGeneratingId] = useState<string | null>(null)
   const [bulkGenerating, setBulkGenerating] = useState<boolean>(false)
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 })
   const [hasPricelist, setHasPricelist] = useState<boolean>(false)
@@ -169,8 +171,12 @@ export function InventoryModule() {
         const status = inv
           ? (stockPieces === 0 ? 'out' : (stockPieces < (p.minStock || unitsPerBase) ? 'low' : 'good'))
           : 'unknown'
+        const normalizedImage = p.image_url ?? p.imageUrl ?? p.image
+        const productData = normalizedImage
+          ? { ...p, image: normalizedImage, image_url: normalizedImage, imageUrl: normalizedImage }
+          : p
         return {
-          ...p,
+          ...productData,
           stock: stockPieces,
           status,
           unitsPerBase
@@ -220,35 +226,12 @@ export function InventoryModule() {
     loadOrgProducts(orgId)
   }, [orgId, hydrateFromCache])
 
-  const handleGenerateImage = async (productId: string) => {
-    if (!orgId || generatingId) return
-    try {
-      setGeneratingId(productId)
-      const res = await fetch('/api/image/openai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          orgId, 
-          productId, 
-          useGoogleRefs: true,
-          promptStyle: `Photorealistic product photo; single centered product on a brown mahogany wooden shelf (visible grain); matte slate background (#2b2f33); warm studio lighting from top-left; 50mm lens slight 10° angle; high detail; natural highlights; no extra props`
-        })
-      })
-      // ignore body; quick refresh regardless of success
-      await loadOrgProducts(orgId)
-    } catch {
-      // noop
-    } finally {
-      setGeneratingId(null)
-    }
-  }
-
   const handleBulkGenerate = async () => {
     if (!orgId || bulkGenerating) return
     const idsMissing = products.filter(p => !p.image).map(p => p.id)
     if (idsMissing.length === 0) return
-    const BULK_LIMIT = 30
-    const CONCURRENCY = 3
+  const BULK_LIMIT = 5
+  const CONCURRENCY = 1
     const target = idsMissing.slice(0, BULK_LIMIT)
     setBulkGenerating(true)
     setBulkProgress({ done: 0, total: target.length })
@@ -264,13 +247,13 @@ export function InventoryModule() {
                 orgId, 
                 productId, 
                 useGoogleRefs: true,
-                promptStyle: `Photorealistic product photo; single centered product on a brown mahogany wooden shelf (visible grain); matte slate background (#2b2f33); warm studio lighting from top-left; 50mm lens slight 10° angle; high detail; natural highlights; no extra props`
+                promptStyle: DEFAULT_IMAGE_PROMPT
               })
             })
             const json = await res.json().catch(() => ({} as any))
             const url = (json as any)?.url as string | undefined
             if (url) {
-              setProducts(prev => prev.map(p => p.id === productId ? { ...p, image: url } : p))
+              setProducts(prev => prev.map(p => p.id === productId ? { ...p, image: url, image_url: url, imageUrl: url } : p))
             }
           } catch {
             // ignore
@@ -537,95 +520,83 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
       <div className="flex-1 overflow-auto">
         {activeTab === 'products' && (
           <div className="p-4">
-            {/* Products toolbar */}
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur">
-              <div className="flex items-center gap-4 text-sm">
-                <span className="text-slate-300">Products: <span className="text-white font-semibold">{products.length}</span></span>
-                <span className="text-slate-300">Missing images: <span className="text-white font-semibold">{products.filter(p => !p.image).length}</span></span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleBulkGenerate}
-                  disabled={bulkGenerating || products.filter(p => !p.image).length === 0}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/15 bg-slate-900/60 text-slate-200 hover:bg-slate-800/70 disabled:opacity-50"
-                >
-                  <Wand2 className="w-4 h-4" />
-                  {bulkGenerating
-                    ? `Generating ${bulkProgress.done}/${bulkProgress.total}`
-                    : `Generate images (${products.filter(p => !p.image).length})`}
-                </button>
-              </div>
-            </div>
             {showMissingStockAlert && (
               <div className="mb-4 rounded-xl border border-yellow-400/30 bg-yellow-500/10 text-yellow-200 px-4 py-3 backdrop-blur-md">
                 Stock counts aren't set for this org yet. Not mandatory, but add them for accurate POS and alerts.
               </div>
             )}
-            {!loadingProducts && products.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-16 text-center rounded-2xl border border-white/10 bg-white/5 backdrop-blur">
-                <Package className="w-12 h-12 text-slate-400 mb-3" />
-                <h4 className="text-white font-semibold">No products yet</h4>
-                <p className="text-slate-400 text-sm mt-1">Add products from the New tab to get started.</p>
-                <button onClick={() => setActiveTab('new')} className="mt-4 px-4 py-2 rounded-lg bg-blue-500/20 text-blue-200 border border-blue-500/30 hover:bg-blue-500/30">Go to New</button>
+            {loadingProducts ? (
+              <div className="min-h-[55vh] flex items-center justify-center">
+                <LoadingSpinner size="md" />
               </div>
-            )}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-              {loadingProducts && (
-                <div className="col-span-full text-slate-400">Loading products…</div>
-              )}
-              {products.map(item => (
+            ) : products.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 px-6 text-center rounded-3xl border border-white/5 bg-gradient-to-br from-slate-900/60 via-slate-900/35 to-indigo-900/30 backdrop-blur-xl shadow-[0_12px_40px_-18px_rgba(37,99,235,0.45)] space-y-4">
+                <div className="relative flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-slate-800/70 via-slate-900/40 to-blue-900/30 border border-white/5 shadow-[0_10px_30px_-15px_rgba(59,130,246,0.35)]">
+                  <Package className="relative z-10 w-10 h-10 text-slate-400/80" />
+                  <div className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-br from-blue-500/15 via-transparent to-transparent" />
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-slate-200 text-lg font-semibold tracking-wide">No products yet</h4>
+                  <p className="text-slate-400/90 text-sm max-w-sm mx-auto">
+                    Add your first items from the New tab to see your catalog come to life.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setActiveTab('new')}
+                  className="mt-2 px-5 py-2.5 rounded-xl border border-blue-500/20 bg-gradient-to-r from-blue-500/25 via-blue-500/20 to-indigo-500/25 text-blue-100 text-sm font-medium tracking-wide shadow-[0_6px_24px_-14px_rgba(59,130,246,0.6)] hover:border-blue-400/40 hover:from-blue-500/30 hover:via-blue-500/20 hover:to-indigo-500/30 transition-all"
+                >
+                  Add your first product
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                {products.map(item => (
                 <div
                   key={item.id}
-                  className="group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] hover:border-white/[0.15] transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_48px_-12px_rgba(59,130,246,0.15)] cursor-pointer hover:scale-105 hover:-translate-y-2"
+                  className="group relative transform-gpu overflow-hidden rounded-3xl border border-slate-400/15 bg-gradient-to-br from-slate-900/55 via-slate-900/30 to-sky-950/35 backdrop-blur-2xl transition-all duration-500 shadow-[0_12px_40px_-22px_rgba(56,189,248,0.45)] hover:shadow-[0_28px_70px_-32px_rgba(59,130,246,0.55)] hover:-translate-y-2 hover:scale-[1.02] hover:rotate-[0.35deg] cursor-pointer"
                   onClick={() => { setEditingProduct(item); setIsModalOpen(true) }}
                 >
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.03] via-transparent to-purple-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                  <div className="aspect-square w-full bg-gradient-to-br from-slate-800/60 to-slate-700/40 flex items-center justify-center relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.02] via-transparent to-blue-600/[0.03] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                    <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/12 via-transparent to-indigo-600/18" />
+                    <div className="absolute inset-0 blur-2xl bg-cyan-500/10" />
+                  </div>
+                  <div className="aspect-square w-full bg-gradient-to-br from-slate-800/65 via-slate-900/55 to-slate-950/60 flex items-center justify-center relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-cyan-500/8 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
                     {item.image ? (
-                      <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500" />
+                      <img src={item.image} alt={item.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 group-hover:rotate-[0.6deg]" />
                     ) : (
-                      <Package className="w-16 h-16 text-slate-400 group-hover:scale-125 group-hover:text-blue-300 group-hover:rotate-12 transition-all duration-500 relative z-10" />
+                      <Package className="w-16 h-16 text-slate-400 transition-all duration-700 group-hover:scale-125 group-hover:text-cyan-200/90 group-hover:-translate-y-1" />
                     )}
-                    {/* Generate image quick action */}
-                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleGenerateImage(item.id) }}
-                        disabled={!!generatingId || bulkGenerating}
-                        className="px-2 py-1 text-xs rounded-md border border-white/20 bg-slate-900/60 text-slate-200 hover:bg-slate-800/70 disabled:opacity-50"
-                        title={generatingId === item.id ? 'Generating…' : 'Generate image'}
-                      >
-                        {generatingId === item.id || bulkGenerating ? 'Generating…' : 'Generate Img'}
-                      </button>
-                    </div>
+                    <div className="absolute inset-x-6 bottom-6 h-[1px] rounded-full bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
                   </div>
                   <div className="p-4 relative">
-                    <h4 className="text-slate-200 font-medium text-sm truncate group-hover:text-white transition-colors duration-300">{item.name}</h4>
-                    <div className="mt-2 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-2 group-hover:translate-y-0">
-                      <span className="text-xs text-slate-400 group-hover:text-slate-300">{item.pieceBarcode || item.brand || ''}</span>
-                      <span className={`text-xs px-2 py-1 rounded-full border ${
-                        (item.status || 'good') === 'good' ? 'text-blue-400 bg-blue-500/20 border-blue-500/30' :
-                        (item.status || 'good') === 'low' ? 'text-orange-400 bg-orange-500/20 border-orange-500/30' :
-                        (item.status || 'good') === 'out' ? 'text-red-400 bg-red-500/20 border-red-500/30' : 'text-slate-400 bg-slate-500/20 border-slate-500/30'
+                    <h4 className="text-slate-200 font-medium text-sm truncate transition-colors duration-300 group-hover:text-white">{item.name}</h4>
+                    <div className="mt-2 flex items-center justify-between text-xs opacity-80 group-hover:opacity-100 transition-all duration-500 transform translate-y-2 group-hover:translate-y-0">
+                      <span className="text-slate-400 group-hover:text-slate-200/90">{item.pieceBarcode || item.brand || ''}</span>
+                      <span className={`px-2 py-1 rounded-full border backdrop-blur-md ${
+                        (item.status || 'good') === 'good' ? 'text-cyan-300 border-cyan-400/40 bg-cyan-500/20' :
+                        (item.status || 'good') === 'low' ? 'text-amber-300 border-amber-400/40 bg-amber-500/15' :
+                        (item.status || 'good') === 'out' ? 'text-rose-300 border-rose-400/40 bg-rose-500/15' : 'text-slate-300 border-slate-500/40 bg-slate-600/20'
                       }`}>
                         {item.stock ?? '—'}
                       </span>
                     </div>
                   </div>
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700">
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent transform -skew-x-12 animate-shimmer" />
+                  <div className="pointer-events-none absolute inset-0">
+                    <div className="absolute inset-0 border border-white/5 opacity-0 group-hover:opacity-40 transition-opacity duration-500 rounded-3xl" />
+                    <div className="absolute -top-16 -left-16 h-40 w-40 rounded-full bg-cyan-500/20 blur-3xl opacity-0 group-hover:opacity-80 transition-opacity duration-700" />
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === 'new' && (
           <div className="space-y-8 p-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] hover:border-white/[0.15] transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_48px_-12px_rgba(59,130,246,0.15)] cursor-pointer">
+              <div className="group relative overflow-hidden rounded-3xl border border-emerald-400/15 bg-gradient-to-br from-slate-950/88 via-slate-950/74 to-emerald-950/38 backdrop-blur-2xl transition-all duration-500 shadow-[0_24px_60px_-32px_rgba(16,185,129,0.4)] hover:border-emerald-300/30 hover:shadow-[0_32px_72px_-28px_rgba(16,185,129,0.45)] cursor-pointer">
                 <input
                   type="file"
                   accept=".csv,.xlsx,.xls,.pdf,.txt"
@@ -634,19 +605,19 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                   disabled={isProcessingModalOpen}
                 />
                 <div className="relative p-10">
-                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] via-transparent to-blue-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/16 via-emerald-500/08 to-emerald-400/08 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   <div className="relative text-center">
-                    <div className="w-24 h-24 mx-auto mb-6 rounded-2xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] flex items-center justify-center group-hover:scale-105 transition-all duration-500 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)]">
+                    <div className="w-24 h-24 mx-auto mb-6 rounded-2xl backdrop-blur-2xl bg-gradient-to-br from-emerald-500/12 via-emerald-500/06 to-emerald-400/10 border border-emerald-300/25 flex items-center justify-center group-hover:scale-105 transition-all duration-500 shadow-[0_10px_30px_-20px_rgba(16,185,129,0.35)]">
                       {processedProducts.length > 0 ? (
-                        <Check className="w-12 h-12 text-green-400 transition-all duration-500" />
+                        <Check className="w-12 h-12 text-emerald-200 transition-all duration-500" />
                       ) : (
-                        <Upload className="w-12 h-12 text-slate-300 group-hover:text-emerald-300 transition-all duration-500" />
+                        <Upload className="w-12 h-12 text-slate-300 group-hover:text-emerald-200 transition-all duration-500" />
                       )}
                     </div>
-                    <h4 className={`text-slate-100 font-semibold text-xl mb-3 group-hover:text-white transition-colors duration-300 ${processedProducts.length > 0 ? 'text-green-400' : ''}`}>
+                    <h4 className={`text-lg font-semibold tracking-wide transition-colors duration-300 ${processedProducts.length > 0 ? 'text-emerald-200/90' : 'text-slate-100 group-hover:text-white'}`}>
                       {processedProducts.length > 0 ? 'Done' : 'Upload pricelist'}
                     </h4>
-                    <p className={`text-slate-400 text-sm leading-relaxed group-hover:text-slate-300 transition-colors duration-300 ${processedProducts.length > 0 ? 'text-green-300' : ''}`}>
+                    <p className={`text-sm leading-relaxed transition-colors duration-300 ${processedProducts.length > 0 ? 'text-emerald-200/70' : 'text-slate-400 group-hover:text-slate-200/90'}`}>
                       {processedProducts.length > 0 
                         ? `${processedProducts.length} products processed`
                         : 'CSV, Excel, or PDF. We parse items and add them.'}
@@ -654,44 +625,44 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                   </div>
                 </div>
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
-                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-emerald-500/[0.02] to-emerald-500/[0.05]" />
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-emerald-500/08 to-emerald-400/12" />
+                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-emerald-200/30 to-transparent" />
                 </div>
               </div>
 
               <div
-                className="group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] hover:border-white/[0.15] transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_48px_-12px_rgba(59,130,246,0.15)] cursor-pointer"
+                className="group relative overflow-hidden rounded-3xl border border-blue-400/18 bg-gradient-to-br from-slate-950/88 via-slate-950/74 to-blue-950/44 backdrop-blur-2xl transition-all duration-500 shadow-[0_24px_60px_-32px_rgba(59,130,246,0.4)] hover:border-blue-300/35 hover:shadow-[0_32px_72px_-28px_rgba(59,130,246,0.45)] cursor-pointer"
                 onClick={() => { setEditingProduct(null); setIsModalOpen(true) }}
               >
                 <div className="relative p-10">
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.03] via-transparent to-purple-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/15 via-blue-500/08 to-indigo-500/12 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   <div className="relative text-center">
-                    <div className="w-24 h-24 mx-auto mb-6 rounded-2xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] flex items-center justify-center group-hover:scale-105 transition-all duration-500 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)]">
-                      <PlusCircle className="w-12 h-12 text-slate-300 group-hover:text-blue-300 transition-all duration-500" />
+                    <div className="w-24 h-24 mx-auto mb-6 rounded-2xl backdrop-blur-2xl bg-gradient-to-br from-blue-500/12 via-blue-500/06 to-indigo-500/10 border border-blue-300/24 flex items-center justify-center group-hover:scale-105 transition-all duration-500 shadow-[0_10px_30px_-20px_rgba(59,130,246,0.35)]">
+                      <PlusCircle className="w-12 h-12 text-blue-200/90 transition-all duration-500" />
                     </div>
-                    <h4 className="text-slate-100 font-semibold text-xl mb-3 group-hover:text-white transition-colors duration-300">Add Manually</h4>
-                    <p className="text-slate-400 text-sm leading-relaxed group-hover:text-slate-300 transition-colors duration-300">Create products individually with complete details and specifications</p>
+                    <h4 className="text-lg font-semibold tracking-wide text-blue-100/90 group-hover:text-white transition-colors duration-300">Add manually</h4>
+                    <p className="text-sm leading-relaxed text-slate-400 group-hover:text-slate-200/90 transition-colors duration-300">Create products individually with complete details and specifications.</p>
                   </div>
                 </div>
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
-                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-500/[0.02] to-blue-500/[0.05]" />
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-500/09 to-indigo-500/12" />
+                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-200/28 to-transparent" />
                 </div>
               </div>
 
               {hasPricelist && (
-                <div className="group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] hover:border-white/[0.15] transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_48px_-12px_rgba(59,130,246,0.15)]">
+                <div className="group relative overflow-hidden rounded-3xl border border-cyan-400/16 bg-gradient-to-br from-slate-950/88 via-slate-950/74 to-cyan-950/40 backdrop-blur-2xl transition-all duration-500 shadow-[0_24px_60px_-32px_rgba(6,182,212,0.4)] hover:border-cyan-300/32 hover:shadow-[0_32px_72px_-28px_rgba(6,182,212,0.45)]">
                   <div className="relative p-10">
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.03] via-transparent to-purple-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/15 via-cyan-500/08 to-blue-500/12 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                     <div className="relative text-center">
-                      <div className="w-24 h-24 mx-auto mb-6 rounded-2xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] flex items-center justify-center group-hover:scale-105 transition-all duration-500 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)]">
-                        <Upload className="w-12 h-12 text-slate-300 group-hover:text-blue-300 transition-all duration-500" />
+                      <div className="w-24 h-24 mx-auto mb-6 rounded-2xl backdrop-blur-2xl bg-gradient-to-br from-cyan-500/12 via-cyan-500/06 to-blue-500/10 border border-cyan-300/24 flex items-center justify-center group-hover:scale-105 transition-all duration-500 shadow-[0_10px_30px_-20px_rgba(6,182,212,0.35)]">
+                        <Upload className="w-12 h-12 text-cyan-200/90 transition-all duration-500" />
                       </div>
-                      <h4 className="text-slate-100 font-semibold text-xl mb-3 group-hover:text-white transition-colors duration-300">Re-upload pricelist</h4>
-                      <p className="text-slate-400 text-sm leading-relaxed group-hover:text-slate-300 transition-colors duration-300">CSV/XLSX/PDF supported. Org ID optional.</p>
+                      <h4 className="text-lg font-semibold tracking-wide text-cyan-100/90 group-hover:text-white transition-colors duration-300">Re-upload pricelist</h4>
+                      <p className="text-sm leading-relaxed text-slate-400 group-hover:text-slate-200/90 transition-colors duration-300">CSV/XLSX/PDF supported. Organization ID optional.</p>
                       <form className="space-y-3 mt-4" onSubmit={(e) => e.preventDefault()}>
                         <div className="flex items-center space-x-2">
-                          <input className="flex-1 bg-slate-800/60 border border-white/10 rounded-lg px-3 py-2 text-slate-200" placeholder="Organization ID" value={orgId} onChange={e => setOrgId(e.target.value)} />
+                          <input className="flex-1 rounded-xl border border-white/8 bg-slate-950/70 px-3 py-2 text-slate-200 placeholder-slate-500 focus:border-cyan-400/35 focus:outline-none transition-all" placeholder="Organization ID" value={orgId} onChange={e => setOrgId(e.target.value)} />
                         </div>
                         <div>
                           <input id="csv-reupload" type="file" className="hidden" accept=".csv,.xlsx,.xls,.pdf" onChange={async (ev) => {
@@ -703,14 +674,17 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                               await loadOrgProducts(orgId)
                             }
                           }} />
-                          <label htmlFor="csv-reupload" className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-all duration-300 cursor-pointer"><Upload className="w-4 h-4" /><span>Upload CSV</span></label>
+                          <label htmlFor="csv-reupload" className="inline-flex items-center space-x-2 rounded-xl border border-cyan-400/24 bg-cyan-500/12 px-4 py-2 text-cyan-100/90 hover:border-cyan-300/40 hover:bg-cyan-500/18 transition-all duration-300 cursor-pointer">
+                            <Upload className="w-4 h-4" />
+                            <span>Upload CSV</span>
+                          </label>
                         </div>
                       </form>
                     </div>
                   </div>
                   <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
-                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-blue-500/[0.02] to-blue-500/[0.05]" />
-                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-cyan-500/09 to-cyan-500/14" />
+                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-200/26 to-transparent" />
                   </div>
                 </div>
               )}
@@ -721,20 +695,20 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                 <button 
                   onClick={handleImportTemplate}
                   disabled={isDownloading}
-                  className="group relative overflow-hidden rounded-xl backdrop-blur-md bg-gradient-to-r from-white/[0.08] to-white/[0.04] border border-white/[0.08] hover:border-blue-400/30 px-6 py-3 transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(59,130,246,0.2)] hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  className="group relative overflow-hidden rounded-2xl border border-blue-400/16 bg-gradient-to-r from-slate-950/82 via-slate-950/62 to-blue-950/40 px-6 py-3 backdrop-blur-xl transition-all duration-300 shadow-[0_18px_40px_-22px_rgba(59,130,246,0.45)] hover:border-blue-300/30 hover:shadow-[0_24px_56px_-24px_rgba(59,130,246,0.42)] hover:scale-[1.015] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/[0.05] to-purple-500/[0.03] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/14 via-blue-500/08 to-purple-500/12 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   <div className="relative flex items-center gap-3">
                     {downloadComplete ? (
-                      <Check className="w-5 h-5 text-green-400 transition-colors duration-300" />
+                      <Check className="w-5 h-5 text-emerald-200/90 transition-colors duration-300" />
                     ) : isDownloading ? (
-                      <Download className="w-5 h-5 text-blue-300 animate-bounce transition-colors duration-300" />
+                      <Download className="w-5 h-5 text-blue-200/90 animate-bounce transition-colors duration-300" />
                     ) : (
-                      <FileText className="w-5 h-5 text-slate-300 group-hover:text-blue-300 transition-colors duration-300" />
+                      <FileText className="w-5 h-5 text-slate-300 group-hover:text-blue-200 transition-colors duration-300" />
                     )}
                     <span className={`font-medium transition-colors duration-300 ${
-                      downloadComplete ? 'text-green-400' :
-                      isDownloading ? 'text-blue-300' :
+                      downloadComplete ? 'text-emerald-200' :
+                      isDownloading ? 'text-blue-200' :
                       'text-slate-200 group-hover:text-white'
                     }`}>
                       {downloadComplete ? 'Template Downloaded!' :

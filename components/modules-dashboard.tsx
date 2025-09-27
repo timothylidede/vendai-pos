@@ -18,6 +18,7 @@ import { OrganizationSettings } from '@/components/organization-settings'
 import { ProfileManagement } from '@/components/profile-management'
 import { hasInventory } from '@/lib/pos-operations'
 import { getOrgSettings } from '@/lib/org-operations'
+import { LoadingSpinner } from './loading-spinner'
 
 const retailerModules = [
   {
@@ -26,10 +27,17 @@ const retailerModules = [
     icon: ShoppingCart,
     color: 'text-green-400',
     hoverColor: 'hover:text-green-300',
-    bgGradient: 'from-green-500/[0.03] via-transparent to-green-500/[0.02]',
-    borderColor: 'border-green-500/30',
-    hoverBorderColor: 'hover:border-green-400/50',
-    shadowColor: 'hover:shadow-[0_20px_48px_-12px_rgba(34,197,94,0.15)]'
+    bgGradient: 'from-emerald-500/[0.14] via-emerald-500/[0.07] to-emerald-500/[0.04]',
+    borderColor: 'border-emerald-400/15',
+    hoverBorderColor: 'hover:border-emerald-300/25',
+    shadowColor: 'hover:shadow-[0_30px_70px_-32px_rgba(16,185,129,0.28)]',
+    palette: {
+      cardBase: 'bg-gradient-to-br from-slate-950/88 via-slate-950/72 to-emerald-950/32',
+      iconBg: 'bg-gradient-to-br from-emerald-500/[0.16] via-emerald-500/[0.08] to-emerald-400/[0.12]',
+      ring: 'ring-emerald-400/25',
+      title: 'text-emerald-200/85',
+      muted: 'text-emerald-200/60'
+    }
   },
   {
     title: 'Inventory',
@@ -37,10 +45,17 @@ const retailerModules = [
     icon: Package,
     color: 'text-blue-400',
     hoverColor: 'hover:text-blue-300',
-    bgGradient: 'from-blue-500/[0.03] via-transparent to-blue-500/[0.02]',
-    borderColor: 'border-blue-500/30',
-    hoverBorderColor: 'hover:border-blue-400/50',
-    shadowColor: 'hover:shadow-[0_20px_48px_-12px_rgba(59,130,246,0.15)]'
+    bgGradient: 'from-blue-500/[0.14] via-blue-500/[0.07] to-indigo-500/[0.045]',
+    borderColor: 'border-blue-400/15',
+    hoverBorderColor: 'hover:border-blue-300/25',
+    shadowColor: 'hover:shadow-[0_30px_70px_-32px_rgba(59,130,246,0.28)]',
+    palette: {
+      cardBase: 'bg-gradient-to-br from-slate-950/88 via-slate-950/72 to-blue-950/32',
+      iconBg: 'bg-gradient-to-br from-blue-500/[0.16] via-blue-500/[0.08] to-indigo-500/[0.12]',
+      ring: 'ring-blue-400/25',
+      title: 'text-blue-200/85',
+      muted: 'text-blue-200/60'
+    }
   },
   {
     title: 'Suppliers',
@@ -48,10 +63,17 @@ const retailerModules = [
     icon: HeartHandshake,
     color: 'text-purple-400',
     hoverColor: 'hover:text-purple-300',
-    bgGradient: 'from-purple-500/[0.03] via-transparent to-purple-500/[0.02]',
-    borderColor: 'border-purple-500/30',
-    hoverBorderColor: 'hover:border-purple-400/50',
-    shadowColor: 'hover:shadow-[0_20px_48px_-12px_rgba(168,85,247,0.15)]'
+    bgGradient: 'from-purple-500/[0.14] via-purple-500/[0.07] to-pink-500/[0.04]',
+    borderColor: 'border-purple-400/15',
+    hoverBorderColor: 'hover:border-purple-300/25',
+    shadowColor: 'hover:shadow-[0_30px_70px_-32px_rgba(168,85,247,0.28)]',
+    palette: {
+      cardBase: 'bg-gradient-to-br from-slate-950/88 via-slate-950/72 to-purple-950/32',
+      iconBg: 'bg-gradient-to-br from-purple-500/[0.16] via-purple-500/[0.08] to-pink-500/[0.12]',
+      ring: 'ring-purple-400/25',
+      title: 'text-purple-200/85',
+      muted: 'text-purple-200/60'
+    }
   }
 ]
 
@@ -62,10 +84,17 @@ const distributorModules = [
     icon: Truck,
     color: 'text-orange-400',
     hoverColor: 'hover:text-orange-300',
-    bgGradient: 'from-orange-500/[0.03] via-transparent to-orange-500/[0.02]',
-    borderColor: 'border-orange-500/30',
-    hoverBorderColor: 'hover:border-orange-400/50',
-    shadowColor: 'hover:shadow-[0_20px_48px_-12px_rgba(249,115,22,0.15)]'
+    bgGradient: 'from-amber-500/[0.14] via-orange-500/[0.07] to-orange-500/[0.04]',
+    borderColor: 'border-orange-400/15',
+    hoverBorderColor: 'hover:border-orange-300/26',
+    shadowColor: 'hover:shadow-[0_30px_70px_-32px_rgba(249,115,22,0.28)]',
+    palette: {
+      cardBase: 'bg-gradient-to-br from-slate-950/88 via-slate-950/72 to-amber-950/32',
+      iconBg: 'bg-gradient-to-br from-amber-500/[0.16] via-orange-500/[0.08] to-orange-500/[0.12]',
+      ring: 'ring-orange-400/25',
+      title: 'text-amber-200/85',
+      muted: 'text-amber-200/60'
+    }
   },
   {
     title: 'Inventory',
@@ -73,10 +102,17 @@ const distributorModules = [
     icon: Package,
     color: 'text-blue-400',
     hoverColor: 'hover:text-blue-300',
-    bgGradient: 'from-blue-500/[0.03] via-transparent to-blue-500/[0.02]',
-    borderColor: 'border-blue-500/30',
-    hoverBorderColor: 'hover:border-blue-400/50',
-    shadowColor: 'hover:shadow-[0_20px_48px_-12px_rgba(59,130,246,0.15)]'
+    bgGradient: 'from-blue-500/25 via-blue-500/10 to-indigo-500/8',
+    borderColor: 'border-blue-400/25',
+    hoverBorderColor: 'hover:border-blue-300/40',
+    shadowColor: 'hover:shadow-[0_30px_70px_-28px_rgba(59,130,246,0.55)]',
+    palette: {
+      cardBase: 'bg-gradient-to-br from-slate-950/85 via-blue-950/45 to-slate-950/60',
+      iconBg: 'bg-gradient-to-br from-blue-500/18 via-blue-500/12 to-indigo-500/15',
+      ring: 'ring-blue-400/40',
+      title: 'text-blue-200',
+      muted: 'text-blue-200/70'
+    }
   },
   {
     title: 'Retailers',
@@ -84,10 +120,17 @@ const distributorModules = [
     icon: Users,
     color: 'text-cyan-400',
     hoverColor: 'hover:text-cyan-300',
-    bgGradient: 'from-cyan-500/[0.03] via-transparent to-cyan-500/[0.02]',
-    borderColor: 'border-cyan-500/30',
-    hoverBorderColor: 'hover:border-cyan-400/50',
-    shadowColor: 'hover:shadow-[0_20px_48px_-12px_rgba(6,182,212,0.15)]'
+    bgGradient: 'from-cyan-500/[0.14] via-cyan-500/[0.07] to-teal-500/[0.04]',
+    borderColor: 'border-cyan-400/15',
+    hoverBorderColor: 'hover:border-cyan-300/25',
+    shadowColor: 'hover:shadow-[0_30px_70px_-32px_rgba(6,182,212,0.28)]',
+    palette: {
+      cardBase: 'bg-gradient-to-br from-slate-950/88 via-slate-950/72 to-cyan-950/32',
+      iconBg: 'bg-gradient-to-br from-cyan-500/[0.16] via-cyan-500/[0.08] to-teal-500/[0.12]',
+      ring: 'ring-cyan-400/25',
+      title: 'text-cyan-200/85',
+      muted: 'text-cyan-200/60'
+    }
   }
 ]
 
@@ -273,10 +316,7 @@ export function ModulesDashboard() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-400">Loading your dashboard...</p>
-        </div>
+        <LoadingSpinner size="lg" showMessage message="Loading your dashboard..." className="space-y-3" />
       </div>
     );
   }
@@ -491,6 +531,24 @@ export function ModulesDashboard() {
               ? (showTooltip === module.title || needsInventory)
               : (!needsInventory && showTooltip === module.title);
             const gated = needsInventory && module.title !== 'Inventory';
+            const palette = module.palette || {
+              cardBase: 'bg-gradient-to-br from-slate-950/85 via-slate-950/65 to-slate-950/55',
+              iconBg: 'bg-gradient-to-br from-white/15 via-white/10 to-white/5',
+              ring: 'ring-blue-400/30',
+              title: module.color,
+              muted: 'text-slate-300'
+            }
+            const activeShadow = module.color === 'text-green-400'
+              ? 'shadow-[0_28px_68px_-26px_rgba(16,185,129,0.6)]'
+              : module.color === 'text-blue-400'
+              ? 'shadow-[0_28px_68px_-26px_rgba(59,130,246,0.55)]'
+              : module.color === 'text-purple-400'
+              ? 'shadow-[0_28px_68px_-26px_rgba(168,85,247,0.55)]'
+              : module.color === 'text-orange-400'
+              ? 'shadow-[0_28px_68px_-26px_rgba(249,115,22,0.55)]'
+              : module.color === 'text-cyan-400'
+              ? 'shadow-[0_28px_68px_-26px_rgba(6,182,212,0.55)]'
+              : 'shadow-[0_28px_68px_-26px_rgba(59,130,246,0.5)]'
             
             return (
               <motion.div
@@ -538,16 +596,8 @@ export function ModulesDashboard() {
                   </motion.div>
                 )}
                 <div 
-                  className={`group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border ${gated ? 'border-white/[0.04] opacity-60' : 'border-white/[0.08]'} ${module.hoverBorderColor} transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] ${module.shadowColor} cursor-pointer h-full ${
-                    isClicked ? 'ring-2 ring-offset-2 ring-offset-slate-900 ' + (
-                      module.color === 'text-green-400' ? 'ring-green-400/50' :
-                      module.color === 'text-blue-400' ? 'ring-blue-400/50' : 
-                      'ring-purple-400/50'
-                    ) + ' shadow-2xl ' + (
-                      module.color === 'text-green-400' ? 'shadow-green-400/25' :
-                      module.color === 'text-blue-400' ? 'shadow-blue-400/25' :
-                      'shadow-purple-400/25'
-                    ) : ''
+                  className={`group relative overflow-hidden rounded-3xl backdrop-blur-2xl ${palette.cardBase} border ${gated ? 'border-white/5 opacity-60' : module.borderColor} ${gated ? '' : module.hoverBorderColor} transition-all duration-500 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.65)] ${module.shadowColor} cursor-pointer h-full ${
+                    isClicked && !gated ? `ring-2 ring-offset-2 ring-offset-slate-950 ${palette.ring} ${activeShadow}` : ''
                   }`}
                 >
                   {/* Glassmorphic background overlay */}
@@ -556,7 +606,7 @@ export function ModulesDashboard() {
                   <div className="relative flex flex-col items-center justify-center h-full space-y-6 p-8">
                     {/* Icon Container */}
                     <div className="relative">
-                      <div className="w-20 h-20 rounded-2xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] flex items-center justify-center group-hover:scale-110 transition-all duration-500 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)]">
+                      <div className={`w-20 h-20 rounded-2xl backdrop-blur-2xl ${palette.iconBg} border border-white/5 flex items-center justify-center group-hover:scale-110 transition-all duration-500 shadow-[0_10px_30px_-18px_rgba(15,23,42,0.75)]`}>
                         <Icon className={`w-10 h-10 ${module.color} ${module.hoverColor} transition-all duration-500 ${gated ? 'opacity-60' : ''}`} 
                               style={{
                                 filter: `drop-shadow(0 4px 8px ${
@@ -582,9 +632,12 @@ export function ModulesDashboard() {
                     
                     {/* Content */}
                     <div className="text-center">
-                      <h3 className={`text-xl font-bold ${module.color} ${module.hoverColor} transition-colors duration-300 tracking-tight ${gated ? 'opacity-60' : ''}`}>
+                      <h3 className={`text-lg font-semibold tracking-wide transition-colors duration-300 ${palette.title} ${module.hoverColor} ${gated ? 'opacity-60' : ''}`}>
                         {module.title}
                       </h3>
+                      <p className={`mt-2 text-sm transition-colors duration-300 ${palette.muted} ${gated ? 'opacity-50' : 'group-hover:text-slate-200/90'}`}>
+                        {module.description}
+                      </p>
                     </div>
                   </div>
                   

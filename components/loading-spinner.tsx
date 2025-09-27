@@ -23,10 +23,10 @@ export function LoadingSpinner({
   showMessage = false 
 }: LoadingSpinnerProps) {
   return (
-    <div className={`flex flex-col items-center justify-center ${className}`}>
+    <div className={`flex flex-col items-center justify-center text-center mx-auto gap-3 ${className}`}>
       {/* Spinning vendai Logo */}
       <motion.div
-        className={`relative ${sizeClasses[size]} mb-3`}
+        className={`relative ${sizeClasses[size]}`}
         animate={{ rotate: 360 }}
         transition={{ 
           duration: 2, 

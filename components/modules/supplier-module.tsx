@@ -10,6 +10,7 @@ import { Button } from "../ui/button"
 import { Input } from "../ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs"
+import { LoadingSpinner } from "../loading-spinner"
 
 import { db } from "@/lib/firebase"
 import { collection, query, orderBy, limit, startAfter, getDocs, addDoc, doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore"
@@ -910,7 +911,7 @@ export function SupplierModule() {
             <div className="h-full overflow-y-auto">
               {loading ? (
                 <div className="flex items-center justify-center h-full">
-                  <div className="text-white">Loading suppliers...</div>
+                  <LoadingSpinner size="md" />
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
@@ -1073,7 +1074,7 @@ export function SupplierModule() {
               <div className="flex-1 overflow-y-auto p-6">
                 {loadingProducts ? (
                   <div className="flex items-center justify-center h-64">
-                    <div className="text-white">Loading products...</div>
+                    <LoadingSpinner size="md" />
                   </div>
                 ) : filteredProducts.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -1226,7 +1227,7 @@ export function SupplierModule() {
           <div className="h-full overflow-y-auto">
             {loadingRetailers ? (
               <div className="flex items-center justify-center h-full">
-                <div className="text-white">Loading retailers...</div>
+                <LoadingSpinner size="md" />
               </div>
             ) : (
               <div className="p-6">

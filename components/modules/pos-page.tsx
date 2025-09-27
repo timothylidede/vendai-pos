@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card } from '../ui/card'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-import { ScrollArea } from '../ui/scroll-area'
-import { ScanBarcode, ShoppingCart, Trash2, Plus, ChevronDown, X, Search, Package, ArrowLeft, Minus, Square } from 'lucide-react'
+import { ScanBarcode, ShoppingCart, Trash2, Plus, ChevronDown, X, Search, Package, ArrowLeft } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { POSProduct, POSOrderLine, POSOrderDoc } from '@/lib/types'
 // Gradually migrating to optimized operations
@@ -12,6 +10,7 @@ import { listPOSProducts, addPosOrder, listRecentOrders, getInventory } from '@/
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/hooks/use-toast'
 import { useGlassmorphicToast } from '../ui/glassmorphic-toast'
+import { LoadingSpinner } from '../loading-spinner'
 
 interface CartLine {
   productId: string
@@ -29,22 +28,7 @@ interface OrderTab {
   createdAt: Date
 }
 
-interface OrderRow {
-  id: string
-  number: string
-  date: string
-  time: string
-  amount: string
-  status: 'Ongoing' | 'Payment'
-}
-
-interface OrderTab {
-  id: string
-  number: string
-  cart: CartLine[]
-  total: number
-  createdAt: Date
-}
+type StoredOrderTab = Omit<OrderTab, 'createdAt'> & { createdAt: string }
 
 export function POSPage() {
   const [headerCollapsed, setHeaderCollapsed] = useState(true)
@@ -52,7 +36,6 @@ export function POSPage() {
   const [activeTab, setActiveTab] = useState<'register' | 'orders'>('register')
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState('001')
-  const [isEntering, setIsEntering] = useState(true)
   const [isExiting, setIsExiting] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -96,9 +79,9 @@ export function POSPage() {
     const savedTabs = localStorage.getItem('pos-order-tabs')
     if (savedTabs) {
       try {
-        const tabData = JSON.parse(savedTabs)
+        const tabData = JSON.parse(savedTabs) as StoredOrderTab[]
         const restoredTabs = new Map<string, OrderTab>()
-        tabData.forEach((tab: any) => {
+        tabData.forEach((tab) => {
           restoredTabs.set(tab.id, {
             ...tab,
             createdAt: new Date(tab.createdAt)
@@ -166,31 +149,20 @@ export function POSPage() {
     }
   }
 
-  // Handle entrance animation
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsEntering(false)
-    }, 100)
-    return () => clearTimeout(timer)
-  }, [])
-
   // Load recent orders for Orders tab
   useEffect(() => {
     let active = true
     ;(async () => {
       try {
         const orgId = userData?.organizationName || 'default'
-        const { orders, missingIndex, indexHint } = await listRecentOrders(orgId, 30)
-        if (active) setRecentOrders(orders as any)
-        if (missingIndex) {
-          toast({ title: 'Index not found (using fallback)', description: 'Create Firestore index for faster Orders: ' + (indexHint || '') })
-        }
+        const fetchedOrders = await listRecentOrders(orgId, 30)
+        if (active) setRecentOrders(fetchedOrders)
       } catch (e) {
         console.error(e)
       }
     })()
     return () => { active = false }
-  }, [userData?.organizationName])
+  }, [userData?.organizationName, toast])
 
   // Debounce search to avoid firing a request on every keystroke
   useEffect(() => {
@@ -682,7 +654,7 @@ export function POSPage() {
                       const orderNumber = activeOrderId || selectedOrder
                       
                       try {
-                        const id = await addPosOrder(orgId, userId, lines)
+                        await addPosOrder(orgId, userId, lines)
                         const itemsCount = cart.reduce((n, l) => n + l.quantity, 0)
                         toast({ 
                           title: 'Order completed!', 
@@ -707,8 +679,8 @@ export function POSPage() {
                         }
                         
                         // Refresh recent orders list
-                        const { orders } = await listRecentOrders(orgId, 30)
-                        setRecentOrders(orders as any)
+                        const refreshedOrders = await listRecentOrders(orgId, 30)
+                        setRecentOrders(refreshedOrders)
                       } catch (e) {
                         console.error('Order failed:', e)
                         toast({ 
@@ -730,57 +702,74 @@ export function POSPage() {
           <div className="flex-1 overflow-hidden relative">
             {loading && (
               <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-10">
-                <div className="text-center text-white">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-400 mx-auto mb-4"></div>
-                  <p>Loading products...</p>
-                </div>
+                <LoadingSpinner size="md" />
               </div>
             )}
             <div className="h-full overflow-y-auto thin-scroll">
               <div className="p-6">
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
                   {/* Real Products */}
-                  {filteredProducts.map((p) => (
-                    <motion.div
-                      key={p.id}
-                      whileHover={{ scale: 1.08, y: -8 }}
-                      whileTap={{ scale: 0.95 }}
-                      transition={{ type: 'spring', stiffness: 300, damping: 18 }}
-                      className="group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] hover:border-green-400/40 transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_48px_-12px_rgba(34,197,94,0.2)] cursor-pointer hover:-rotate-1"
-                      onClick={() => addProductToCart(p)}
-                    >
-                      {/* Glassmorphic background overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-br from-green-500/[0.03] via-transparent to-emerald-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                      
-                      <div className="aspect-square w-full bg-gradient-to-br from-slate-800/60 to-slate-700/40 flex items-center justify-center relative">
-                        <div className="absolute inset-0 bg-gradient-to-br from-green-500/[0.02] via-transparent to-green-600/[0.03] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                        <Package className="w-16 h-16 text-slate-400 group-hover:scale-125 group-hover:text-green-300 group-hover:rotate-12 transition-all duration-500 relative z-10" />
-                        
-                        {/* Floating add indicator */}
-                        <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-gradient-to-br from-green-400/20 to-green-500/30 border border-green-400/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 transform scale-75 group-hover:scale-100">
-                          <Plus className="w-4 h-4 text-green-300" />
+                  {filteredProducts.map((p) => {
+                    const productImage = p.image || (p as any)?.imageUrl || (p as any)?.image_url || (p as any)?.imageURL
+
+                    return (
+                      <motion.div
+                        key={p.id}
+                        whileHover={{ scale: 1.08, y: -8 }}
+                        whileTap={{ scale: 0.95 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 18 }}
+                        className="group relative rounded-3xl overflow-hidden backdrop-blur-2xl border border-white/10 bg-gradient-to-br from-slate-900/70 via-slate-900/45 to-emerald-900/35 transition-all duration-500 shadow-[0_16px_45px_-22px_rgba(15,118,110,0.55)] hover:border-emerald-400/40 hover:shadow-[0_34px_80px_-32px_rgba(5,150,105,0.45)] cursor-pointer"
+                        onClick={() => addProductToCart(p)}
+                      >
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/12 via-transparent to-cyan-500/18" />
+                          <div className="absolute inset-0 blur-3xl bg-emerald-500/10" />
                         </div>
-                      </div>
-                      
-                      <div className="p-4 relative">
-                        <h4 className="text-slate-200 font-medium text-sm group-hover:text-white transition-colors duration-300">{p.name}</h4>
-                        <div className="mt-2 flex items-center justify-between opacity-60 group-hover:opacity-100 transition-all duration-500 transform translate-y-1 group-hover:translate-y-0">
-                          <span className="text-green-400 font-semibold text-sm">{formatMoney(p.piecePrice)}</span>
-                          <span className="text-xs text-slate-400 group-hover:text-slate-300 px-2 py-1 rounded-full bg-slate-700/50 border border-slate-600/50">
-                            {p.retailUom}
-                          </span>
+
+                        <div className="relative aspect-square w-full overflow-hidden bg-[#0f172b]">
+                          <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-emerald-400/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                          {productImage ? (
+                            <img
+                              src={productImage}
+                              alt={p.name}
+                              className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110 group-hover:rotate-[0.6deg]"
+                              loading="lazy"
+                              style={{ backgroundColor: '#0f172b' }}
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center">
+                              <Package className="w-16 h-16 text-slate-400 transition-all duration-700 group-hover:scale-125 group-hover:text-emerald-200/90 group-hover:-translate-y-1" />
+                            </div>
+                          )}
+
+                          <div className="absolute top-3 right-3 flex h-9 w-9 items-center justify-center rounded-full border border-emerald-400/60 bg-emerald-500/20 opacity-0 backdrop-blur-md transition-all duration-300 transform scale-75 group-hover:scale-100 group-hover:opacity-100">
+                            <Plus className="h-4 w-4 text-emerald-200" />
+                          </div>
+
+                          <div className="absolute inset-x-6 bottom-6 h-px rounded-full bg-gradient-to-r from-transparent via-emerald-300/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
                         </div>
-                      </div>
-                      
-                      {/* Top highlight line */}
-                      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-400/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                      
-                      {/* Shimmer effect */}
-                      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700">
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-green-200/5 to-transparent transform -skew-x-12 translate-x-[-100%] group-hover:translate-x-[200%] transition-transform duration-1000" />
-                      </div>
-                    </motion.div>
-                  ))}
+
+                        <div className="relative p-4">
+                          <h4 className="text-slate-200 font-medium text-sm truncate transition-colors duration-300 group-hover:text-white">{p.name}</h4>
+                          <div className="mt-2 flex items-center justify-between text-xs opacity-70 group-hover:opacity-100 transition-all duration-500 transform translate-y-1 group-hover:translate-y-0">
+                            <span className="text-emerald-300 font-semibold text-sm">{formatMoney(p.piecePrice)}</span>
+                            <span className="px-2 py-1 rounded-full border border-slate-500/40 bg-slate-900/40 text-slate-300 group-hover:text-white backdrop-blur-md">
+                              {p.retailUom}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="pointer-events-none absolute inset-0">
+                          <div className="absolute inset-0 border border-white/5 opacity-0 group-hover:opacity-40 transition-opacity duration-500 rounded-3xl" />
+                          <div className="absolute -top-20 -left-16 h-44 w-44 rounded-full bg-emerald-500/25 blur-3xl opacity-0 group-hover:opacity-80 transition-opacity duration-700" />
+                        </div>
+
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700">
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-emerald-200/5 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-[200%] transition-transform duration-1000" />
+                        </div>
+                      </motion.div>
+                    )
+                  })}
                 </div>
               </div>
             </div>

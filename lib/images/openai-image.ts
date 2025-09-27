@@ -1,7 +1,7 @@
 import { db } from '@/lib/firebase'
 import { adminDb, adminStorage } from '@/lib/firebase-admin'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
-import OpenAI from 'openai'
+import Replicate from 'replicate'
 
 // Optional: lightweight Google CSE fetch for reference images
 async function googleRefImages(query: string, topN = 3): Promise<string[]> {
@@ -66,6 +66,28 @@ async function googleRefImages(query: string, topN = 3): Promise<string[]> {
   }
 }
 
+async function fetchImageAsDataUrl(url: string): Promise<{ dataUrl: string; contentType: string; originalUrl: string } | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) {
+      console.error('❌ Failed to download reference image:', url, res.status)
+      return null
+    }
+    const contentType = res.headers.get('content-type') || 'image/png'
+    if (!contentType.startsWith('image/')) {
+      console.warn('⚠️ Skipping non-image reference response', { url, contentType })
+      return null
+    }
+    const arrayBuffer = await res.arrayBuffer()
+    const base64 = Buffer.from(arrayBuffer).toString('base64')
+    const dataUrl = `data:${contentType};base64,${base64}`
+    return { dataUrl, contentType, originalUrl: url }
+  } catch (error) {
+    console.error('❌ Reference image fetch error:', url, error)
+    return null
+  }
+}
+
 export async function generateProductImageWithOpenAI(params: {
   orgId: string
   productId: string
@@ -76,21 +98,21 @@ export async function generateProductImageWithOpenAI(params: {
   promptStyle?: string
   useGoogleRefs?: boolean
 }): Promise<{ ok: boolean; url?: string; error?: string; revisedPrompt?: string }>{
-  console.log('🎨 Starting AI image generation:', {
+  console.log('🎨 Starting Replicate image generation:', {
     productId: params.productId,
     orgId: params.orgId,
     useGoogleRefs: params.useGoogleRefs,
     hasPromptStyle: !!params.promptStyle
   })
 
-  const OPENAI_API_KEY = process.env.OPENAI_API_KEY
-  if (!OPENAI_API_KEY) {
-    console.error('❌ Missing OPENAI_API_KEY in environment')
-    return { ok: false, error: 'Missing OPENAI_API_KEY' }
+  const replicateToken = process.env.REPLICATE_API_TOKEN
+  if (!replicateToken) {
+    console.error('❌ Missing REPLICATE_API_TOKEN in environment')
+    return { ok: false, error: 'Missing REPLICATE_API_TOKEN' }
   }
-  console.log('✅ OpenAI API key found')
-  
-  const client = new OpenAI({ apiKey: OPENAI_API_KEY })
+  console.log('✅ Replicate API token found')
+
+  const replicate = new Replicate({ auth: replicateToken })
 
   // Ensure we have product basics
   let name = params.name
@@ -99,13 +121,33 @@ export async function generateProductImageWithOpenAI(params: {
   let supplier = params.supplier
   if (!name) {
     console.log('📦 Fetching product details from database...')
-    const snap = await getDoc(doc(db, 'pos_products', params.productId))
-    const p = snap.exists() ? (snap.data() as any) : {}
-    name = p.name
-    brand = brand ?? p.brand
-    category = category ?? p.category
-    supplier = supplier ?? p.supplier
-    console.log('📦 Product details:', { name, brand, category, supplier })
+    try {
+      const snap = await getDoc(doc(db, 'pos_products', params.productId))
+      const p = snap.exists() ? (snap.data() as any) : {}
+      name = p.name
+      brand = brand ?? p.brand
+      category = category ?? p.category
+      supplier = supplier ?? p.supplier
+      console.log('📦 Product details (client SDK):', { name, brand, category, supplier })
+    } catch (fetchError: any) {
+      if (fetchError?.code === 'unavailable') {
+        console.warn('⚠️ Firestore client offline, falling back to admin SDK')
+        const adminSnap = await adminDb.collection('pos_products').doc(params.productId).get()
+        if (adminSnap.exists) {
+          const p = adminSnap.data() as any
+          name = p?.name
+          brand = brand ?? p?.brand
+          category = category ?? p?.category
+          supplier = supplier ?? p?.supplier
+          console.log('📦 Product details (admin fallback):', { name, brand, category, supplier })
+        } else {
+          console.error('❌ Product not found via admin fallback')
+        }
+      } else {
+        console.error('❌ Failed to fetch product details:', fetchError)
+        throw fetchError
+      }
+    }
   }
   if (!name) {
     console.error('❌ Product has no name')
@@ -113,12 +155,10 @@ export async function generateProductImageWithOpenAI(params: {
   }
 
   // Standardized prompt: slate background on wooden shelf
-  const basePrompt = params.promptStyle || `Photorealistic product photo; single centered product on a brown mahogany wooden shelf (visible grain); matte slate background (#2b2f33); warm studio lighting from top-left; 50mm lens slight 10° angle; high detail; natural highlights; no extra props`
+  const basePrompt = params.promptStyle || `Photorealistic product photo; single centered product on a floating glass shelf; uniform slate background (#1f2937) matching the Vendai interface; cool teal-accent studio lighting; no text, hands, or additional props; background color must remain constant.`
   const title = `${brand ? brand + ' ' : ''}${name}`.trim()
-  const fullPrompt = `${basePrompt}. Subject: ${title}. ${category ? 'Category: ' + category + '. ' : ''}${supplier ? 'Supplier: ' + supplier + '. ' : ''}`
-
-  // Simple prompt for DALL-E 3 - no need for complex references for now
-  const enhancedPrompt = `${basePrompt}. Product: ${title}${category ? '. Category: ' + category : ''}. Consistent composition; shelf across bottom third.`
+  // Simple prompt demanding a strict slate background to match the app aesthetic
+  const enhancedPrompt = `${basePrompt}. Product: ${title}${category ? '. Category: ' + category : ''}. Maintain an unbroken slate backdrop (#1f2937) with subtle glass reflection; no alternative backgrounds.`
 
   console.log('🎭 Using prompt style:', params.promptStyle ? 'Custom' : 'Default')
   console.log('📝 Enhanced prompt:', enhancedPrompt)
@@ -127,102 +167,159 @@ export async function generateProductImageWithOpenAI(params: {
     let imageBytes: Buffer | null = null
     let revisedPrompt: string | undefined
 
-    // Try to find a reference image via Google CSE and do img2img if possible
-    let refUrl: string | undefined
+    // Try to find reference images via Google CSE and feed them to Replicate
+    let referenceImageUrls: string[] = []
     if (params.useGoogleRefs) {
       console.log('🔍 Attempting to find reference images...')
       const refs = await googleRefImages(`${title} ${category ? category + ' ' : ''}product image`, 5)
-      refUrl = refs[0]
-      if (refUrl) {
-        console.log('✅ Using reference image:', refUrl)
+      if (refs.length) {
+        console.log('✅ Reference URLs found, fetching data...')
+        const fetchedRefs: string[] = []
+        for (const url of refs.slice(0, 4)) {
+          const data = await fetchImageAsDataUrl(url)
+          if (data?.dataUrl) {
+            fetchedRefs.push(data.originalUrl)
+          }
+        }
+        referenceImageUrls = fetchedRefs
+        console.log('🖼️ Using', referenceImageUrls.length, 'reference images for guidance')
       } else {
-        console.log('⚠️ No reference images found')
+        console.log('⚠️ No reference images found via Google CSE')
       }
     } else {
       console.log('⏭️ Skipping reference image search (useGoogleRefs=false)')
     }
 
-    if (refUrl) {
-      console.log('🖼️ Attempting image-to-image generation with reference...')
-      try {
-        // OpenAI image edit endpoint with image[] and prompt
-        // Fetch the reference and send it as input for guidance
-        console.log('📥 Fetching reference image:', refUrl)
-        const refRes = await fetch(refUrl)
-        if (refRes.ok) {
-          console.log('✅ Reference image fetched successfully')
-          const refArrayBuf = await refRes.arrayBuffer()
-          // File may not exist in older runtimes; if so, this throws and we fall back
-          const refFile = new File([refArrayBuf], 'ref.png', { type: 'image/png' })
-          
-          console.log('🎨 Calling OpenAI image edit API...')
-          const resp = await client.images.edit({
-            model: 'gpt-image-1',
-            image: refFile as any,
-            prompt: enhancedPrompt,
-            size: '1024x1024',
-            n: 1
-          } as any)
-          console.log('✅ OpenAI image edit API responded')
-          const first = resp.data?.[0]
-          if (first?.b64_json) {
-            console.log('📦 Received base64 image data')
-            imageBytes = Buffer.from(first.b64_json, 'base64')
-            revisedPrompt = (first as any).revised_prompt
-          } else if ((first as any)?.url) {
-            console.log('🌐 Received image URL, downloading...')
-            const imgRes = await fetch((first as any).url)
-            if (imgRes.ok) {
-              const arr = await imgRes.arrayBuffer()
-              imageBytes = Buffer.from(arr)
-              console.log('✅ Image downloaded successfully')
+    if (!referenceImageUrls.length) {
+      console.log('ℹ️ Proceeding without reference images (none passed validation)')
+    }
+
+    const replicateModel = process.env.REPLICATE_MODEL_ID || 'google/nano-banana'
+    const replicateInput: Record<string, unknown> = {
+      prompt: enhancedPrompt,
+      output_quality: 'high'
+    }
+
+    if (referenceImageUrls.length) {
+      replicateInput.image_input = referenceImageUrls
+    }
+
+    console.log('🎨 Calling Replicate model...', { model: replicateModel, hasRefs: referenceImageUrls.length > 0 })
+
+    type ReplicatePredictionStatus = 'starting' | 'processing' | 'succeeded' | 'failed' | 'canceled'
+    interface ReplicatePrediction {
+      id: string
+      status: ReplicatePredictionStatus
+      output?: unknown
+      error?: string | null
+    }
+
+    const prediction = await replicate.predictions.create({
+      model: replicateModel,
+      input: replicateInput,
+      stream: false
+    }) as ReplicatePrediction
+
+    console.log('⏳ Replicate prediction queued', { id: prediction.id, status: prediction.status })
+
+    const terminalStatuses: ReplicatePredictionStatus[] = ['succeeded', 'failed', 'canceled']
+    let currentPrediction: ReplicatePrediction = prediction
+    const startedAt = Date.now()
+    const MAX_WAIT_MS = 120_000
+    const POLL_INTERVAL_MS = 2_000
+
+    while (!terminalStatuses.includes(currentPrediction.status)) {
+      if (Date.now() - startedAt > MAX_WAIT_MS) {
+        throw new Error('Replicate prediction timed out')
+      }
+      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
+      currentPrediction = await replicate.predictions.get(currentPrediction.id) as ReplicatePrediction
+      console.log('⏳ Replicate status update', { status: currentPrediction.status })
+    }
+
+    if (currentPrediction.status !== 'succeeded') {
+      const replicateError = currentPrediction.error || `Replicate prediction ${currentPrediction.status}`
+      console.error('❌ Replicate prediction did not succeed', { status: currentPrediction.status, error: replicateError })
+      return { ok: false, error: replicateError }
+    }
+
+    const extractHttpUrls = (value: unknown): string[] => {
+      if (!value) return []
+
+      const collectFromToString = (candidate: unknown) => {
+        try {
+          if (candidate && typeof (candidate as any).toString === 'function') {
+            const text = (candidate as any).toString()
+            if (typeof text === 'string' && text.trim()) {
+              return extractHttpUrls(text)
             }
-            revisedPrompt = (first as any).revised_prompt
           }
-        } else {
-          console.log('❌ Failed to fetch reference image:', refRes.status)
+        } catch (err) {
+          console.warn('⚠️ Failed to read string from Replicate output candidate', err)
         }
-      } catch (error) {
-        console.log('⚠️ Image-to-image generation failed, will try text-to-image:', error)
-        // ignore and fall back
+        return []
       }
+
+      if (typeof value === 'string') {
+        const direct = value.trim()
+        if (direct.startsWith('http')) {
+          return [direct]
+        }
+        const matches = Array.from(direct.matchAll(/https?:\/\/[^\s"']+/g)).map(match => match[0])
+        return matches
+      }
+
+      if (Array.isArray(value)) {
+        return value.flatMap(item => extractHttpUrls(item))
+      }
+
+      if (typeof value === 'object') {
+        if (value && typeof (value as any).url === 'function') {
+          try {
+            const urlResult = (value as any).url()
+            if (typeof urlResult === 'string') {
+              return extractHttpUrls(urlResult)
+            }
+            if (urlResult instanceof URL) {
+              return [urlResult.toString()]
+            }
+          } catch (err) {
+            console.warn('⚠️ Failed to resolve Replicate file output URL', err)
+          }
+        }
+
+        if (value && typeof (value as any).toString === 'function' && !(value instanceof ReadableStream)) {
+          const stringUrls = collectFromToString(value)
+          if (stringUrls.length) return stringUrls
+        }
+
+        return Object.values(value as Record<string, unknown>).flatMap(item => extractHttpUrls(item))
+      }
+
+      return []
     }
 
-    // Fallback: pure text-to-image
-    if (!imageBytes) {
-      console.log('🎨 Using text-to-image generation (DALL-E)...')
-      const resp = await client.images.generate({
-        model: 'gpt-image-1',
-        prompt: enhancedPrompt,
-        size: '1024x1024',
-        n: 1
-      })
-      console.log('✅ OpenAI image generation API responded')
-      const first = resp.data?.[0]
-      if (first?.b64_json) {
-        console.log('📦 Received base64 image data')
-        imageBytes = Buffer.from(first.b64_json, 'base64')
-        revisedPrompt = (first as any).revised_prompt
-      } else if ((first as any)?.url) {
-        console.log('🌐 Received image URL, downloading...')
-        const imgRes = await fetch((first as any).url)
-        if (!imgRes.ok) {
-          console.error('❌ Failed to download generated image:', imgRes.status)
-          return { ok: false, error: 'No image data returned' }
-        }
-        const arr = await imgRes.arrayBuffer()
-        imageBytes = Buffer.from(arr)
-        console.log('✅ Generated image downloaded successfully')
-        revisedPrompt = (first as any).revised_prompt
-      } else {
-        console.error('❌ No image data in OpenAI response')
-        return { ok: false, error: 'No image data returned' }
-      }
+    const rawOutput = currentPrediction.output
+    console.log('✅ Replicate prediction completed')
+    const candidateUrls = extractHttpUrls(rawOutput)
+    const preferredUrls = candidateUrls.filter(url => url.includes('replicate') || url.includes('replicate.delivery'))
+    const outputUrls = (preferredUrls.length ? preferredUrls : candidateUrls).filter(url => url.startsWith('http'))
+
+    if (!outputUrls.length) {
+      console.error('❌ No image URLs returned from Replicate', { rawOutput })
+      return { ok: false, error: 'Replicate did not return an image URL' }
     }
 
-    if (revisedPrompt) {
-      console.log('📝 OpenAI revised prompt:', revisedPrompt)
+    const downloadUrl = outputUrls[0]
+    console.log('🌐 Downloading generated image from Replicate...', { downloadUrl })
+    const generatedImageRes = await fetch(downloadUrl)
+    if (!generatedImageRes.ok) {
+      console.error('❌ Failed to download generated image from Replicate', generatedImageRes.status)
+      return { ok: false, error: 'Failed to download generated image' }
     }
+
+    const generatedArrayBuffer = await generatedImageRes.arrayBuffer()
+    imageBytes = Buffer.from(generatedArrayBuffer)
 
     // Upload to Firebase Storage using Admin SDK
     console.log('☁️ Uploading image to Firebase Storage...')
@@ -252,18 +349,24 @@ export async function generateProductImageWithOpenAI(params: {
     await file.makePublic()
     console.log('✅ File made public')
     
-  const url = `https://storage.googleapis.com/${bucket.name}/${encodeURI(path)}`
+    const url = `https://storage.googleapis.com/${bucket.name}/${encodeURI(path)}`
     console.log('🔗 Public URL:', url)
 
     // Update product doc
     console.log('💾 Updating product document with image URL...')
-    await setDoc(doc(db, 'pos_products', params.productId), { image: url, updatedAt: new Date().toISOString() }, { merge: true })
+    const updatedAt = new Date().toISOString()
+    await setDoc(doc(db, 'pos_products', params.productId), {
+      image: url,
+      image_url: url,
+      imageUrl: url,
+      updatedAt
+    }, { merge: true })
     console.log('✅ Product document updated')
 
     console.log('🎉 Image generation completed successfully!')
     return { ok: true, url, revisedPrompt }
   } catch (error: any) {
-    console.error('❌ OpenAI Image Generation Error:', error)
+    console.error('❌ Replicate Image Generation Error:', error)
     console.error('Error stack:', error?.stack)
     
     let errorMsg = error?.message || 'Image generation failed'
@@ -278,12 +381,15 @@ export async function generateProductImageWithOpenAI(params: {
     } else if (error?.message?.includes('Could not load the default credentials')) {
       errorMsg = 'Firebase credentials not configured properly.'
       console.error('🔧 Firebase Admin SDK credentials issue - need FIREBASE_SERVICE_ACCOUNT_KEY or Application Default Credentials')
-    } else if (error?.message?.includes('OpenAI')) {
-      console.error('🤖 OpenAI API error details:', {
-        status: error?.status,
-        type: error?.type,
-        code: error?.code
-      })
+    } else if (error?.status === 402 || error?.code === 'insufficient_quota') {
+      errorMsg = 'Replicate credits exhausted. Review billing before retrying.'
+      console.error('💳 Replicate quota exceeded')
+    } else if (error?.status === 429) {
+      errorMsg = 'Replicate rate limit hit. Please wait before trying again.'
+      console.error('⏱️ Replicate rate limit reached')
+    } else if (error?.name === 'AbortError') {
+      errorMsg = 'Replicate request was aborted. Try again in a bit.'
+      console.error('🛑 Replicate request aborted')
     }
     
     console.error('💥 Final error result:', { ok: false, error: errorMsg })

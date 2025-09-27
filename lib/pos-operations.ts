@@ -74,23 +74,23 @@ export async function listPOSProducts(orgId: string, search?: string, limitN = 6
   }
 
   const hardLimit = Math.max(1, Math.min(500, limitN || 64))
-  // Try org-scoped, ordered query (fast if index exists)
+  // Fetch org-scoped products without requiring composite indexes
   try {
+    const scopedLimit = Math.min(500, Math.max(hardLimit, 100))
     const qy = query(
       collection(db, POS_PRODUCTS_COL),
       where('orgId', '==', orgId),
-      orderBy('updatedAt', 'desc'),
-      limit(hardLimit)
+      limit(scopedLimit)
     )
     const snap = await getDocs(qy)
     let rows = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))
 
-    // If nothing found (e.g., missing orgId on older docs), fallback to global collection once
     if (!rows.length) {
-      const allSnap = await getDocs(query(collection(db, POS_PRODUCTS_COL), limit(500)))
+      const allSnap = await getDocs(query(collection(db, POS_PRODUCTS_COL), limit(scopedLimit)))
       rows = allSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))
     }
 
+    rows.sort((a: any, b: any) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
     const mapped = rows.map(toPOSItem)
     if (!isSearching) _posProductsCache.set(cacheKey, { ts: Date.now(), items: mapped })
     if (isSearching) {
@@ -98,22 +98,10 @@ export async function listPOSProducts(orgId: string, search?: string, limitN = 6
       return mapped.filter(p => p.name.toLowerCase().includes(s) || p.brand?.toLowerCase().includes(s)).slice(0, hardLimit)
     }
     return mapped.slice(0, hardLimit)
-  } catch (err: any) {
-    const msg = String(err?.message || err)
-    const requiresIndex = msg.includes('requires an index')
-    // Fallback without orderBy to avoid index requirement
-    const qy2 = query(
-      collection(db, POS_PRODUCTS_COL),
-      where('orgId', '==', orgId),
-      limit(500)
-    )
-    const snap2 = await getDocs(qy2)
-    let rows = snap2.docs.map(d => ({ id: d.id, ...(d.data() as any) }))
-    if (!rows.length) {
-      const allSnap = await getDocs(query(collection(db, POS_PRODUCTS_COL), limit(500)))
-      rows = allSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))
-    }
-    // Client-side sort by updatedAt desc if present
+  } catch (err) {
+    console.error('Failed to list POS products', err)
+    const allSnap = await getDocs(query(collection(db, POS_PRODUCTS_COL), limit(500)))
+    const rows = allSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))
     rows.sort((a: any, b: any) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
     const mapped = rows.map(toPOSItem)
     if (!isSearching) _posProductsCache.set(cacheKey, { ts: Date.now(), items: mapped })

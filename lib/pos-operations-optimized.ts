@@ -130,15 +130,20 @@ export async function listPOSProducts(
       })
     } else {
       // Fall back to legacy structure
+      const scopedLimit = Math.min(500, Math.max(limit_ || 25, 100))
       const legacyQuery = query(
         collection(db, POS_PRODUCTS_COL),
         where('orgId', '==', orgId),
-        orderBy('updatedAt', 'desc'),
-        limit(limit_ || 25)
+        limit(scopedLimit)
       )
       
       const legacySnapshot = await getDocs(legacyQuery)
-      products = legacySnapshot.docs.map(doc => toPOSItem({ ...doc.data(), id: doc.id }))
+      const toLegacyItem = (doc: any) => toPOSItem({ ...doc.data(), id: doc.id })
+      const getUpdated = (item: POSProduct) => {
+        const meta = item as unknown as { updatedAt?: string; createdAt?: string }
+        return new Date(meta?.updatedAt || meta?.createdAt || 0).getTime()
+      }
+      products = legacySnapshot.docs.map(toLegacyItem).sort((a, b) => getUpdated(b) - getUpdated(a))
     }
     
   } catch (error) {
@@ -146,15 +151,20 @@ export async function listPOSProducts(
     
     // Fallback to legacy structure
     try {
+      const scopedLimit = Math.min(500, Math.max(limit_ || 25, 100))
       const legacyQuery = query(
         collection(db, POS_PRODUCTS_COL),
         where('orgId', '==', orgId),
-        orderBy('updatedAt', 'desc'),
-        limit(limit_ || 25)
+        limit(scopedLimit)
       )
       
       const legacySnapshot = await getDocs(legacyQuery)
-      products = legacySnapshot.docs.map(doc => toPOSItem({ ...doc.data(), id: doc.id }))
+      const toLegacyItem = (doc: any) => toPOSItem({ ...doc.data(), id: doc.id })
+      const getUpdated = (item: POSProduct) => {
+        const meta = item as unknown as { updatedAt?: string; createdAt?: string }
+        return new Date(meta?.updatedAt || meta?.createdAt || 0).getTime()
+      }
+      products = legacySnapshot.docs.map(toLegacyItem).sort((a, b) => getUpdated(b) - getUpdated(a))
       
     } catch (legacyError) {
       console.error('Both optimized and legacy queries failed:', legacyError)
@@ -264,7 +274,6 @@ export async function addPosOrder(orgId: string, userId: string, lines: POSOrder
       for (const line of lines) {
         try {
           let productRef
-          let inventoryUpdate
           
           if (useOptimized) {
             // Try optimized structure - update stock in product document
@@ -277,7 +286,7 @@ export async function addPosOrder(orgId: string, userId: string, lines: POSOrder
               
               // Calculate stock deduction
               const { base: baseToDeduct, loose: looseToDeduct } = computeIssueFromPieces(
-                line.qty, 
+                line.quantityPieces, 
                 currentStock.unitsPerBase || 1
               )
               
@@ -314,7 +323,7 @@ export async function addPosOrder(orgId: string, userId: string, lines: POSOrder
             
             if (invSnap.exists()) {
               const inv = invSnap.data() as InventoryRecord
-              const { base: baseToDeduct, loose: looseToDeduct } = computeIssueFromPieces(line.qty, inv.unitsPerBase || 1)
+              const { base: baseToDeduct, loose: looseToDeduct } = computeIssueFromPieces(line.quantityPieces, inv.unitsPerBase || 1)
               
               let newQtyBase = inv.qtyBase - baseToDeduct
               let newQtyLoose = inv.qtyLoose - looseToDeduct

@@ -1,0 +1,44 @@
+# Ignore local dependencies and build artifacts
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+
+# Electron packages and desktop-specific files
+electron/
+resources/
+
+# Generated scripts and binaries
+scripts/
+image-gen/
+run-generator.bat
+run-generator.ps1
+generate-products.bat
+generate-products.ps1
+
+# Local data exports and large reference assets
+odoo screenshots/
+data/*.pdf
+data/**/*.pdf
+data/*.txt
+data/**/*.txt
+
+# Hosting templates and download bundles
+download-hosting/
+website-download-template.html
+website-integration.html
+
+# Documentation and notes
+docs/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.cache/
+cache/
+tmp/
+temp/

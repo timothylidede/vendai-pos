@@ -24,11 +24,6 @@
       ]
     }
   ],
-  "functions": {
-    "app/api/**/*.ts": {
-      "runtime": "@vercel/node"
-    }
-  },
   "env": {
     "NEXT_PUBLIC_VERCEL_ENV": "production"
   }

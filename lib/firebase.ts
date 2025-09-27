@@ -5,11 +5,9 @@ import { getFirestore } from 'firebase/firestore';
 // Firebase configuration - use environment variables with fallbacks for production
 const getFirebaseConfig = () => {
   // In Electron/production, environment variables might be passed differently
-  const isElectron = typeof window !== 'undefined' && (window as any).electronAPI;
-  
   return {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDAH3xcghGGn1pQez0fczy6rBP9qqBWfx0',
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'auth.vendai.digital',
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'vendai-fa58c.firebaseapp.com',
     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'vendai-fa58c',
     storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'vendai-fa58c.firebasestorage.app',
     messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '1002924595563',

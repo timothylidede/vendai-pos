@@ -14,6 +14,7 @@ import { auth, db } from '@/lib/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { getInvitation, acceptInvitation } from '@/lib/invitation-operations';
+import { createOrgScaffold, ensureUniqueOrgId } from '@/lib/org-operations';
 import { notifyInvitationAccepted, notifyMemberJoined } from '@/lib/notification-operations';
 
 type UserRole = 'retailer' | 'distributor' | null;
@@ -111,7 +112,7 @@ export default function OnboardingPage() {
           setLoading(false);
         }
       } else {
-        router.push('/signup');
+        router.push('/login');
       }
     });
 
@@ -138,6 +139,9 @@ export default function OnboardingPage() {
     if (currentStep > 0) {
       setDirection(-1);
       setCurrentStep(s => s - 1);
+    } else {
+      // At first step, go back to chooser
+      router.push('/onboarding/choose');
     }
   };
 
@@ -166,6 +170,16 @@ export default function OnboardingPage() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }, { merge: true });
+
+        // Ensure org scaffold exists (safe if already created by org creator)
+        try {
+          await createOrgScaffold(data.organizationName, {
+            creatorUid: user.uid,
+            creatorEmail: user.email || null,
+          })
+        } catch (e) {
+          console.warn('Org scaffold ensure failed:', e)
+        }
 
         try {
           const acceptResult = await acceptInvitation(data.invitationId, user.uid);
@@ -200,12 +214,15 @@ export default function OnboardingPage() {
         }
       } else {
         const userDocRef = doc(db, 'users', user.uid);
+        // Generate a unique, slugified organization id
+        const { orgId, displayName } = await ensureUniqueOrgId(data.organizationName)
         await setDoc(userDocRef, {
           uid: user.uid,
           email: user.email,
           displayName: user.displayName || user.email?.split('@')[0] || 'User',
           role: data.role,
-          organizationName: data.organizationName,
+          organizationName: orgId,
+          organizationDisplayName: displayName,
           contactNumber: data.contactNumber,
           location: data.location,
           coordinates: data.coordinates,
@@ -214,6 +231,17 @@ export default function OnboardingPage() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }, { merge: true });
+
+        // Provision org scaffold to initialize org_settings and keep data empty
+        try {
+          await createOrgScaffold(orgId, {
+            creatorUid: user.uid,
+            creatorEmail: user.email || null,
+            displayName,
+          })
+        } catch (e) {
+          console.warn('Org scaffold provisioning failed:', e)
+        }
       }
       router.push('/modules');
     } catch (error) {
@@ -516,13 +544,8 @@ export default function OnboardingPage() {
 
                   {/* Navigation Buttons */}
                   <div className="flex justify-between mt-8">
-                    {!data.isJoiningExisting && currentStep > 0 ? (
-                      <Button
-                        onClick={handleBack}
-                        variant="outline"
-                        disabled={isSubmitting}
-                        className="px-6 py-3 bg-slate-800/60 hover:bg-slate-700/70 text-slate-300 border border-slate-500/60 hover:border-slate-400/80 rounded-xl transition-all duration-200"
-                      >
+                    {!data.isJoiningExisting ? (
+                      <Button onClick={handleBack} variant="outline" disabled={isSubmitting} className="px-6 py-3 bg-slate-800/60 hover:bg-slate-700/70 text-slate-300 border border-slate-500/60 hover:border-slate-400/80 rounded-xl transition-all duration-200">
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Back
                       </Button>
@@ -530,15 +553,7 @@ export default function OnboardingPage() {
                       <div></div>
                     )}
 
-                    <Button
-                      onClick={handleNext}
-                      disabled={!canProceed() || isSubmitting}
-                      className={`px-6 py-3 rounded-xl font-medium transition-all duration-200 flex items-center ${
-                        canProceed() && !isSubmitting
-                          ? 'bg-white hover:bg-gray-100 text-black shadow-lg hover:shadow-xl transform hover:scale-[1.02]'
-                          : 'bg-slate-700/30 text-slate-500 cursor-not-allowed'
-                      }`}
-                    >
+                    <Button onClick={handleNext} disabled={!canProceed() || isSubmitting} className={`px-6 py-3 rounded-xl font-medium transition-all duration-200 flex items-center ${canProceed() && !isSubmitting ? 'bg-white hover:bg-gray-100 text-black shadow-lg hover:shadow-xl transform hover:scale-[1.02]' : 'bg-slate-700/30 text-slate-500 cursor-not-allowed'}`}>
                       {isSubmitting ? (
                         <>
                           <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin mr-2"></div>

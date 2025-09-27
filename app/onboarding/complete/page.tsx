@@ -51,8 +51,8 @@ export default function OnboardingCompletePage() {
           setLoading(false);
         }
       } else {
-        console.log('No user logged in, redirecting to signup');
-        router.push('/signup');
+        console.log('No user logged in, redirecting to login');
+        router.push('/login');
       }
     });
 

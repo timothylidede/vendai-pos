@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   const settings = await getOrgSettings(orgId)
   const themeHex = settings?.theme_bg_hex || '#F6F4F2'
 
-  const prompt = `Photorealistic product photo of the item shown in the reference image(s). Output a single centered product placed on a brown mahogany wooden shelf with visible wood grain. Lighting: warm, studio-quality, 'precious' accent lighting from top-left creating soft highlights and gentle shadows. Background color: ${themeHex}. Camera: 50mm, slight 10° angle, product fully visible, no additional props. Keep product proportions and text readable. Ensure consistent composition across all SKUs: product centered, same distance from camera, shelf visible across bottom third of frame. High detail, high resolution, natural specular highlights on glossy surfaces. If no license to reproduce brand logos, render neutral label placeholders instead. Output format: 2048x2560 JPEG.`
+  const prompt = `Photorealistic product photo. Single centered product on a brown mahogany wooden shelf (visible grain). Background: matte slate (${themeHex}). Warm studio light from top-left, 50mm lens ~10° angle. No props. Keep proportions and label legible. Consistent framing: shelf across bottom third. High detail, natural highlights. 2048x2560.`
 
   return NextResponse.json({
     ok: true,

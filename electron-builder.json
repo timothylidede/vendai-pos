@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "com.vendai.pos",
-  "productName": "VendAI POS",
+  "appId": "com.vendai.app",
+  "productName": "Vendai",
   "copyright": "Copyright © 2024 Timothy Lidede",
   "directories": {
     "output": "dist"
@@ -35,7 +35,8 @@
       { "target": "nsis", "arch": ["x64"] }
     ],
     "artifactName": "${productName}-${version}-Windows-Setup.${ext}",
-    "requestedExecutionLevel": "asInvoker"
+    "requestedExecutionLevel": "asInvoker",
+    "icon": "build/icons/icon.ico"
   },
   "nsis": {
     "oneClick": false,
@@ -61,8 +62,8 @@
   
   "protocols": [
     {
-      "name": "VendAI",
-      "schemes": ["vendai"]
+      "name": "VendAI POS",
+      "schemes": ["vendai-pos"]
     }
   ]
 }

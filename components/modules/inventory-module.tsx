@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Package, AlertTriangle, TrendingUp, Upload, FileText, PlusCircle, Download, Check, ArrowLeft } from "lucide-react"
+import { Package, AlertTriangle, TrendingUp, Upload, FileText, PlusCircle, Download, Check, ArrowLeft, Wand2 } from "lucide-react"
 import { motion } from "framer-motion"
 import { AIProcessingModal } from "../ai-processing-modal"
 import { db } from "@/lib/firebase"
 import { collection, getDocs, query, where, limit, orderBy, doc, setDoc, addDoc, deleteDoc, getDoc } from "firebase/firestore"
 import { POS_PRODUCTS_COL, INVENTORY_COL } from "@/lib/pos-operations"
+import { useAuth } from "@/contexts/auth-context"
 
 interface ProcessingStep {
   id: string;
@@ -46,7 +47,7 @@ const getStatusIcon = (status: string) => {
 
 export function InventoryModule() {
   const [activeTab, setActiveTab] = useState<'products' | 'new'>('products')
-  const [orgId, setOrgId] = useState<string>('DEMO_ORG')
+  const [orgId, setOrgId] = useState<string>('')
   const [products, setProducts] = useState<any[]>([])
   const [loadingProducts, setLoadingProducts] = useState<boolean>(false)
   const [isDownloading, setIsDownloading] = useState(false)
@@ -59,6 +60,9 @@ export function InventoryModule() {
   const [isEntering, setIsEntering] = useState(true)
   const [isExiting, setIsExiting] = useState(false)
   const [invMap, setInvMap] = useState<Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }>>({})
+  const [generatingId, setGeneratingId] = useState<string | null>(null)
+  const [bulkGenerating, setBulkGenerating] = useState<boolean>(false)
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 })
   const [hasPricelist, setHasPricelist] = useState<boolean>(false)
   const [showMissingStockAlert, setShowMissingStockAlert] = useState<boolean>(false)
   const [processingStats, setProcessingStats] = useState({
@@ -78,6 +82,7 @@ export function InventoryModule() {
   const [editingProduct, setEditingProduct] = useState<any | null>(null)
 
   const router = useRouter()
+  const { userData } = useAuth()
 
   // Handle entrance animation
   useEffect(() => {
@@ -87,60 +92,144 @@ export function InventoryModule() {
     return () => clearTimeout(timer)
   }, [])
 
+  // Derive orgId from authenticated user, if available
+  useEffect(() => {
+    if (userData?.organizationName) {
+      setOrgId(userData.organizationName)
+    }
+  }, [userData?.organizationName])
+
+  // Helper: load products and inventory without composite index
+  const loadOrgProducts = async (org: string) => {
+    if (!org) {
+      setProducts([])
+      setHasPricelist(false)
+      setShowMissingStockAlert(false)
+      return
+    }
+    try {
+      setLoadingProducts(true)
+      // Products for specific org only (no orderBy to avoid composite index)
+      const qy = query(
+        collection(db, POS_PRODUCTS_COL),
+        where('orgId', '==', org),
+        limit(1000)
+      )
+      const snap = await getDocs(qy)
+      // Client-side sort by updatedAt desc when present
+      const prods = snap.docs
+        .map(d => ({ id: d.id, ...d.data() as any }))
+        .sort((a: any, b: any) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
+
+      // Inventory for this org
+      const invQ = query(collection(db, INVENTORY_COL), where('orgId', '==', org), limit(1000))
+      const invSnap = await getDocs(invQ)
+      const map: Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }> = {}
+      invSnap.docs.forEach(d => {
+        const v: any = d.data()
+        if (v?.productId) map[v.productId] = { qtyBase: v.qtyBase || 0, qtyLoose: v.qtyLoose || 0, unitsPerBase: v.unitsPerBase || 1 }
+      })
+
+      // Compute stock + status
+      const augmented = prods.map((p: any) => {
+        const inv = map[p.id]
+        const unitsPerBase = inv?.unitsPerBase || p.unitsPerBase || p.wholesaleQuantity || 1
+        const stockPieces: number = inv ? inv.qtyBase * unitsPerBase + inv.qtyLoose : 0
+        const status = inv
+          ? (stockPieces === 0 ? 'out' : (stockPieces < (p.minStock || unitsPerBase) ? 'low' : 'good'))
+          : 'unknown'
+        return {
+          ...p,
+          stock: stockPieces,
+          status,
+          unitsPerBase
+        }
+      })
+
+      setProducts(augmented)
+      setInvMap(map)
+      const anyInventory = invSnap.size > 0
+      const anyProducts = prods.length > 0
+      setHasPricelist(anyProducts || anyInventory)
+      setShowMissingStockAlert(anyProducts && !anyInventory)
+    } catch (e) {
+      // noop
+    } finally {
+      setLoadingProducts(false)
+    }
+  }
+
   // Fetch products and inventory for org
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoadingProducts(true)
-        // Load products for specific organization ONLY
-        const qy = query(
-          collection(db, POS_PRODUCTS_COL), 
-          where('orgId', '==', orgId),
-          orderBy('updatedAt', 'desc'),
-          limit(1000)
-        )
-        const snap = await getDocs(qy)
-        const prods = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-
-        // Load inventory for this org
-        const invQ = query(collection(db, INVENTORY_COL), where('orgId', '==', orgId), limit(1000))
-        const invSnap = await getDocs(invQ)
-        const map: Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }> = {}
-        invSnap.docs.forEach(d => {
-          const v: any = d.data()
-          if (v?.productId) map[v.productId] = { qtyBase: v.qtyBase || 0, qtyLoose: v.qtyLoose || 0, unitsPerBase: v.unitsPerBase || 1 }
-        })
-
-        // Compute stock + status
-        const augmented = prods.map((p: any) => {
-          const inv = map[p.id]
-          const unitsPerBase = inv?.unitsPerBase || p.unitsPerBase || p.wholesaleQuantity || 1
-          const stockPieces: number = inv ? inv.qtyBase * unitsPerBase + inv.qtyLoose : 0
-          const status = inv
-            ? (stockPieces === 0 ? 'out' : (stockPieces < (p.minStock || unitsPerBase) ? 'low' : 'good'))
-            : 'unknown'
-          return {
-            ...p,
-            stock: stockPieces,
-            status,
-            unitsPerBase
-          }
-        })
-
-        setProducts(augmented)
-        setInvMap(map)
-        const anyInventory = invSnap.size > 0
-        const anyProducts = prods.length > 0
-        setHasPricelist(anyProducts || anyInventory)
-        setShowMissingStockAlert(anyProducts && !anyInventory)
-      } catch (e) {
-        // noop
-      } finally {
-        setLoadingProducts(false)
-      }
-    }
-    load()
+    loadOrgProducts(orgId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId])
+
+  const handleGenerateImage = async (productId: string) => {
+    if (!orgId || generatingId) return
+    try {
+      setGeneratingId(productId)
+      const res = await fetch('/api/image/openai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          orgId, 
+          productId, 
+          useGoogleRefs: true,
+          promptStyle: `Photorealistic product photo; single centered product on a brown mahogany wooden shelf (visible grain); matte slate background (#2b2f33); warm studio lighting from top-left; 50mm lens slight 10° angle; high detail; natural highlights; no extra props`
+        })
+      })
+      // ignore body; quick refresh regardless of success
+      await loadOrgProducts(orgId)
+    } catch {
+      // noop
+    } finally {
+      setGeneratingId(null)
+    }
+  }
+
+  const handleBulkGenerate = async () => {
+    if (!orgId || bulkGenerating) return
+    const idsMissing = products.filter(p => !p.image).map(p => p.id)
+    if (idsMissing.length === 0) return
+    const BULK_LIMIT = 30
+    const CONCURRENCY = 3
+    const target = idsMissing.slice(0, BULK_LIMIT)
+    setBulkGenerating(true)
+    setBulkProgress({ done: 0, total: target.length })
+    try {
+      for (let i = 0; i < target.length; i += CONCURRENCY) {
+        const batch = target.slice(i, i + CONCURRENCY)
+        await Promise.all(batch.map(async (productId) => {
+          try {
+            const res = await fetch('/api/image/openai', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                orgId, 
+                productId, 
+                useGoogleRefs: true,
+                promptStyle: `Photorealistic product photo; single centered product on a brown mahogany wooden shelf (visible grain); matte slate background (#2b2f33); warm studio lighting from top-left; 50mm lens slight 10° angle; high detail; natural highlights; no extra props`
+              })
+            })
+            const json = await res.json().catch(() => ({} as any))
+            const url = (json as any)?.url as string | undefined
+            if (url) {
+              setProducts(prev => prev.map(p => p.id === productId ? { ...p, image: url } : p))
+            }
+          } catch {
+            // ignore
+          } finally {
+            setBulkProgress(prev => ({ done: Math.min(prev.done + 1, prev.total), total: prev.total }))
+          }
+        }))
+      }
+      // Final refresh to catch any lagging writes
+      await loadOrgProducts(orgId)
+    } finally {
+      setBulkGenerating(false)
+    }
+  }
 
   const handleBackClick = () => {
     if (isExiting) return
@@ -150,43 +239,12 @@ export function InventoryModule() {
     }, 200)
   }
 
+  // Compact, minimal steps for a faster UX
   const initializeProcessingSteps = (): ProcessingStep[] => [
-    {
-      id: 'file_validation',
-      title: 'File Validation',
-      description: 'Validating file format, size, and content structure',
-      status: 'pending'
-    },
-    {
-      id: 'text_extraction',
-      title: 'Document Analysis',
-      description: 'Extracting text content and analyzing document structure',
-      status: 'pending'
-    },
-    {
-      id: 'ai_extraction',
-      title: 'AI Data Processing',
-      description: 'Using advanced AI to extract and structure product information',
-      status: 'pending'
-    },
-    {
-      id: 'data_validation',
-      title: 'Data Validation',
-      description: 'Validating extracted data and cleaning product information',
-      status: 'pending'
-    },
-    {
-      id: 'image_generation',
-      title: 'Product Image Generation',
-      description: 'Generating high-quality product images using AI',
-      status: 'pending'
-    },
-    {
-      id: 'finalization',
-      title: 'Processing Complete',
-      description: 'Finalizing product data and preparing for import',
-      status: 'pending'
-    }
+    { id: 'file_validation', title: 'Validate', description: '', status: 'pending' },
+    { id: 'ai_extraction', title: 'Extract', description: '', status: 'pending' },
+    { id: 'importing', title: 'Import', description: '', status: 'pending' },
+    { id: 'finalization', title: 'Done', description: '', status: 'pending' }
   ]
 
   const updateStepStatus = (stepId: string, status: ProcessingStep['status'], progress?: number) => {
@@ -271,22 +329,16 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
       await new Promise(resolve => setTimeout(resolve, 500))
       updateStepStatus('file_validation', 'completed', 100)
 
-      // Step 2: Text extraction
-      updateStepStatus('text_extraction', 'processing', 0)
-      
+      // Step 2: AI extraction/processing
+      updateStepStatus('ai_extraction', 'processing', 0)
+
       const formData = new FormData()
       formData.append('file', file)
       formData.append('orgId', orgId)
-
-      await new Promise(resolve => setTimeout(resolve, 800))
-      updateStepStatus('text_extraction', 'completed', 100)
-
-      // Step 3: Enhanced AI processing with analytics
-      updateStepStatus('ai_extraction', 'processing', 0)
       const ext = (file.name.split('.').pop() || '').toLowerCase()
       
       if (ext === 'csv') {
-        // Use enhanced processing API
+        // Call processing API
         const response = await fetch('/api/inventory/process-enhanced', { method: 'POST', body: formData })
         const result = await response.json().catch(() => ({} as any))
         
@@ -295,87 +347,24 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
           updateStepStatus('ai_extraction', 'error')
           return
         }
-
-        // Update statistics from enhanced processing
-        if (result.stats) {
-          setProcessingStats(prevStats => ({
-            ...prevStats,
-            totalProducts: result.stats.totalProducts,
-            productsAdded: result.stats.productsAdded,
-            productsUpdated: result.stats.productsUpdated,
-            duplicatesFound: result.stats.duplicatesFound,
-            suppliersAnalyzed: result.stats.suppliersAnalyzed,
-            locationMatches: result.stats.locationMatches,
-            estimatedTimeRemaining: Math.max(0, (result.stats.totalProducts - result.stats.productsAdded - result.stats.productsUpdated) * 0.1)
-          }))
-        }
-
         updateStepStatus('ai_extraction', 'completed', 100)
       } else {
-        setProcessingError('Currently, only CSV uploads are supported with full analytics. PDF/Excel support coming soon.')
+        setProcessingError('Currently, only CSV uploads are supported. PDF/Excel support coming soon.')
         updateStepStatus('ai_extraction', 'error')
         return
       }
-
-      // Step 4: Data validation with progress updates
-      updateStepStatus('data_validation', 'processing', 0)
-      const currentStats = processingStats
-      
-      // Simulate validation progress
-      for (let i = 0; i <= 100; i += 20) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-        updateStepStatus('data_validation', 'processing', i)
-        
-        // Update step with product count
-        setProcessingSteps(prev => prev.map(step => 
-          step.id === 'data_validation' ? { 
-            ...step, 
-            productsProcessed: Math.round(currentStats.productsAdded * i / 100),
-            totalProducts: currentStats.totalProducts
-          } : step
-        ))
-      }
-      updateStepStatus('data_validation', 'completed', 100)
-
-      // Step 5: Image generation (show progress)
-      updateStepStatus('image_generation', 'processing', 0)
-      for (let i = 0; i <= 100; i += 25) {
-        await new Promise(resolve => setTimeout(resolve, 300))
-        updateStepStatus('image_generation', 'processing', i)
-      }
-      updateStepStatus('image_generation', 'completed', 100)
-
-      // Step 6: Finalization
-      updateStepStatus('finalization', 'processing', 0)
+      // Step 3: Importing
+      updateStepStatus('importing', 'processing', 0)
       await new Promise(resolve => setTimeout(resolve, 400))
+      updateStepStatus('importing', 'completed', 100)
+
+      // Step 4: Finalization
+      updateStepStatus('finalization', 'processing', 0)
+      await new Promise(resolve => setTimeout(resolve, 200))
       updateStepStatus('finalization', 'completed', 100)
 
       // Success: reload products from Firestore for Products tab
-      try {
-        setLoadingProducts(true)
-        // Load products for specific organization ONLY
-        const qy = query(
-          collection(db, POS_PRODUCTS_COL), 
-          where('orgId', '==', orgId),
-          orderBy('updatedAt', 'desc'),
-          limit(1000)
-        )
-        const snap = await getDocs(qy)
-        const prods = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        const invQ = query(collection(db, INVENTORY_COL), where('orgId', '==', orgId), limit(1000))
-        const invSnap = await getDocs(invQ)
-        const map: Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }> = {}
-        invSnap.docs.forEach(d => { const v: any = d.data(); if (v?.productId) map[v.productId] = { qtyBase: v.qtyBase || 0, qtyLoose: v.qtyLoose || 0, unitsPerBase: v.unitsPerBase || 1 } })
-        const augmented = prods.map((p: any) => {
-          const inv = map[p.id]; const unitsPerBase = inv?.unitsPerBase || p.unitsPerBase || p.wholesaleQuantity || 1; const stockPieces: number = inv ? inv.qtyBase * unitsPerBase + inv.qtyLoose : 0; const status = inv ? (stockPieces === 0 ? 'out' : (stockPieces < (p.minStock || unitsPerBase) ? 'low' : 'good')) : 'unknown'; return { ...p, stock: stockPieces, status, unitsPerBase }
-        })
-        setProducts(augmented)
-        setInvMap(map)
-        setHasPricelist(augmented.length > 0)
-        setShowMissingStockAlert(augmented.length > 0 && invSnap.size === 0)
-      } finally {
-        setLoadingProducts(false)
-      }
+      await loadOrgProducts(orgId)
       
       setProcessedProducts([])
       setTimeout(() => setIsProcessingModalOpen(false), 1200)
@@ -469,6 +458,23 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
               </button>
             </div>
           </div>
+          {activeTab === 'products' && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleBulkGenerate}
+                disabled={bulkGenerating || products.filter(p => !p.image).length === 0}
+                className="group relative w-auto h-10 px-3 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] disabled:opacity-50"
+                title="Generate images for products missing images"
+              >
+                <Wand2 className="w-5 h-5 text-slate-200 group-hover:text-white mr-2" />
+                <span className="text-slate-200 group-hover:text-white text-sm font-medium">
+                  {bulkGenerating
+                    ? `Generating ${bulkProgress.done}/${bulkProgress.total}`
+                    : `Generate images (${products.filter(p => !p.image).length})`}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -476,6 +482,25 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
       <div className="flex-1 overflow-auto">
         {activeTab === 'products' && (
           <div className="p-4">
+            {/* Products toolbar */}
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur">
+              <div className="flex items-center gap-4 text-sm">
+                <span className="text-slate-300">Products: <span className="text-white font-semibold">{products.length}</span></span>
+                <span className="text-slate-300">Missing images: <span className="text-white font-semibold">{products.filter(p => !p.image).length}</span></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleBulkGenerate}
+                  disabled={bulkGenerating || products.filter(p => !p.image).length === 0}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/15 bg-slate-900/60 text-slate-200 hover:bg-slate-800/70 disabled:opacity-50"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  {bulkGenerating
+                    ? `Generating ${bulkProgress.done}/${bulkProgress.total}`
+                    : `Generate images (${products.filter(p => !p.image).length})`}
+                </button>
+              </div>
+            </div>
             {showMissingStockAlert && (
               <div className="mb-4 rounded-xl border border-yellow-400/30 bg-yellow-500/10 text-yellow-200 px-4 py-3 backdrop-blur-md">
                 Stock counts aren't set for this org yet. Not mandatory, but add them for accurate POS and alerts.
@@ -500,9 +525,24 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                   onClick={() => { setEditingProduct(item); setIsModalOpen(true) }}
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.03] via-transparent to-purple-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                  <div className="aspect-square w-full bg-gradient-to-br from-slate-800/60 to-slate-700/40 flex items-center justify-center relative">
+                  <div className="aspect-square w-full bg-gradient-to-br from-slate-800/60 to-slate-700/40 flex items-center justify-center relative overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-blue-500/[0.02] via-transparent to-blue-600/[0.03] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                    <Package className="w-16 h-16 text-slate-400 group-hover:scale-125 group-hover:text-blue-300 group-hover:rotate-12 transition-all duration-500 relative z-10" />
+                    {item.image ? (
+                      <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500" />
+                    ) : (
+                      <Package className="w-16 h-16 text-slate-400 group-hover:scale-125 group-hover:text-blue-300 group-hover:rotate-12 transition-all duration-500 relative z-10" />
+                    )}
+                    {/* Generate image quick action */}
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleGenerateImage(item.id) }}
+                        disabled={!!generatingId || bulkGenerating}
+                        className="px-2 py-1 text-xs rounded-md border border-white/20 bg-slate-900/60 text-slate-200 hover:bg-slate-800/70 disabled:opacity-50"
+                        title={generatingId === item.id ? 'Generating…' : 'Generate image'}
+                      >
+                        {generatingId === item.id || bulkGenerating ? 'Generating…' : 'Generate Img'}
+                      </button>
+                    </div>
                   </div>
                   <div className="p-4 relative">
                     <h4 className="text-slate-200 font-medium text-sm truncate group-hover:text-white transition-colors duration-300">{item.name}</h4>
@@ -549,12 +589,12 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                       )}
                     </div>
                     <h4 className={`text-slate-100 font-semibold text-xl mb-3 group-hover:text-white transition-colors duration-300 ${processedProducts.length > 0 ? 'text-green-400' : ''}`}>
-                      {processedProducts.length > 0 ? 'Processing Complete!' : 'AI Document Processing'}
+                      {processedProducts.length > 0 ? 'Done' : 'Upload pricelist'}
                     </h4>
                     <p className={`text-slate-400 text-sm leading-relaxed group-hover:text-slate-300 transition-colors duration-300 ${processedProducts.length > 0 ? 'text-green-300' : ''}`}>
                       {processedProducts.length > 0 
-                        ? `Successfully processed ${processedProducts.length} products with AI-generated images and structured data` 
-                        : 'Upload inventory files (CSV, Excel, PDF) for intelligent AI processing with automatic product extraction and image generation'}
+                        ? `${processedProducts.length} products processed`
+                        : 'CSV, Excel, or PDF. We parse items and add them.'}
                     </p>
                   </div>
                 </div>
@@ -592,42 +632,20 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                       <div className="w-24 h-24 mx-auto mb-6 rounded-2xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] flex items-center justify-center group-hover:scale-105 transition-all duration-500 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)]">
                         <Upload className="w-12 h-12 text-slate-300 group-hover:text-blue-300 transition-all duration-500" />
                       </div>
-                      <h4 className="text-slate-100 font-semibold text-xl mb-3 group-hover:text-white transition-colors duration-300">Re-upload price list</h4>
-                      <p className="text-slate-400 text-sm leading-relaxed group-hover:text-slate-300 transition-colors duration-300">Re-upload a CSV to update products; include orgId to create inventory stubs for unlocking modules.</p>
+                      <h4 className="text-slate-100 font-semibold text-xl mb-3 group-hover:text-white transition-colors duration-300">Re-upload pricelist</h4>
+                      <p className="text-slate-400 text-sm leading-relaxed group-hover:text-slate-300 transition-colors duration-300">CSV/XLSX/PDF supported. Org ID optional.</p>
                       <form className="space-y-3 mt-4" onSubmit={(e) => e.preventDefault()}>
                         <div className="flex items-center space-x-2">
                           <input className="flex-1 bg-slate-800/60 border border-white/10 rounded-lg px-3 py-2 text-slate-200" placeholder="Organization ID" value={orgId} onChange={e => setOrgId(e.target.value)} />
                         </div>
                         <div>
-                          <input id="csv-reupload" type="file" className="hidden" accept=".csv" onChange={async (ev) => {
+                          <input id="csv-reupload" type="file" className="hidden" accept=".csv,.xlsx,.xls,.pdf" onChange={async (ev) => {
                             const f = ev.target.files?.[0]; if (!f) return;
                             const fd = new FormData(); fd.append('file', f); fd.append('orgId', orgId);
-                            const res = await fetch('/api/inventory/upload', { method: 'POST', body: fd });
+                            const res = await fetch('/api/inventory/process-enhanced', { method: 'POST', body: fd });
                             ev.currentTarget.value = ''
                             if (res.ok) {
-                              setLoadingProducts(true)
-                              try {
-                                // Load products for specific organization ONLY  
-                                const qy = query(
-                                  collection(db, POS_PRODUCTS_COL), 
-                                  where('orgId', '==', orgId),
-                                  orderBy('updatedAt', 'desc'),
-                                  limit(1000)
-                                )
-                                const snap = await getDocs(qy)
-                                const prods = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-                                const invQ = query(collection(db, INVENTORY_COL), where('orgId', '==', orgId), limit(1000))
-                                const invSnap = await getDocs(invQ)
-                                const map: Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }> = {}
-                                invSnap.docs.forEach(d => { const v: any = d.data(); if (v?.productId) map[v.productId] = { qtyBase: v.qtyBase || 0, qtyLoose: v.qtyLoose || 0, unitsPerBase: v.unitsPerBase || 1 } })
-                                const augmented = prods.map((p: any) => {
-                                  const inv = map[p.id]; const unitsPerBase = inv?.unitsPerBase || p.unitsPerBase || p.wholesaleQuantity || 1; const stockPieces: number = inv ? inv.qtyBase * unitsPerBase + inv.qtyLoose : 0; const status = inv ? (stockPieces === 0 ? 'out' : (stockPieces < (p.minStock || unitsPerBase) ? 'low' : 'good')) : 'unknown'; return { ...p, stock: stockPieces, status, unitsPerBase }
-                                })
-                                setProducts(augmented)
-                                setInvMap(map)
-                                setHasPricelist(augmented.length > 0)
-                                setShowMissingStockAlert(augmented.length > 0 && invSnap.size === 0)
-                              } finally { setLoadingProducts(false) }
+                              await loadOrgProducts(orgId)
                             }
                           }} />
                           <label htmlFor="csv-reupload" className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 transition-all duration-300 cursor-pointer"><Upload className="w-4 h-4" /><span>Upload CSV</span></label>
@@ -716,52 +734,8 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
               orgId={orgId}
               initial={editingProduct}
               onCancel={() => setIsModalOpen(false)}
-              onSaved={() => { setIsModalOpen(false); setEditingProduct(null); /* reload */ (async () => {
-                setLoadingProducts(true)
-                try {
-                  // Load products for specific organization ONLY
-                  const qy = query(
-                    collection(db, POS_PRODUCTS_COL), 
-                    where('orgId', '==', orgId),
-                    orderBy('updatedAt', 'desc'),
-                    limit(1000)
-                  )
-                  const snap = await getDocs(qy)
-                  const prods = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-                  const invQ = query(collection(db, INVENTORY_COL), where('orgId', '==', orgId), limit(1000))
-                  const invSnap = await getDocs(invQ)
-                  const map: Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }> = {}
-                  invSnap.docs.forEach(d => { const v: any = d.data(); if (v?.productId) map[v.productId] = { qtyBase: v.qtyBase || 0, qtyLoose: v.qtyLoose || 0, unitsPerBase: v.unitsPerBase || 1 } })
-                  const augmented = prods.map((p: any) => {
-                    const inv = map[p.id]; const unitsPerBase = inv?.unitsPerBase || p.unitsPerBase || p.wholesaleQuantity || 1; const stockPieces: number = inv ? inv.qtyBase * unitsPerBase + inv.qtyLoose : 0; const status = inv ? (stockPieces === 0 ? 'out' : (stockPieces < (p.minStock || unitsPerBase) ? 'low' : 'good')) : 'unknown'; return { ...p, stock: stockPieces, status, unitsPerBase }
-                  })
-                  setProducts(augmented)
-                  setInvMap(map)
-                } finally { setLoadingProducts(false) }
-              })() }}
-              onDeleted={() => { setIsModalOpen(false); setEditingProduct(null); /* trigger reload via saved */ (async () => {
-                setLoadingProducts(true)
-                try {
-                  // Load products for specific organization ONLY
-                  const qy = query(
-                    collection(db, POS_PRODUCTS_COL), 
-                    where('orgId', '==', orgId),
-                    orderBy('updatedAt', 'desc'),
-                    limit(1000)
-                  )
-                  const snap = await getDocs(qy)
-                  const prods = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-                  const invQ = query(collection(db, INVENTORY_COL), where('orgId', '==', orgId), limit(1000))
-                  const invSnap = await getDocs(invQ)
-                  const map: Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }> = {}
-                  invSnap.docs.forEach(d => { const v: any = d.data(); if (v?.productId) map[v.productId] = { qtyBase: v.qtyBase || 0, qtyLoose: v.qtyLoose || 0, unitsPerBase: v.unitsPerBase || 1 } })
-                  const augmented = prods.map((p: any) => {
-                    const inv = map[p.id]; const unitsPerBase = inv?.unitsPerBase || p.unitsPerBase || p.wholesaleQuantity || 1; const stockPieces: number = inv ? inv.qtyBase * unitsPerBase + inv.qtyLoose : 0; const status = inv ? (stockPieces === 0 ? 'out' : (stockPieces < (p.minStock || unitsPerBase) ? 'low' : 'good')) : 'unknown'; return { ...p, stock: stockPieces, status, unitsPerBase }
-                  })
-                  setProducts(augmented)
-                  setInvMap(map)
-                } finally { setLoadingProducts(false) }
-              })() }}
+              onSaved={() => { setIsModalOpen(false); setEditingProduct(null); (async () => { await loadOrgProducts(orgId) })() }}
+              onDeleted={() => { setIsModalOpen(false); setEditingProduct(null); (async () => { await loadOrgProducts(orgId) })() }}
             />
           </div>
         </div>
@@ -804,6 +778,7 @@ function ProductForm({ orgId, initial, onCancel, onSaved, onDeleted }: ProductFo
     try {
       const now = new Date().toISOString()
       const data: any = {
+        orgId,
         name: name.trim(),
         brand: brand.trim() || undefined,
         category: category.trim() || undefined,

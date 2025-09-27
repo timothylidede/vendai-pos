@@ -33,12 +33,17 @@
     "release:mac": "npm run build && electron-builder --mac --x64 --arm64 --publish=always",
     "release:info": "node scripts/create-release.js info",
     "release:help": "node scripts/create-release.js help",
-    "images:generate": "node scripts/generate-product-images.cjs"
+    "images:generate": "node scripts/generate-product-images.cjs",
+    "deploy:vercel": "powershell -ExecutionPolicy Bypass -File scripts/deploy-vercel.ps1",
+    "deploy:vercel:cmd": "scripts/deploy-vercel.bat",
+    "build:web": "next build",
+    "build:desktop": "npm run build && electron-builder --publish=never"
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^1.16.10",
     "@googlemaps/react-wrapper": "^1.2.0",
     "@hookform/resolvers": "^3.10.0",
+    "@octokit/rest": "^22.0.0",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
     "@radix-ui/react-aspect-ratio": "1.1.1",

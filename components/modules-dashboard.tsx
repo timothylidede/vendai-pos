@@ -17,6 +17,7 @@ import { NotificationSystem } from '@/components/notification-system'
 import { OrganizationSettings } from '@/components/organization-settings'
 import { ProfileManagement } from '@/components/profile-management'
 import { hasInventory } from '@/lib/pos-operations'
+import { getOrgSettings } from '@/lib/org-operations'
 
 const retailerModules = [
   {
@@ -120,25 +121,36 @@ export function ModulesDashboard() {
         const isNewUser = localStorage.getItem('vendai-first-login') !== 'false';
         setIsFirstTime(isNewUser);
         if (isNewUser) {
-          setTimeout(() => {
-            setShowTooltip(userData.role === 'retailer' ? 'Point of Sale' : 'Logistics');
-          }, 2000);
-          setTimeout(() => {
-            localStorage.setItem('vendai-first-login', 'false');
-          }, 5000);
+          // Mark first-login consumed without showing any tooltips/banners
+          localStorage.setItem('vendai-first-login', 'false');
         }
       }
     }
   }, [user, userData, loading, router]);
 
-  // Check if inventory exists for org; if not, force highlight Inventory and disable others
+  // Check if inventory exists or org_settings marks not-ready; if not, force highlight Inventory and disable others
   useEffect(() => {
     let active = true
     ;(async () => {
       if (!user || !userData) return
-      const has = await hasInventory(orgId)
-      if (active) setNeedsInventory(!has)
-      if (!has) setShowTooltip('Inventory')
+      // Prefer org_settings inventory_status when available
+      let needs = true
+      try {
+        const settings = await getOrgSettings(orgId)
+        if (settings?.inventory_status === 'ready') {
+          needs = false
+        } else if (settings?.inventory_status === 'in-progress' || settings?.inventory_status === 'not-started') {
+          needs = true
+        } else {
+          // Fall back to actual inventory presence
+          needs = !(await hasInventory(orgId))
+        }
+      } catch (e) {
+        // On failure, fallback to inventory presence
+        needs = !(await hasInventory(orgId))
+      }
+      if (active) setNeedsInventory(needs)
+      if (needs) setShowTooltip('Inventory')
     })()
     return () => { active = false }
   }, [user, userData, orgId])
@@ -153,10 +165,10 @@ export function ModulesDashboard() {
     setShowLogoutModal(false);
     setShowProfileDropdown(false);
     try {
-      await signOut(auth);
-      localStorage.removeItem('vendai-user-role');
-      localStorage.removeItem('vendai-first-login');
-      router.push('/');
+  await signOut(auth);
+  localStorage.removeItem('vendai-user-role');
+  localStorage.removeItem('vendai-first-login');
+  router.push('/login');
     } catch (error) {
       console.error('Error signing out:', error);
     }
@@ -305,7 +317,6 @@ export function ModulesDashboard() {
             >
               <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.03] via-transparent to-pink-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
               <UserCircle className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
-              <ChevronDown className={`absolute -bottom-1 -right-1 w-2.5 h-2.5 text-slate-400 transition-all duration-200 ${showProfileDropdown ? 'rotate-180 text-white' : ''}`} />
             </button>
 
             {/* Glassmorphic Profile Dropdown */}
@@ -337,7 +348,7 @@ export function ModulesDashboard() {
                           {userData?.displayName || user?.displayName || user?.email?.split('@')[0] || 'User'}
                         </h3>
                         <p className="text-slate-300 text-sm capitalize">{userData?.role || 'Loading...'}</p>
-                        {userData?.organizationName && (
+                        {(userData?.organizationDisplayName || userData?.organizationName) && (
                           <p className="text-slate-400 text-xs">{userData.organizationName}</p>
                         )}
                         <div className="flex items-center space-x-2 mt-1">
@@ -390,7 +401,7 @@ export function ModulesDashboard() {
                         <div className="text-left">
                           <div className="text-white text-sm font-medium">Organization</div>
                           <div className="text-slate-400 text-xs">
-                            {userData?.organizationName || 'Not set'}
+                            {userData?.organizationDisplayName || userData?.organizationName || 'Not set'}
                             {userData?.isOrganizationCreator && ' (Creator)'}
                           </div>
                         </div>
@@ -426,39 +437,7 @@ export function ModulesDashboard() {
       </div>
 
       {/* First-time user welcome banner */}
-      {isFirstTime && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          className="max-w-4xl mx-auto mb-8"
-        >
-          <div className="backdrop-blur-xl bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-green-500/10 border border-blue-400/20 rounded-2xl p-6 shadow-lg">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
-                <span className="text-2xl">🎉</span>
-              </div>
-              <div className="flex-1">
-                <h2 className="text-lg font-semibold text-white mb-1">
-                  Welcome to VendAI!
-                </h2>
-                <p className="text-slate-300 text-sm">
-                  {userData?.role === 'retailer' 
-                    ? 'Your POS system is ready. Click on "Point of Sale" to process your first transaction!' 
-                    : 'Your distribution platform is ready. Click on "Inventory" to start managing your catalog!'
-                  }
-                </p>
-              </div>
-              <button
-                onClick={() => setIsFirstTime(false)}
-                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      )}
+      {/* First-time user welcome banner removed per request */}
 
       {/* Modules Grid */}
       <div className="flex flex-col items-center mb-12">
@@ -466,7 +445,10 @@ export function ModulesDashboard() {
           {getCurrentModules().map((module, index) => {
             const Icon = module.icon
             const isClicked = clickedModule === module.title;
-            const hasTooltip = showTooltip === module.title || (needsInventory && module.title === 'Inventory');
+            // Only show gating tooltip on the Inventory module. For other modules, show tooltip only when not gated.
+            const hasTooltip = module.title === 'Inventory'
+              ? (showTooltip === module.title || needsInventory)
+              : (!needsInventory && showTooltip === module.title);
             const gated = needsInventory && module.title !== 'Inventory';
             
             return (

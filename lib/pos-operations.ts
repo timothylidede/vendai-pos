@@ -261,20 +261,8 @@ export async function hasInventory(orgId: string): Promise<boolean> {
       const docs = await getDocs(q)
       if (!docs.empty) return true
     }
-    
-    // If no inventory records found with exact orgId, check pos_products collection
-    // Some products might have been added with orgId field or without inventory stubs
-    const productsQuery = query(collection(db, POS_PRODUCTS_COL), where('orgId', '==', orgId), limit(1))
-    const productsSnap = await getDocs(productsQuery)
-    if (!productsSnap.empty) return true
-    
-    // Final fallback - check if any POS products exist at all (for legacy data)
-    const allProductsQuery = query(collection(db, POS_PRODUCTS_COL), limit(1))
-    const allProductsSnap = await getDocs(allProductsQuery)
-    const hasAnyProducts = !allProductsSnap.empty
-    
-    // If there are any products, consider inventory as available
-    return hasAnyProducts
+    // If no inventory records found, org is not ready
+    return false
   } catch (error) {
     console.error('Error checking inventory:', error)
     // If we can't determine, assume no inventory to be safe

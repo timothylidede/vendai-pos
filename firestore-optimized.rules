@@ -1,0 +1,233 @@
+// Optimized Firestore Security Rules for VendAI
+// Supports hierarchical data structure with performance optimizations
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ========================================================================
+    // HELPER FUNCTIONS
+    // ========================================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isOrgMember(orgId) {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid));
+    }
+    
+    function hasRole(orgId, roles) {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.role in roles;
+    }
+    
+    function isDistributor() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distributor';
+    }
+    
+    function isRetailer() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'retailer';
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // ========================================================================
+    // USER MANAGEMENT
+    // ========================================================================
+    
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+      allow read: if isAuthenticated(); // Allow reading other user profiles for business operations
+    }
+    
+    // ========================================================================
+    // ORGANIZATION STRUCTURE (Optimized Hierarchical)
+    // ========================================================================
+    
+    match /organizations/{orgId} {
+      // Organization metadata
+      allow read: if isAuthenticated();
+      allow write: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'owner']);
+      
+      // Organization members
+      match /members/{userId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'owner']);
+      }
+      
+      // Organization settings
+      match /settings/{settingId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'owner']);
+      }
+      
+      // Products subcollection (Optimized)
+      match /products/{productId} {
+        allow read: if isAuthenticated(); // Products can be viewed by all authenticated users
+        allow create: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'manager', 'owner']);
+        allow update: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'manager', 'owner']);
+        allow delete: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'owner']);
+      }
+      
+      // Inventory subcollection  
+      match /inventory/{productId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'manager', 'owner']);
+      }
+      
+      // POS Orders subcollection
+      match /pos_orders/{orderId} {
+        allow read: if isOrgMember(orgId);
+        allow create: if isOrgMember(orgId);
+        allow update: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'manager', 'cashier', 'owner']);
+      }
+      
+      // Barcode/SKU mappings
+      match /mappings/{mappingId} {
+        allow read: if isOrgMember(orgId);
+        allow write: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'manager', 'owner']);
+      }
+    }
+    
+    // ========================================================================
+    // DISTRIBUTORS
+    // ========================================================================
+    
+    match /distributors/{distributorId} {
+      allow read: if isAuthenticated(); // Public business profiles
+      allow write: if isDistributor() && isOwner(resource.data.userId);
+      
+      // Distributor products (legacy support)
+      match /products/{productId} {
+        allow read: if isAuthenticated();
+        allow write: if isDistributor() && isOwner(resource.data.distributorUserId);
+      }
+    }
+    
+    // ========================================================================
+    // RETAILERS  
+    // ========================================================================
+    
+    match /retailers/{retailerId} {
+      allow read: if isAuthenticated(); // Visible to distributors for business operations
+      allow write: if isRetailer() && isOwner(resource.data.userId);
+    }
+    
+    // ========================================================================
+    // ORDERS (B2B and POS)
+    // ========================================================================
+    
+    match /orders/{orderId} {
+      // B2B orders: Both distributor and retailer can read
+      allow read: if isAuthenticated() && (
+        (isDistributor() && request.auth.uid == resource.data.distributorUserId) ||
+        (isRetailer() && request.auth.uid == resource.data.retailerUserId) ||
+        isAdmin()
+      );
+      
+      // Create orders: Retailers create orders to distributors
+      allow create: if isRetailer() && request.auth.uid == request.resource.data.retailerUserId;
+      
+      // Update orders: Distributors can update status, retailers can cancel
+      allow update: if isAuthenticated() && (
+        (isDistributor() && request.auth.uid == resource.data.distributorUserId) ||
+        (isRetailer() && request.auth.uid == resource.data.retailerUserId && 
+         request.resource.data.status in ['cancelled'] &&
+         resource.data.status in ['draft', 'confirmed'])
+      );
+    }
+    
+    // ========================================================================
+    // INVOICES
+    // ========================================================================
+    
+    match /invoices/{invoiceId} {
+      allow read: if isAuthenticated() && (
+        (isDistributor() && request.auth.uid == resource.data.distributorUserId) ||
+        (isRetailer() && request.auth.uid == resource.data.retailerUserId) ||
+        isAdmin()
+      );
+      
+      allow create: if isDistributor() && request.auth.uid == request.resource.data.distributorUserId;
+      allow update: if isDistributor() && request.auth.uid == resource.data.distributorUserId;
+    }
+    
+    // ========================================================================
+    // SETTLEMENTS
+    // ========================================================================
+    
+    match /settlements/{settlementId} {
+      allow read: if isAuthenticated() && (
+        (isDistributor() && request.auth.uid == resource.data.distributorUserId) ||
+        isAdmin()
+      );
+      
+      allow create, update: if isAdmin(); // Only admins can manage settlements
+    }
+    
+    // ========================================================================
+    // LEGACY COLLECTIONS (Backward Compatibility)
+    // ========================================================================
+    
+    // Legacy pos_products collection
+    match /pos_products/{productId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && resource.data.orgId != null && isOrgMember(resource.data.orgId);
+    }
+    
+    // Legacy inventory collection
+    match /inventory/{inventoryId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && resource.data.orgId != null && isOrgMember(resource.data.orgId);
+    }
+    
+    // Legacy pos_orders collection
+    match /pos_orders/{orderId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && resource.data.orgId != null && isOrgMember(resource.data.orgId);
+    }
+    
+    // Legacy org_settings collection
+    match /org_settings/{orgId} {
+      allow read: if isOrgMember(orgId);
+      allow write: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'owner']);
+    }
+    
+    // ========================================================================
+    // ANALYTICS AND REPORTING (Read-only for most users)
+    // ========================================================================
+    
+    match /analytics/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin(); // Only system can write analytics
+    }
+    
+    // ========================================================================
+    // API KEYS AND AUTHENTICATION
+    // ========================================================================
+    
+    match /api_keys/{keyId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+    
+    // ========================================================================
+    // FILE UPLOADS AND METADATA
+    // ========================================================================
+    
+    match /uploads/{uploadId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == resource.data.uploadedBy;
+    }
+  }
+}

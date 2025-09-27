@@ -48,6 +48,11 @@ export const createInvitation = async (
   invitationRequest: CreateInvitationRequest
 ): Promise<{ success: boolean; invitationId?: string; invitationLink?: string; error?: string }> => {
   try {
+    // Normalize target email early
+    const inviteeEmail = (invitationRequest.inviteeEmail || '').trim().toLowerCase();
+    if (!inviteeEmail) {
+      return { success: false, error: 'Invitee email is required' };
+    }
     // Get inviter's data
     const inviterDoc = await getDoc(doc(db, 'users', inviterUid));
     if (!inviterDoc.exists()) {
@@ -59,10 +64,10 @@ export const createInvitation = async (
       return { success: false, error: 'Only organization creators can send invitations' };
     }
 
-    // Check if invitation already exists
+    // Check if invitation already exists (pending and not cancelled)
     const existingInvitationsQuery = query(
       collection(db, 'invitations'),
-      where('inviteeEmail', '==', invitationRequest.inviteeEmail),
+      where('inviteeEmail', '==', inviteeEmail),
       where('organizationName', '==', inviterData.organizationName),
       where('accepted', '==', false),
       where('cancelled', '==', false)
@@ -80,7 +85,7 @@ export const createInvitation = async (
       inviterName: inviterData.displayName || inviterData.email?.split('@')[0] || 'Organization Admin',
       inviterEmail: inviterData.email,
       inviterUid: inviterUid,
-      inviteeEmail: invitationRequest.inviteeEmail,
+      inviteeEmail,
       organizationLocation: inviterData.location,
       organizationCoordinates: inviterData.coordinates,
       message: invitationRequest.message || '',
@@ -95,13 +100,38 @@ export const createInvitation = async (
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
     const invitationLink = `${baseUrl}/onboarding?invite=${invitationRef.id}`;
 
-    // Send notification to invitee if they're already registered
-    await notifyInvitationReceived(
-      invitationRequest.inviteeEmail,
-      invitation.inviterName,
-      invitation.organizationName,
-      invitationRef.id
-    );
+    // If the invitee already has an account, create an in-app notification; otherwise prompt an email with download link
+    try {
+      const usersQuery = query(
+        collection(db, 'users'),
+        where('email', '==', inviteeEmail)
+      )
+      const snap = await getDocs(usersQuery)
+      if (!snap.empty) {
+        await notifyInvitationReceived(
+          inviteeEmail,
+          invitation.inviterName,
+          invitation.organizationName,
+          invitationRef.id
+        )
+      } else {
+        // Trigger a mailto link for the inviter to send an email with the download link
+        const mailto = `mailto:${encodeURIComponent(inviteeEmail)}?subject=${encodeURIComponent('Invitation to join ' + invitation.organizationName)}&body=${encodeURIComponent(
+          `Hi,
+
+${invitation.inviterName} invited you to join ${invitation.organizationName} on Vendai.
+
+1) Download Vendai: https://vendai.digital
+2) After installing, sign in with this email and open this link to accept the invite:
+${(typeof window !== 'undefined' ? window.location.origin : 'https://app.vendai.digital') + '/onboarding?invite=' + invitationRef.id}
+
+Thanks!`
+        )}`
+        try { if (typeof window !== 'undefined') window.open(mailto, '_blank') } catch {}
+      }
+    } catch (e) {
+      console.warn('Post-invitation notification/mailto step failed:', e)
+    }
 
     return {
       success: true,
@@ -313,20 +343,72 @@ export const getInvitationsForEmail = async (
   email: string
 ): Promise<{ success: boolean; invitations?: (InvitationData & { id: string })[]; error?: string }> => {
   try {
-    const invitationsQuery = query(
-      collection(db, 'invitations'),
-      where('inviteeEmail', '==', email),
-      where('accepted', '==', false),
-      where('cancelled', '==', false)
-    );
-    const snapshot = await getDocs(invitationsQuery);
+    const norm = (email || '').trim().toLowerCase();
+    const original = (email || '').trim();
+    const invitesCol = collection(db, 'invitations');
+
+    // Query by normalized email
+    const q1 = query(invitesCol, where('inviteeEmail', '==', norm));
+    const snap1 = await getDocs(q1);
+
+    // If original casing differs, query that too to catch older docs
+    let docs = [...snap1.docs];
+    if (original && original !== norm) {
+      const q2 = query(invitesCol, where('inviteeEmail', '==', original));
+      const snap2 = await getDocs(q2);
+      // Merge unique by id
+      const map = new Map(docs.map(d => [d.id, d]));
+      for (const d of snap2.docs) map.set(d.id, d);
+      docs = Array.from(map.values());
+    }
+
     const now = Date.now();
-    const invitations = snapshot.docs
+    const invitations = docs
       .map(d => ({ id: d.id, ...d.data() }))
-      .filter((inv: any) => !inv.expiresAt || new Date(inv.expiresAt).getTime() > now) as (InvitationData & { id: string })[];
+      // Filter out accepted/cancelled in memory (treat missing as false)
+      .filter((inv: any) => inv.cancelled !== true && inv.accepted !== true)
+      // Filter out expired if we can parse a time
+      .filter((inv: any) => {
+        if (!inv.expiresAt) return true;
+        try {
+          const ms = inv.expiresAt?.toMillis?.()
+            ?? inv.expiresAt?.toDate?.()?.getTime?.()
+            ?? (typeof inv.expiresAt === 'number' ? inv.expiresAt : new Date(inv.expiresAt).getTime());
+          if (typeof ms !== 'number' || Number.isNaN(ms)) return true;
+          return ms > now;
+        } catch {
+          return true;
+        }
+      }) as (InvitationData & { id: string })[];
     return { success: true, invitations };
   } catch (error) {
     console.error('Error fetching received invitations:', error);
     return { success: false, error: 'Failed to fetch invitations' };
+  }
+};
+
+/**
+ * Get all pending invitations for an organization (by organizationName)
+ */
+export const getOrganizationInvitations = async (
+  organizationName: string
+): Promise<{ success: boolean; invitations?: (InvitationData & { id: string })[]; error?: string }> => {
+  try {
+    const invitationsQuery = query(
+      collection(db, 'invitations'),
+      where('organizationName', '==', organizationName),
+      where('cancelled', '==', false)
+    );
+    const invitationsSnapshot = await getDocs(invitationsQuery);
+
+    const invitations = invitationsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as (InvitationData & { id: string })[];
+
+    return { success: true, invitations };
+  } catch (error) {
+    console.error('Error getting organization invitations:', error);
+    return { success: false, error: 'Failed to retrieve organization invitations' };
   }
 };

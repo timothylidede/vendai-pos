@@ -35,18 +35,18 @@ export default function HomePage() {
               return
             } else {
               // User exists but hasn't completed onboarding
-              router.push('/onboarding')
+              router.push('/onboarding/choose')
               return
             }
           } else {
-            // User document doesn't exist - redirect to onboarding
-            router.push('/onboarding')
+            // User document doesn't exist - redirect to onboarding chooser
+            router.push('/onboarding/choose')
             return
           }
         } catch (error) {
           console.error('Error checking user data:', error)
-          // On error, redirect to onboarding to be safe
-          router.push('/onboarding')
+          // On error, redirect to onboarding chooser to be safe
+          router.push('/onboarding/choose')
           return
         }
       } else {

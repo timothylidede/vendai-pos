@@ -11,6 +11,7 @@ interface UserData {
   displayName?: string;
   role: 'retailer' | 'distributor';
   organizationName: string;
+  organizationDisplayName?: string;
   contactNumber?: string;
   location?: string;
   coordinates?: { lat: number; lng: number };

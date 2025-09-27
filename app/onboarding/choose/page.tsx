@@ -5,20 +5,24 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Building, Mail, Sparkles, Users, ArrowRight, ClipboardList } from 'lucide-react'
+import { Building, Mail, Sparkles, ClipboardList, LogOut } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
-import { getInvitationsForEmail, InvitationData } from '@/lib/invitation-operations'
+import { getInvitationsForEmail, InvitationData, acceptInvitation } from '@/lib/invitation-operations'
+import { signOut } from 'firebase/auth'
+import { auth, db } from '@/lib/firebase'
+import { doc, setDoc } from 'firebase/firestore'
 
 export default function ChooseOnboardingPage() {
   const router = useRouter()
   const { user, userData, loading } = useAuth()
   const [invites, setInvites] = useState<(InvitationData & { id: string })[] | null>(null)
   const [loadingInvites, setLoadingInvites] = useState(false)
+  const [acceptingId, setAcceptingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!loading) {
       if (!user) {
-        router.push('/signup')
+        router.push('/login')
         return
       }
       // If already onboarded, go to modules
@@ -38,8 +42,53 @@ export default function ChooseOnboardingPage() {
 
   const hasInvites = (invites?.length || 0) > 0
 
+  const onLogout = async () => {
+    try {
+      await signOut(auth)
+    } finally {
+      router.push('/login')
+    }
+  }
+
+  const onAccept = async (inv: InvitationData & { id: string }) => {
+    if (!user) return
+    setAcceptingId(inv.id)
+    try {
+      // Update/merge user profile to join the org immediately
+      const userDocRef = doc(db, 'users', user.uid)
+      await setDoc(userDocRef, {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || user.email?.split('@')[0] || 'User',
+        role: inv.role,
+        organizationName: inv.organizationName,
+        onboardingCompleted: true,
+        isOrganizationCreator: false,
+        joinedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }, { merge: true })
+
+      // Mark invitation accepted
+      await acceptInvitation(inv.id, user.uid)
+
+      // Go straight to modules
+      router.push('/modules')
+    } catch (e) {
+      console.error('Failed to accept invitation:', e)
+    } finally {
+      setAcceptingId(null)
+    }
+  }
+
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-6 bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900">
+    <div className="min-h-screen w-full flex items-center justify-center p-6 bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900 relative">
+      {/* Logout button top-right */}
+      <div className="absolute top-6 right-6">
+        <Button onClick={onLogout} variant="outline" className="border-slate-600 text-slate-300 hover:text-white">
+          <LogOut className="w-4 h-4 mr-2" /> Logout
+        </Button>
+      </div>
+
       <div className="max-w-5xl w-full grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Create Organization */}
         <Card className="relative overflow-hidden backdrop-blur-xl bg-slate-900/80 border border-slate-600/50 rounded-2xl p-8 shadow-[0_20px_48px_-12px_rgba(0,0,0,0.8)]">
@@ -72,7 +121,7 @@ export default function ChooseOnboardingPage() {
               </div>
               <h2 className="text-xl font-semibold text-white">Join an organization</h2>
             </div>
-            <p className="text-slate-300 text-sm mb-4">Review invitations sent to {user?.email || 'your email'} and accept to join.</p>
+            <p className="text-slate-300 text-sm mb-4">Review invitations sent to your email and accept to join.</p>
 
             {loadingInvites ? (
               <div className="flex items-center text-slate-400 text-sm">
@@ -89,20 +138,11 @@ export default function ChooseOnboardingPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
-                        onClick={() => router.push(`/onboarding?invite=${inv.id}`)}
-                        className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => onAccept(inv)}
+                        disabled={acceptingId === inv.id}
+                        className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-70"
                       >
-                        Accept
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          const link = `${window.location.origin}/onboarding?invite=${inv.id}`
-                          navigator.clipboard.writeText(link)
-                        }}
-                        variant="outline"
-                        className="h-8 px-3 border-slate-600 text-slate-300 hover:text-white"
-                      >
-                        <ClipboardList className="w-4 h-4 mr-1" /> Copy Link
+                        {acceptingId === inv.id ? 'Accepting…' : 'Accept'}
                       </Button>
                     </div>
                   </div>
@@ -112,16 +152,7 @@ export default function ChooseOnboardingPage() {
               <div className="text-slate-400 text-sm mb-4">No invitations found for your account.</div>
             )}
 
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={() => router.push('/onboarding')}
-                variant="outline"
-                className="border-slate-600 text-slate-300 hover:text-white"
-              >
-                Or create a new organization
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </div>
+            {/* Removed the "Or create a new organization" button */}
           </div>
         </Card>
       </div>

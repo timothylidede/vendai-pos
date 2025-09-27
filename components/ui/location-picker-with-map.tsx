@@ -24,6 +24,7 @@ export function LocationPickerWithMap({ onLocationSelect, value, placeholder }: 
   const [marker, setMarker] = useState<google.maps.Marker | null>(null);
   const [showMap, setShowMap] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
   
   const { isLoaded: isGoogleMapsLoaded, loadError } = useGoogleMaps();
 
@@ -212,53 +213,63 @@ export function LocationPickerWithMap({ onLocationSelect, value, placeholder }: 
   }, [isGoogleMapsLoaded, showMap, currentLocation?.lat, currentLocation?.lng]);
 
   const getCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const pos = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          };
-          
-          setCurrentLocation(pos);
-          
+    setShowMap(true); // ensure the map UI becomes visible
+    if (!navigator.geolocation) {
+      console.warn('Geolocation not supported in this environment');
+      return;
+    }
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const pos = { lat: position.coords.latitude, lng: position.coords.longitude };
+        setCurrentLocation(pos);
+
+        // If Google Maps loaded and we have marker/map, animate and reverse geocode
+        if (window.google?.maps) {
           if (map && marker) {
             map.setCenter(pos);
             map.setZoom(15);
             marker.setPosition(pos);
             marker.setAnimation(window.google.maps.Animation.BOUNCE);
-            
-            setTimeout(() => {
-              marker.setAnimation(null);
-            }, 1400);
-            
-            // Reverse geocoding
+            setTimeout(() => marker.setAnimation(null), 1400);
+          }
+          try {
             const geocoder = new window.google.maps.Geocoder();
             geocoder.geocode({ location: pos }, (results, status) => {
               if (status === 'OK' && results && results[0]) {
                 const address = results[0].formatted_address;
-                if (inputRef.current) {
-                  inputRef.current.value = address;
-                }
+                if (inputRef.current) inputRef.current.value = address;
                 onLocationSelect(address, pos);
+              } else {
+                // Fallback: set coordinates string if reverse geocoding fails
+                const coordLabel = `Lat ${pos.lat.toFixed(6)}, Lng ${pos.lng.toFixed(6)}`;
+                if (inputRef.current) inputRef.current.value = coordLabel;
+                onLocationSelect(coordLabel, pos);
               }
             });
+          } catch (e) {
+            const coordLabel = `Lat ${pos.lat.toFixed(6)}, Lng ${pos.lng.toFixed(6)}`;
+            if (inputRef.current) inputRef.current.value = coordLabel;
+            onLocationSelect(coordLabel, pos);
           }
-        },
-        (error) => {
-          // Handle geolocation errors with meaningful messages
-          let errorMessage = 'Unknown geolocation error';
-          if (error.code === error.PERMISSION_DENIED) {
-            errorMessage = 'Location access denied by user';
-          } else if (error.code === error.POSITION_UNAVAILABLE) {
-            errorMessage = 'Location information unavailable';
-          } else if (error.code === error.TIMEOUT) {
-            errorMessage = 'Location request timeout';
-          }
-          console.warn('Geolocation error:', errorMessage, error);
+        } else {
+          // Google not loaded: still pass coordinates and show readable label
+          const coordLabel = `Lat ${pos.lat.toFixed(6)}, Lng ${pos.lng.toFixed(6)}`;
+          if (inputRef.current) inputRef.current.value = coordLabel;
+          onLocationSelect(coordLabel, pos);
         }
-      );
-    }
+        setIsLocating(false);
+      },
+      (error) => {
+        let errorMessage = 'Unknown geolocation error';
+        if (error.code === error.PERMISSION_DENIED) errorMessage = 'Location access denied by user';
+        else if (error.code === error.POSITION_UNAVAILABLE) errorMessage = 'Location information unavailable';
+        else if (error.code === error.TIMEOUT) errorMessage = 'Location request timeout';
+        console.warn('Geolocation error:', errorMessage, error);
+        setIsLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
   };
 
   return (
@@ -294,10 +305,20 @@ export function LocationPickerWithMap({ onLocationSelect, value, placeholder }: 
       <button
         type="button"
         onClick={getCurrentLocation}
-        className="w-full p-3 text-sm text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 hover:border-blue-500/50 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2"
+        disabled={isLocating}
+        className={`w-full p-3 text-sm ${isLocating ? 'text-blue-300/70' : 'text-blue-400 hover:text-blue-300'} bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 hover:border-blue-500/50 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2 disabled:opacity-60 disabled:cursor-not-allowed`}
       >
-        <Navigation className="w-4 h-4" />
-        <span>Use my current location</span>
+        {isLocating ? (
+          <>
+            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            <span>Getting your location…</span>
+          </>
+        ) : (
+          <>
+            <Navigation className="w-4 h-4" />
+            <span>Use my current location</span>
+          </>
+        )}
       </button>
 
       {/* Map Container */}

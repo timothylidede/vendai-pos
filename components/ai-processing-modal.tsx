@@ -65,7 +65,7 @@ export function AIProcessingModal({
   if (!isOpen) return null;
 
   const currentStepIndex = steps.findIndex(step => step.id === currentStep);
-  const overallProgress = currentStepIndex >= 0 ? ((currentStepIndex + 1) / steps.length) * 100 : 0;
+  const overallProgress = currentStepIndex >= 0 ? ((currentStepIndex + 1) / Math.max(1, steps.length)) * 100 : 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -141,50 +141,7 @@ export function AIProcessingModal({
                   </div>
                 </div>
 
-                {/* Statistics Grid */}
-                {stats && (
-                  <div className="grid grid-cols-2 gap-3 mt-4">
-                    <div className="bg-white/5 rounded-xl p-3 backdrop-blur-sm border border-white/10">
-                      <div className="text-xs text-slate-400 uppercase tracking-wide">Products Added</div>
-                      <div className="text-lg font-semibold text-green-400">{stats.productsAdded}</div>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-3 backdrop-blur-sm border border-white/10">
-                      <div className="text-xs text-slate-400 uppercase tracking-wide">Updated</div>
-                      <div className="text-lg font-semibold text-blue-400">{stats.productsUpdated}</div>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-3 backdrop-blur-sm border border-white/10">
-                      <div className="text-xs text-slate-400 uppercase tracking-wide">Time Elapsed</div>
-                      <div className="text-lg font-semibold text-purple-400">{formatTime(elapsedTime)}</div>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-3 backdrop-blur-sm border border-white/10">
-                      <div className="text-xs text-slate-400 uppercase tracking-wide">ETA Remaining</div>
-                      <div className="text-lg font-semibold text-cyan-400">
-                        {stats.estimatedTimeRemaining > 0 ? formatTime(stats.estimatedTimeRemaining) : '--'}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Advanced Analytics (Hidden from User) */}
-                {stats && userLocation && (
-                  <div className="bg-white/5 rounded-xl p-4 backdrop-blur-sm border border-white/10 mt-4">
-                    <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">Intelligence Analysis</div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <span className="text-slate-500">Suppliers Analyzed:</span>
-                        <span className="text-slate-300 ml-2">{stats.suppliersAnalyzed}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500">Location Matches:</span>
-                        <span className="text-slate-300 ml-2">{stats.locationMatches}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500">Duplicates:</span>
-                        <span className="text-slate-300 ml-2">{stats.duplicatesFound}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {/* Compact mode: hide detailed stats/analytics for faster, cleaner UX */}
               </div>
             )}
           </div>
@@ -275,32 +232,7 @@ export function AIProcessingModal({
                     }`}>
                       {step.title}
                     </h3>
-                    <p className="text-slate-400 text-sm mt-1 leading-relaxed">
-                      {step.description}
-                    </p>
-                    
-                    {/* Product count for current step */}
-                    {step.status === 'processing' && step.productsProcessed !== undefined && step.totalProducts !== undefined && (
-                      <div className="text-xs text-slate-500 mt-2">
-                        Processing: {step.productsProcessed} / {step.totalProducts} products
-                      </div>
-                    )}
-                    
-                    {/* Individual step progress */}
-                    {step.status === 'processing' && step.progress !== undefined && (
-                      <div className="mt-3">
-                        <div className="flex justify-between text-xs text-slate-400 mb-1">
-                          <span>Step Progress</span>
-                          <span>{Math.round(step.progress)}%</span>
-                        </div>
-                        <div className="h-1 rounded-full bg-white/10 overflow-hidden">
-                          <div 
-                            className="h-full bg-gradient-to-r from-blue-400 to-purple-400 transition-all duration-500"
-                            style={{ width: `${step.progress}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
+                    {/* Compact: hide verbose description and per-step progress */}
                   </div>
                 </div>
               ))

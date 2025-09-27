@@ -5,26 +5,52 @@ import { useRouter } from 'next/navigation';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { motion } from 'framer-motion';
-import { signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithPopup, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '@/lib/firebase';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Download, ExternalLink } from 'lucide-react';
 
 export function WelcomePage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isElectron, setIsElectron] = useState(false);
+  const [isVercel, setIsVercel] = useState(false);
+
+  useEffect(() => {
+    // Detect environment
+    const checkElectron = () => {
+      return !!(
+        (window as any).electronAPI || 
+        (window as any).require || 
+        navigator.userAgent.toLowerCase().indexOf('electron') > -1
+      );
+    };
+    
+    const checkVercel = () => {
+      return window.location.hostname.includes('vercel.app') || 
+             window.location.hostname === 'app.vendai.digital';
+    };
+
+    setIsElectron(checkElectron());
+    setIsVercel(checkVercel());
+  }, []);
+
+  const handleDownloadApp = () => {
+    // Redirect to the main vendai.digital site for download
+    window.open('https://vendai.digital', '_blank');
+  };
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     setErrorMessage(null);
     
     try {
-      console.log('Starting Google sign in...');
+      console.log('Starting Google sign in...', { isElectron, isVercel });
       
-      // Check if we're in Electron environment
-      if (typeof window !== 'undefined' && (window as any).electronAPI) {
-        // Use Electron OAuth flow - like VSCode, Zoom, etc.
+      if (isElectron && (window as any).electronAPI) {
+        // Electron OAuth flow
         console.log('Using Electron OAuth flow...');
         
         const electronAPI = (window as any).electronAPI;
@@ -34,93 +60,32 @@ export function WelcomePage() {
           const googleUser = oauthResult.user;
           console.log('OAuth successful, creating Firebase user:', googleUser.email);
           
-          // Prefer proper Firebase sign-in using the returned Google tokens
           try {
             const credential = GoogleAuthProvider.credential(
               oauthResult.tokens.idToken || null,
               oauthResult.tokens.accessToken || null
             );
             const userCred = await signInWithCredential(auth, credential);
-            const uid = userCred.user.uid;
-
-            const userDocRef = doc(db, 'users', uid);
-            const userDoc = await getDoc(userDocRef);
-
-            if (userDoc.exists()) {
-              console.log('Existing user detected - checking onboarding status');
-              const userData = userDoc.data();
-              const userRole = (userData as any)?.role || 'retailer';
-              const onboardingCompleted = (userData as any)?.onboardingCompleted;
-              
-              localStorage.setItem('vendai-user-role', userRole);
-              
-              // If user has a role and has completed onboarding, go to modules
-              if (userRole && onboardingCompleted) {
-                console.log('User has role and completed onboarding - redirecting to dashboard');
-                localStorage.setItem('vendai-first-login', 'false');
-                router.push('/modules');
-              } else {
-                console.log('User exists but needs to complete onboarding');
-                localStorage.setItem('vendai-first-login', 'true');
-                router.push('/onboarding');
-              }
-            } else {
-              console.log('New user detected - creating profile and redirecting to onboarding');
-              await setDoc(userDocRef, {
-                uid,
-                email: userCred.user.email,
-                displayName: userCred.user.displayName,
-                photoURL: userCred.user.photoURL,
-                createdAt: new Date().toISOString(),
-                onboardingCompleted: false,
-                role: 'retailer'
-              });
-              localStorage.setItem('vendai-first-login', 'true');
-              router.push('/onboarding');
-            }
+            await handleUserAuthentication(userCred.user);
           } catch (fbErr: any) {
             console.error('Firebase sign-in with Google credential failed:', fbErr);
-            // As a fallback, keep the previous local-only behavior
-            const userDocRef = doc(db, 'users', googleUser.id);
-            const userDoc = await getDoc(userDocRef);
-            if (!userDoc.exists()) {
-              await setDoc(userDocRef, {
-                uid: googleUser.id,
-                email: googleUser.email,
-                displayName: googleUser.name,
-                photoURL: googleUser.picture,
-                createdAt: new Date().toISOString(),
-                onboardingCompleted: false,
-                role: 'retailer' // Default role
-              });
-              localStorage.setItem('vendai-first-login', 'true');
-              router.push('/onboarding');
-            } else {
-              console.log('Existing user fallback - checking onboarding status');
-              const userData = userDoc.data();
-              const userRole = (userData as any)?.role || 'retailer';
-              const onboardingCompleted = (userData as any)?.onboardingCompleted;
-              
-              localStorage.setItem('vendai-user-role', userRole);
-              
-              if (userRole && onboardingCompleted) {
-                console.log('User has role and completed onboarding - redirecting to dashboard');
-                localStorage.setItem('vendai-first-login', 'false');
-                router.push('/modules');
-              } else {
-                console.log('User exists but needs to complete onboarding');
-                localStorage.setItem('vendai-first-login', 'true');
-                router.push('/onboarding');
-              }
-            }
+            // Fallback for Electron
+            await handleElectronFallback(googleUser);
           }
         } else {
           throw new Error('OAuth failed or was cancelled');
         }
       } else {
-        // Fallback for web (though this shouldn't happen in Electron)
-        console.log('Not in Electron - this should not happen');
-        setErrorMessage('This app requires Electron to run properly.');
+        // Web OAuth flow (Vercel/browser)
+        console.log('Using web OAuth flow...');
+        
+        try {
+          const result = await signInWithPopup(auth, googleProvider);
+          await handleUserAuthentication(result.user);
+        } catch (webErr: any) {
+          console.error('Web sign-in failed:', webErr);
+          throw webErr;
+        }
       }
     } catch (error: any) {
       console.error('Google sign in error:', error);
@@ -133,6 +98,10 @@ export function WelcomePage() {
         friendlyMessage = 'Sign in was cancelled. Please try again if you want to continue.';
       } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
         friendlyMessage = 'Network error. Please check your internet connection and try again.';
+      } else if (error.code === 'auth/popup-blocked') {
+        friendlyMessage = 'Pop-up was blocked. Please allow pop-ups for this site and try again.';
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        friendlyMessage = 'Sign in was cancelled. Please try again if you want to continue.';
       }
       
       setErrorMessage(friendlyMessage);
@@ -146,6 +115,78 @@ export function WelcomePage() {
     }
   };
 
+  const handleUserAuthentication = async (user: any) => {
+    const userDocRef = doc(db, 'users', user.uid);
+    const userDoc = await getDoc(userDocRef);
+
+    if (userDoc.exists()) {
+      console.log('Existing user detected - checking onboarding status');
+      const userData = userDoc.data();
+      const userRole = userData?.role || 'retailer';
+      const onboardingCompleted = userData?.onboardingCompleted;
+      
+      localStorage.setItem('vendai-user-role', userRole);
+      
+      if (userRole && onboardingCompleted) {
+        console.log('User has role and completed onboarding - redirecting to dashboard');
+        localStorage.setItem('vendai-first-login', 'false');
+        router.push('/modules');
+      } else {
+        console.log('User exists but needs to complete onboarding');
+        localStorage.setItem('vendai-first-login', 'true');
+        router.push('/onboarding/choose');
+      }
+    } else {
+      console.log('New user detected - creating profile and redirecting to onboarding');
+      await setDoc(userDocRef, {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        createdAt: new Date().toISOString(),
+        onboardingCompleted: false,
+        role: 'retailer'
+      });
+      localStorage.setItem('vendai-first-login', 'true');
+      router.push('/onboarding/choose');
+    }
+  };
+
+  const handleElectronFallback = async (googleUser: any) => {
+    const userDocRef = doc(db, 'users', googleUser.id);
+    const userDoc = await getDoc(userDocRef);
+    
+    if (!userDoc.exists()) {
+      await setDoc(userDocRef, {
+        uid: googleUser.id,
+        email: googleUser.email,
+        displayName: googleUser.name,
+        photoURL: googleUser.picture,
+        createdAt: new Date().toISOString(),
+        onboardingCompleted: false,
+        role: 'retailer'
+      });
+      localStorage.setItem('vendai-first-login', 'true');
+      router.push('/onboarding/choose');
+    } else {
+      const userData = userDoc.data();
+      const userRole = userData?.role || 'retailer';
+      const onboardingCompleted = userData?.onboardingCompleted;
+      
+      localStorage.setItem('vendai-user-role', userRole);
+      
+      if (userRole && onboardingCompleted) {
+        console.log('User has role and completed onboarding - redirecting to dashboard');
+        localStorage.setItem('vendai-first-login', 'false');
+        router.push('/modules');
+      } else {
+        console.log('User exists but needs to complete onboarding');
+        localStorage.setItem('vendai-first-login', 'true');
+        router.push('/onboarding/choose');
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900 flex items-center justify-center p-6 relative">
       <div className="max-w-md w-full">
@@ -155,12 +196,12 @@ export function WelcomePage() {
           transition={{ duration: 0.6, ease: "easeOut" }}
         >
           {/* Logo/Brand Section */}
-          <div className="text-center mb-12">
+          <div className="text-center mb-8">
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, delay: 0.2 }}
-              className="mb-8"
+              className="mb-6"
             >
               <motion.div
                 className="relative w-20 h-20 mx-auto cursor-pointer"
@@ -178,7 +219,52 @@ export function WelcomePage() {
                 />
               </motion.div>
             </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+              className="mb-6"
+            >
+              <h1 className="text-2xl font-bold text-white mb-2">Welcome to VendAI</h1>
+              <p className="text-slate-400 text-sm">
+                {isElectron 
+                  ? "AI-Powered POS & ERP Desktop Application"
+                  : "Access your AI-Powered POS & ERP system"
+                }
+              </p>
+            </motion.div>
           </div>
+
+          {/* Environment-specific content */}
+          {!isElectron && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.6 }}
+              className="mb-6"
+            >
+              <Card className="p-4 bg-blue-500/10 border-blue-500/20">
+                <div className="flex items-start space-x-3">
+                  <Download className="w-5 h-5 text-blue-400 mt-0.5" />
+                  <div>
+                    <h3 className="text-white font-medium mb-1">Download Desktop App</h3>
+                    <p className="text-slate-400 text-sm mb-3">
+                      For the full experience, download the desktop application with offline capabilities.
+                    </p>
+                    <Button
+                      onClick={handleDownloadApp}
+                      variant="outline"
+                      className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10 text-sm h-8"
+                    >
+                      <ExternalLink className="w-3 h-3 mr-1" />
+                      Download App
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </motion.div>
+          )}
 
           {/* Google Sign In Button */}
           <Button
@@ -232,27 +318,14 @@ export function WelcomePage() {
             <p className="text-slate-500 text-xs">
               By continuing, you agree to our Terms of Service and Privacy Policy
             </p>
+            {isVercel && (
+              <p className="text-slate-600 text-xs mt-2">
+                Running on Vercel • Web Version
+              </p>
+            )}
           </div>
         </motion.div>
       </div>
     </div>
-  )
-}
-
-interface FeatureCardProps {
-  title: string;
-  description: string;
-  icon: string;
-}
-
-const FeatureCard = (props: FeatureCardProps) => {
-  const { title, description, icon } = props;
-
-  return (
-    <Card className="p-6 backdrop-blur-sm bg-white/5 border-white/10 hover:bg-white/10 transition-colors">
-      <div className="text-4xl mb-4">{icon}</div>
-      <h3 className="text-lg font-semibold mb-2">{title}</h3>
-      <p className="text-sm text-muted-foreground">{description}</p>
-    </Card>
   );
 }

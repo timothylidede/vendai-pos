@@ -131,6 +131,16 @@ export async function quickImportProducts(orgId: string, onProgress?: (progress:
   }
   
   console.log(`Successfully imported ${processed} products with inventory`)
+  // Mark org inventory as ready
+  try {
+    const orgSettingsRef = doc(db, 'org_settings', orgId)
+    await setDoc(orgSettingsRef, {
+      inventory_status: 'ready',
+      updatedAt: new Date().toISOString(),
+    }, { merge: true })
+  } catch (e) {
+    console.warn('Failed to update org_settings after import:', e)
+  }
   return processed
 }
 

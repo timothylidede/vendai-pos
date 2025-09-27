@@ -9,7 +9,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Environment variables for Electron compatibility
+  // Environment variables for both Electron and Vercel compatibility
   env: {
     NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
     NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -17,12 +17,13 @@ const nextConfig = {
     NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
     NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
     NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+    NEXT_PUBLIC_IS_ELECTRON: process.env.NODE_ENV === 'development' ? 'false' : 'true',
+    NEXT_PUBLIC_APP_ENV: process.env.VERCEL_ENV || 'electron',
   },
-  // Remove static export for now - use regular build
-  // output: 'export',
-  // distDir: 'out',
-  // trailingSlash: true,
-  // assetPrefix: './'
+  // Use standard build for both Vercel and Electron
+  experimental: {
+    serverComponentsExternalPackages: ['@firebase/app-compat'],
+  },
 }
 
 export default nextConfig

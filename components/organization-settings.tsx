@@ -25,6 +25,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { 
   createInvitation,
   getUserInvitations,
+    getOrganizationInvitations,
   cancelInvitation,
   resendInvitation,
   deleteInvitation,
@@ -69,7 +70,6 @@ export const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({ isOp
   // Invitation form state
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'retailer' | 'distributor'>('retailer');
-  const [inviteMessage, setInviteMessage] = useState('');
   const [isInviting, setIsInviting] = useState(false);
 
   // Organization settings form state
@@ -139,12 +139,18 @@ export const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({ isOp
   };
 
   const loadInvitations = async () => {
-    if (!user) return;
+    if (!user || !userData?.organizationName) return;
 
     try {
-      const result = await getUserInvitations(user.uid);
-      if (result.success && result.invitations) {
-        setInvitations(result.invitations);
+      // Prefer organization-level invites, fallback to user-sent invites
+      const orgRes = await getOrganizationInvitations(userData.organizationName);
+      if (orgRes.success && orgRes.invitations) {
+        setInvitations(orgRes.invitations);
+        return;
+      }
+      const userRes = await getUserInvitations(user.uid);
+      if (userRes.success && userRes.invitations) {
+        setInvitations(userRes.invitations);
       }
     } catch (error) {
       console.error('Error loading invitations:', error);
@@ -158,13 +164,11 @@ export const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({ isOp
     try {
       const result = await createInvitation(user.uid, {
         inviteeEmail: inviteEmail.trim(),
-        role: inviteRole,
-        message: inviteMessage.trim()
+        role: inviteRole
       });
 
       if (result.success) {
         setInviteEmail('');
-        setInviteMessage('');
         await loadInvitations(); // Reload invitations
         
         // Show success (you could add a toast notification here)
@@ -401,13 +405,6 @@ export const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({ isOp
                     <div className="bg-slate-800/20 rounded-xl p-4">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-medium text-white">Send New Invitation</h3>
-                        <Button
-                          onClick={() => { window.location.href = '/onboarding/choose'; }}
-                          variant="outline"
-                          className="border-slate-600 text-slate-300 hover:text-white"
-                        >
-                          View Invites Page
-                        </Button>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -431,16 +428,6 @@ export const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({ isOp
                             <option value="distributor">Distributor</option>
                           </select>
                         </div>
-                      </div>
-                      <div className="mt-4">
-                        <label className="block text-sm text-slate-400 mb-2">Message (Optional)</label>
-                        <textarea
-                          value={inviteMessage}
-                          onChange={(e) => setInviteMessage(e.target.value)}
-                          placeholder="Welcome to our organization!"
-                          rows={3}
-                          className="w-full p-3 bg-slate-800/40 border border-slate-600/50 rounded-lg text-white placeholder-slate-500 focus:border-blue-500/50 focus:outline-none resize-none"
-                        />
                       </div>
                       <Button
                         onClick={sendInvitation}
@@ -514,11 +501,20 @@ export const OrganizationSettings: React.FC<OrganizationSettingsProps> = ({ isOp
                                       <button
                                         onClick={() => handleCancelInvitation(invitation.id)}
                                         className="p-2 text-slate-400 hover:text-red-400 transition-colors"
-                                        title="Cancel invitation"
+                                        title="Uninvite"
                                       >
                                         <Trash2 className="w-4 h-4" />
                                       </button>
                                     </>
+                                  )}
+                                  {(invitation.cancelled || invitation.accepted) && (
+                                    <button
+                                      onClick={() => user && deleteInvitation(invitation.id, user.uid).then(loadInvitations)}
+                                      className="p-2 text-slate-400 hover:text-red-400 transition-colors"
+                                      title="Delete invitation"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
                                   )}
                                 </div>
                               </div>

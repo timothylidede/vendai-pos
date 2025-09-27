@@ -16,12 +16,57 @@ const express = require('express');
 const crypto = require('crypto');
 const isDev = process.env.NODE_ENV === 'development';
 
+// Single instance lock for proper deep-link handling on Windows
+try {
+  if (app.requestSingleInstanceLock && !app.requestSingleInstanceLock()) {
+    app.quit();
+  }
+} catch (e) {
+  // no-op
+}
+
+// Ensure app name branding (Windows/Linux)
+try { app.setName('vendai'); } catch (e) {}
+// Improve Windows taskbar integration
+try { if (process.platform === 'win32') app.setAppUserModelId('com.vendai.app'); } catch (e) {}
+
 // Keep a global reference of the window object
 let mainWindow;
 let nextServer;
 let authWindow;
 let oauthServer;
 let currentOAuthProcess = null;
+
+// Helper to safely dispatch deep-link events to renderer
+function dispatchDeepLink(url) {
+  if (!mainWindow) return;
+  try {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  } catch (_) {}
+
+  const send = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (url.startsWith('vendai-pos://oauth/callback')) {
+      mainWindow.webContents.send('oauth-callback', url);
+    } else if (url.startsWith('vendai-pos://oauth/success')) {
+      mainWindow.webContents.send('oauth-success');
+    }
+  };
+
+  // If the webContents is still loading, wait for it
+  try {
+    if (mainWindow.webContents.isLoading()) {
+      mainWindow.webContents.once('did-finish-load', send);
+    } else {
+      send();
+    }
+  } catch (_) {
+    // Fallback: attempt to send anyway
+    send();
+  }
+}
 
 // OAuth Configuration for Firebase - we'll use Firebase's OAuth flow
 const OAUTH_PORT = 5173;
@@ -112,6 +157,11 @@ async function createWindow() {
   const serverUrl = await startNextServer();
 
   // Create the browser window
+  const isWin = process.platform === 'win32'
+  const windowIcon = isWin
+    ? path.join(__dirname, '../build/icons/icon.ico')
+    : path.join(__dirname, '../public/images/logo-icon-remove.png')
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -121,9 +171,9 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
-      preload: path.join(__dirname, 'preload.js')
+    preload: path.join(__dirname, 'preload.js')
     },
-    icon: path.join(__dirname, '../public/logo-icon.png'),
+    icon: windowIcon,
     show: false,
     frame: false, // Remove window frame since app has its own header
     titleBarStyle: 'hidden',
@@ -295,12 +345,34 @@ function createMenu() {
 // App event listeners
 app.whenReady().then(() => {
   // Set up custom protocol for OAuth redirects
-  if (!app.isDefaultProtocolClient('vendai-pos')) {
-    app.setAsDefaultProtocolClient('vendai-pos');
+  try {
+    let registered = app.isDefaultProtocolClient('vendai-pos');
+    if (!registered) {
+      if (process.platform === 'win32' && isDev) {
+        // In Windows dev mode, pass explicit arguments for electron.exe
+        registered = app.setAsDefaultProtocolClient('vendai-pos', process.execPath, [process.argv[1]]);
+      } else {
+        registered = app.setAsDefaultProtocolClient('vendai-pos');
+      }
+    }
+    console.log('Custom protocol vendai-pos registered:', registered);
+  } catch (e) {
+    console.warn('Failed to register custom protocol vendai-pos:', e);
   }
 
   createWindow();
   createMenu();
+
+  // On Windows, handle protocol URL passed on first launch (cold start)
+  try {
+    if (process.platform === 'win32') {
+      const argUrl = process.argv.find((arg) => typeof arg === 'string' && arg.startsWith('vendai-pos://'));
+      if (argUrl) {
+        // Wait a tick to ensure window has begun loading
+        setTimeout(() => dispatchDeepLink(argUrl), 300);
+      }
+    }
+  } catch (_) {}
 
   // Handle app activation (macOS)
   app.on('activate', () => {
@@ -349,27 +421,13 @@ app.on('web-contents-created', (event, contents) => {
 // Handle protocol for OAuth redirects
 app.on('open-url', (event, url) => {
   event.preventDefault();
-  if (url.startsWith('vendai-pos://oauth/callback')) {
-    // Send the OAuth result to the renderer process
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('oauth-callback', url);
-    }
-  }
+  dispatchDeepLink(url);
 });
 
 // Handle protocol on Windows
-app.on('second-instance', (event, commandLine, workingDirectory) => {
-  // Someone tried to run a second instance, focus our window instead
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
-  
-  // Check for OAuth callback in command line
-  const url = commandLine.find(arg => arg.startsWith('vendai-pos://'));
-  if (url && url.includes('oauth/callback')) {
-    mainWindow.webContents.send('oauth-callback', url);
-  }
+app.on('second-instance', (event, commandLine) => {
+  const url = commandLine?.find?.((arg) => typeof arg === 'string' && arg.startsWith('vendai-pos://'));
+  if (url) dispatchDeepLink(url);
 });
 
 // IPC handlers
@@ -534,15 +592,67 @@ ipcMain.handle('google-oauth', async () => {
           const userInfo = await userResponse.json();
           console.log('User info:', userInfo);
 
-          // Success page
+          // Success page with deep link back to app
+          const deepLink = 'vendai-pos://oauth/success';
           res.send(`
-            <html>
-              <head><title>Login Successful</title></head>
-              <body style="font-family: Arial; padding: 40px; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                <h2>✅ Login Successful!</h2>
-                <p>Welcome, ${userInfo.name}!</p>
-                <p>You can now close this window and return to VendAI.</p>
-                <script>setTimeout(() => window.close(), 2000);</script>
+            <!DOCTYPE html>
+            <html lang="en">
+              <head>
+                <meta charset="UTF-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                <title>Login Successful · VendAI</title>
+                <style>
+                  :root { color-scheme: dark; }
+                  body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji; background: radial-gradient(100% 100% at 0% 0%, #0b1220 0%, #0a0f1c 50%, #0a0e19 100%); color: #e5e7eb; min-height: 100vh; display: grid; place-items: center; }
+                  .card { width: min(560px, 92vw); padding: 28px; border-radius: 16px; background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03)); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 10px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06); backdrop-filter: blur(8px); text-align: center; }
+                  .title { font-size: 22px; font-weight: 700; margin: 8px 0 4px; }
+                  .muted { color: #9ca3af; font-size: 14px; margin: 6px 0 18px; }
+                  .ok { display: inline-flex; width: 56px; height: 56px; border-radius: 50%; align-items: center; justify-content: center; background: linear-gradient(135deg,#22c55e33,#10b98122); border: 1px solid #10b98155; box-shadow: inset 0 0 20px #10b98111, 0 8px 24px rgba(16,185,129,0.15); }
+                  .ok svg { color: #34d399; }
+                  .btn { display: inline-flex; gap: 8px; align-items: center; justify-content: center; padding: 12px 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: #ffffff; color: #111827; font-weight: 600; text-decoration: none; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
+                  .btn:hover { filter: brightness(0.97); }
+                  .ghost { background: transparent; color: #e5e7eb; border-color: rgba(255,255,255,0.2); }
+                  .footer { margin-top: 18px; font-size: 12px; color: #94a3b8; }
+                  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+                </style>
+              </head>
+              <body>
+                <div class="card">
+                  <div class="ok" aria-hidden="true">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                  </div>
+                  <div class="title">Login successful</div>
+                  <div class="muted">Welcome, ${userInfo.name} — you’re signed in to VendAI.</div>
+                  <div class="row">
+                    <a class="btn" id="open-app" href="${deepLink}" rel="noopener">Return to the VendAI app</a>
+                    <button class="btn ghost" id="close-window" type="button">Close this window</button>
+                  </div>
+                  <div class="footer">If the app doesn’t open automatically, click “Return to the VendAI app”.</div>
+                </div>
+                <script>
+                  (function(){
+                    const deepLink = ${JSON.stringify('vendai-pos://oauth/success')};
+                    // Try to open the app automatically
+                    const tryOpen = () => {
+                      const a = document.createElement('a');
+                      a.href = deepLink;
+                      a.rel = 'noopener';
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                    };
+                    // Try immediately and again after a short delay
+                    tryOpen();
+                    setTimeout(tryOpen, 800);
+
+                    document.getElementById('close-window').addEventListener('click', () => {
+                      window.close();
+                    });
+
+                    // Attempt auto-close after a few seconds
+                    setTimeout(() => { window.close(); }, 4000);
+                  })();
+                </script>
               </body>
             </html>
           `);

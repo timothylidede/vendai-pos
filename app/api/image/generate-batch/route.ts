@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/firebase'
-import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore'
+import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore'
 import { POS_PRODUCTS_COL } from '@/lib/pos-operations'
 import { getOrgSettings } from '@/lib/org-operations'
 
@@ -17,17 +17,24 @@ export async function POST(req: NextRequest) {
   const themeHex = settings?.theme_bg_hex || '#F6F4F2'
   const n = Math.max(1, Math.min(3, Number(count) || 3)) // cap at 3
 
-  // Pick recent products (or any 3 if createdAt missing)
-  const qy = query(collection(db, POS_PRODUCTS_COL), orderBy('updatedAt', 'desc'), limit(n))
-  const snap = await getDocs(qy).catch(() => null)
-
-  const docs = snap ? snap.docs : []
-  const chosen = docs.map(d => ({ id: d.id, ...(d.data() as any) }))
+  // Pick recent products; avoid composite index requirements
+  let chosen: any[] = []
+  try {
+    const base = orgId
+      ? query(collection(db, POS_PRODUCTS_COL), where('orgId', '==', orgId), limit(500))
+      : query(collection(db, POS_PRODUCTS_COL), limit(500))
+    const snap = await getDocs(base)
+    const rows = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))
+    rows.sort((a: any, b: any) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
+    chosen = rows.slice(0, n)
+  } catch {
+    chosen = []
+  }
 
   const items = chosen.map((p: any) => {
     const name = p.name || 'Product'
     const brand = p.brand || ''
-    const prompt = `Photorealistic product photo of the item shown in the reference image(s). Output a single centered product placed on a brown mahogany wooden shelf with visible wood grain. Lighting: warm, studio-quality, 'precious' accent lighting from top-left creating soft highlights and gentle shadows. Background color: ${themeHex}. Camera: 50mm, slight 10° angle, product fully visible, no additional props. Keep product proportions and text readable. Ensure consistent composition across all SKUs: product centered, same distance from camera, shelf visible across bottom third of frame. High detail, high resolution, natural specular highlights on glossy surfaces. If no license to reproduce brand logos, render neutral label placeholders instead. Output format: 2048x2560 JPEG.`
+  const prompt = `Photorealistic product photo. Single centered product on a brown mahogany wooden shelf (visible grain). Background: matte slate (${themeHex}). Warm studio light from top-left, 50mm lens ~10° angle. No props. Keep proportions and label legible. Consistent framing: shelf across bottom third. High detail, natural highlights. 2048x2560.`
     return {
       productId: p.id,
       productName: name,

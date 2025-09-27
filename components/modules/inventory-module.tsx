@@ -553,12 +553,12 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                 {products.map(item => (
                 <div
                   key={item.id}
-                  className="group relative transform-gpu overflow-hidden rounded-3xl border border-slate-400/15 bg-gradient-to-br from-slate-900/55 via-slate-900/30 to-sky-950/35 backdrop-blur-2xl transition-all duration-500 shadow-[0_12px_40px_-22px_rgba(56,189,248,0.45)] hover:shadow-[0_28px_70px_-32px_rgba(59,130,246,0.55)] hover:-translate-y-2 hover:scale-[1.02] hover:rotate-[0.35deg] cursor-pointer"
+                  className="group relative transform-gpu overflow-hidden rounded-3xl border border-slate-400/15 bg-gradient-to-br from-slate-900/55 via-slate-900/30 to-sky-950/35 backdrop-blur-2xl transition-all duration-500 shadow-[0_10px_32px_-20px_rgba(56,189,248,0.32)] hover:shadow-[0_22px_56px_-30px_rgba(59,130,246,0.42)] hover:-translate-y-2 hover:scale-[1.02] hover:rotate-[0.35deg] cursor-pointer"
                   onClick={() => { setEditingProduct(item); setIsModalOpen(true) }}
                 >
                   <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                    <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/12 via-transparent to-indigo-600/18" />
-                    <div className="absolute inset-0 blur-2xl bg-cyan-500/10" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-indigo-600/14" />
+                    <div className="absolute inset-0 blur-2xl bg-cyan-500/08" />
                   </div>
                   <div className="aspect-square w-full bg-gradient-to-br from-slate-800/65 via-slate-900/55 to-slate-950/60 flex items-center justify-center relative overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-cyan-500/8 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
@@ -567,7 +567,7 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                     ) : (
                       <Package className="w-16 h-16 text-slate-400 transition-all duration-700 group-hover:scale-125 group-hover:text-cyan-200/90 group-hover:-translate-y-1" />
                     )}
-                    <div className="absolute inset-x-6 bottom-6 h-[1px] rounded-full bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                    <div className="absolute inset-x-6 bottom-6 h-[1px] rounded-full bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
                   </div>
                   <div className="p-4 relative">
                     <h4 className="text-slate-200 font-medium text-sm truncate transition-colors duration-300 group-hover:text-white">{item.name}</h4>
@@ -583,8 +583,8 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                     </div>
                   </div>
                   <div className="pointer-events-none absolute inset-0">
-                    <div className="absolute inset-0 border border-white/5 opacity-0 group-hover:opacity-40 transition-opacity duration-500 rounded-3xl" />
-                    <div className="absolute -top-16 -left-16 h-40 w-40 rounded-full bg-cyan-500/20 blur-3xl opacity-0 group-hover:opacity-80 transition-opacity duration-700" />
+                    <div className="absolute inset-0 border border-white/5 opacity-0 group-hover:opacity-35 transition-opacity duration-500 rounded-3xl" />
+                    <div className="absolute -top-16 -left-16 h-40 w-40 rounded-full bg-cyan-500/16 blur-3xl opacity-0 group-hover:opacity-65 transition-opacity duration-700" />
                   </div>
                 </div>
               ))}

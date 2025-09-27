@@ -737,12 +737,12 @@ export function POSPage() {
                         whileHover={{ scale: 1.08, y: -8 }}
                         whileTap={{ scale: 0.95 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 18 }}
-                        className="group relative rounded-3xl overflow-hidden backdrop-blur-2xl border border-white/10 bg-gradient-to-br from-slate-900/70 via-slate-900/45 to-emerald-900/35 transition-all duration-500 shadow-[0_16px_45px_-22px_rgba(15,118,110,0.55)] hover:border-emerald-400/40 hover:shadow-[0_34px_80px_-32px_rgba(5,150,105,0.45)] cursor-pointer"
+                        className="group relative rounded-3xl overflow-hidden backdrop-blur-2xl border border-white/10 bg-gradient-to-br from-slate-900/70 via-slate-900/45 to-emerald-900/35 transition-all duration-500 shadow-[0_12px_36px_-20px_rgba(15,118,110,0.32)] hover:border-emerald-300/40 hover:shadow-[0_24px_58px_-28px_rgba(5,150,105,0.36)] cursor-pointer"
                         onClick={() => addProductToCart(p)}
                       >
                         <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/12 via-transparent to-cyan-500/18" />
-                          <div className="absolute inset-0 blur-3xl bg-emerald-500/10" />
+                          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-cyan-500/14" />
+                          <div className="absolute inset-0 blur-2xl bg-emerald-500/08" />
                         </div>
 
                         <div className="relative aspect-square w-full overflow-hidden bg-[#0f172b]">
@@ -761,11 +761,11 @@ export function POSPage() {
                             </div>
                           )}
 
-                          <div className="absolute top-3 right-3 flex h-9 w-9 items-center justify-center rounded-full border border-emerald-400/60 bg-emerald-500/20 opacity-0 backdrop-blur-md transition-all duration-300 transform scale-75 group-hover:scale-100 group-hover:opacity-100">
+                          <div className="absolute top-3 right-3 flex h-9 w-9 items-center justify-center rounded-full border border-emerald-400/50 bg-emerald-500/14 opacity-0 backdrop-blur-md transition-all duration-300 transform scale-75 group-hover:scale-100 group-hover:opacity-100">
                             <Plus className="h-4 w-4 text-emerald-200" />
                           </div>
 
-                          <div className="absolute inset-x-6 bottom-6 h-px rounded-full bg-gradient-to-r from-transparent via-emerald-300/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                          <div className="absolute inset-x-6 bottom-6 h-px rounded-full bg-gradient-to-r from-transparent via-emerald-300/45 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
                         </div>
 
                         <div className="relative p-4">
@@ -779,8 +779,8 @@ export function POSPage() {
                         </div>
 
                         <div className="pointer-events-none absolute inset-0">
-                          <div className="absolute inset-0 border border-white/5 opacity-0 group-hover:opacity-40 transition-opacity duration-500 rounded-3xl" />
-                          <div className="absolute -top-20 -left-16 h-44 w-44 rounded-full bg-emerald-500/25 blur-3xl opacity-0 group-hover:opacity-80 transition-opacity duration-700" />
+                          <div className="absolute inset-0 border border-white/5 opacity-0 group-hover:opacity-35 transition-opacity duration-500 rounded-3xl" />
+                          <div className="absolute -top-20 -left-16 h-44 w-44 rounded-full bg-emerald-500/18 blur-3xl opacity-0 group-hover:opacity-70 transition-opacity duration-700" />
                         </div>
 
                         <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700">

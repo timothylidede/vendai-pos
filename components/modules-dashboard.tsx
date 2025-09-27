@@ -31,7 +31,7 @@ const retailerModules = [
     bgGradient: 'from-emerald-500/[0.14] via-emerald-500/[0.07] to-emerald-500/[0.04]',
     borderColor: 'border-emerald-400/15',
     hoverBorderColor: 'hover:border-emerald-300/25',
-    shadowColor: 'hover:shadow-[0_30px_70px_-32px_rgba(16,185,129,0.28)]',
+  shadowColor: 'hover:shadow-[0_24px_56px_-28px_rgba(16,185,129,0.2)]',
     palette: {
       cardBase: 'bg-gradient-to-br from-slate-950/88 via-slate-950/72 to-emerald-950/32',
       iconBg: 'bg-gradient-to-br from-emerald-500/[0.16] via-emerald-500/[0.08] to-emerald-400/[0.12]',
@@ -49,7 +49,7 @@ const retailerModules = [
     bgGradient: 'from-blue-500/[0.14] via-blue-500/[0.07] to-indigo-500/[0.045]',
     borderColor: 'border-blue-400/15',
     hoverBorderColor: 'hover:border-blue-300/25',
-    shadowColor: 'hover:shadow-[0_30px_70px_-32px_rgba(59,130,246,0.28)]',
+  shadowColor: 'hover:shadow-[0_24px_56px_-28px_rgba(59,130,246,0.2)]',
     palette: {
       cardBase: 'bg-gradient-to-br from-slate-950/88 via-slate-950/72 to-blue-950/32',
       iconBg: 'bg-gradient-to-br from-blue-500/[0.16] via-blue-500/[0.08] to-indigo-500/[0.12]',
@@ -67,7 +67,7 @@ const retailerModules = [
     bgGradient: 'from-purple-500/[0.14] via-purple-500/[0.07] to-pink-500/[0.04]',
     borderColor: 'border-purple-400/15',
     hoverBorderColor: 'hover:border-purple-300/25',
-    shadowColor: 'hover:shadow-[0_30px_70px_-32px_rgba(168,85,247,0.28)]',
+  shadowColor: 'hover:shadow-[0_24px_56px_-28px_rgba(168,85,247,0.2)]',
     palette: {
       cardBase: 'bg-gradient-to-br from-slate-950/88 via-slate-950/72 to-purple-950/32',
       iconBg: 'bg-gradient-to-br from-purple-500/[0.16] via-purple-500/[0.08] to-pink-500/[0.12]',
@@ -88,7 +88,7 @@ const distributorModules = [
     bgGradient: 'from-amber-500/[0.14] via-orange-500/[0.07] to-orange-500/[0.04]',
     borderColor: 'border-orange-400/15',
     hoverBorderColor: 'hover:border-orange-300/26',
-    shadowColor: 'hover:shadow-[0_30px_70px_-32px_rgba(249,115,22,0.28)]',
+  shadowColor: 'hover:shadow-[0_24px_56px_-28px_rgba(249,115,22,0.2)]',
     palette: {
       cardBase: 'bg-gradient-to-br from-slate-950/88 via-slate-950/72 to-amber-950/32',
       iconBg: 'bg-gradient-to-br from-amber-500/[0.16] via-orange-500/[0.08] to-orange-500/[0.12]',
@@ -106,7 +106,7 @@ const distributorModules = [
     bgGradient: 'from-blue-500/25 via-blue-500/10 to-indigo-500/8',
     borderColor: 'border-blue-400/25',
     hoverBorderColor: 'hover:border-blue-300/40',
-    shadowColor: 'hover:shadow-[0_30px_70px_-28px_rgba(59,130,246,0.55)]',
+  shadowColor: 'hover:shadow-[0_24px_56px_-26px_rgba(59,130,246,0.32)]',
     palette: {
       cardBase: 'bg-gradient-to-br from-slate-950/85 via-blue-950/45 to-slate-950/60',
       iconBg: 'bg-gradient-to-br from-blue-500/18 via-blue-500/12 to-indigo-500/15',
@@ -124,7 +124,7 @@ const distributorModules = [
     bgGradient: 'from-cyan-500/[0.14] via-cyan-500/[0.07] to-teal-500/[0.04]',
     borderColor: 'border-cyan-400/15',
     hoverBorderColor: 'hover:border-cyan-300/25',
-    shadowColor: 'hover:shadow-[0_30px_70px_-32px_rgba(6,182,212,0.28)]',
+  shadowColor: 'hover:shadow-[0_24px_56px_-28px_rgba(6,182,212,0.2)]',
     palette: {
       cardBase: 'bg-gradient-to-br from-slate-950/88 via-slate-950/72 to-cyan-950/32',
       iconBg: 'bg-gradient-to-br from-cyan-500/[0.16] via-cyan-500/[0.08] to-teal-500/[0.12]',
@@ -600,7 +600,7 @@ export function ModulesDashboard() {
                   </motion.div>
                 )}
                 <div 
-                  className={`group relative overflow-hidden rounded-3xl backdrop-blur-2xl ${palette.cardBase} border ${gated ? 'border-white/5 opacity-60' : module.borderColor} ${gated ? '' : module.hoverBorderColor} transition-all duration-500 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.65)] ${module.shadowColor} cursor-pointer h-full ${
+                  className={`group relative overflow-hidden rounded-3xl backdrop-blur-2xl ${palette.cardBase} border ${gated ? 'border-white/5 opacity-60' : module.borderColor} ${gated ? '' : module.hoverBorderColor} transition-all duration-500 shadow-[0_18px_48px_-28px_rgba(15,23,42,0.5)] ${module.shadowColor} cursor-pointer h-full ${
                     isClicked && !gated ? `ring-2 ring-offset-2 ring-offset-slate-950 ${palette.ring} ${activeShadow}` : ''
                   }`}
                 >
@@ -614,21 +614,21 @@ export function ModulesDashboard() {
                         <Icon className={`w-10 h-10 ${module.color} ${module.hoverColor} transition-all duration-500 ${gated ? 'opacity-60' : ''}`} 
                               style={{
                                 filter: `drop-shadow(0 4px 8px ${
-                                  module.color === 'text-green-400' ? 'rgba(34, 197, 94, 0.4)' :
-                                  module.color === 'text-blue-400' ? 'rgba(59, 130, 246, 0.4)' :
-                                  'rgba(168, 85, 247, 0.4)'
+                                  module.color === 'text-green-400' ? 'rgba(34, 197, 94, 0.28)' :
+                                  module.color === 'text-blue-400' ? 'rgba(59, 130, 246, 0.28)' :
+                                  'rgba(168, 85, 247, 0.28)'
                                 }) drop-shadow(0 2px 4px ${
-                                  module.color === 'text-green-400' ? 'rgba(34, 197, 94, 0.2)' :
-                                  module.color === 'text-blue-400' ? 'rgba(59, 130, 246, 0.2)' :
-                                  'rgba(168, 85, 247, 0.2)'
+                                  module.color === 'text-green-400' ? 'rgba(34, 197, 94, 0.14)' :
+                                  module.color === 'text-blue-400' ? 'rgba(59, 130, 246, 0.14)' :
+                                  'rgba(168, 85, 247, 0.14)'
                                 }) drop-shadow(0 0 12px ${
-                                  module.color === 'text-green-400' ? 'rgba(34, 197, 94, 0.3)' :
-                                  module.color === 'text-blue-400' ? 'rgba(59, 130, 246, 0.3)' :
-                                  'rgba(168, 85, 247, 0.3)'
+                                  module.color === 'text-green-400' ? 'rgba(34, 197, 94, 0.18)' :
+                                  module.color === 'text-blue-400' ? 'rgba(59, 130, 246, 0.18)' :
+                                  'rgba(168, 85, 247, 0.18)'
                                 }) drop-shadow(0 0 24px ${
-                                  module.color === 'text-green-400' ? 'rgba(34, 197, 94, 0.15)' :
-                                  module.color === 'text-blue-400' ? 'rgba(59, 130, 246, 0.15)' :
-                                  'rgba(168, 85, 247, 0.15)'
+                                  module.color === 'text-green-400' ? 'rgba(34, 197, 94, 0.1)' :
+                                  module.color === 'text-blue-400' ? 'rgba(59, 130, 246, 0.1)' :
+                                  'rgba(168, 85, 247, 0.1)'
                                 })`
                               }} />
                       </div>
@@ -649,7 +649,7 @@ export function ModulesDashboard() {
                   <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   {needsInventory && module.title === 'Inventory' && (
                     <div className="absolute -right-6 -top-4 rotate-12 animate-bounce">
-                      <ArrowRightCircle className="w-10 h-10 text-green-400 drop-shadow-[0_0_12px_rgba(34,197,94,0.5)]" />
+                      <ArrowRightCircle className="w-10 h-10 text-green-400 drop-shadow-[0_0_10px_rgba(34,197,94,0.35)]" />
                     </div>
                   )}
                 </div>

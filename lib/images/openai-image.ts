@@ -168,21 +168,26 @@ export async function generateProductImageWithOpenAI(params: {
     let revisedPrompt: string | undefined
 
     // Try to find reference images via Google CSE and feed them to Replicate
-    let referenceImageUrls: string[] = []
+    let referenceImageInputs: string[] = []
+    let referenceImageSources: string[] = []
     if (params.useGoogleRefs) {
       console.log('🔍 Attempting to find reference images...')
       const refs = await googleRefImages(`${title} ${category ? category + ' ' : ''}product image`, 5)
       if (refs.length) {
         console.log('✅ Reference URLs found, fetching data...')
-        const fetchedRefs: string[] = []
+        const fetchedRefs: { source: string; dataUrl?: string }[] = []
         for (const url of refs.slice(0, 4)) {
           const data = await fetchImageAsDataUrl(url)
           if (data?.dataUrl) {
-            fetchedRefs.push(data.originalUrl)
+            fetchedRefs.push({ source: data.originalUrl, dataUrl: data.dataUrl })
           }
         }
-        referenceImageUrls = fetchedRefs
-        console.log('🖼️ Using', referenceImageUrls.length, 'reference images for guidance')
+        referenceImageInputs = fetchedRefs.map(item => item.dataUrl ?? item.source)
+        referenceImageSources = fetchedRefs.map(item => item.source)
+        console.log('🖼️ Using', referenceImageSources.length, 'reference images for guidance')
+        if (referenceImageSources.length) {
+          console.log('🖼️ Reference sources:', referenceImageSources)
+        }
       } else {
         console.log('⚠️ No reference images found via Google CSE')
       }
@@ -190,7 +195,7 @@ export async function generateProductImageWithOpenAI(params: {
       console.log('⏭️ Skipping reference image search (useGoogleRefs=false)')
     }
 
-    if (!referenceImageUrls.length) {
+    if (!referenceImageInputs.length) {
       console.log('ℹ️ Proceeding without reference images (none passed validation)')
     }
 
@@ -200,47 +205,72 @@ export async function generateProductImageWithOpenAI(params: {
       output_quality: 'high'
     }
 
-    if (referenceImageUrls.length) {
-      replicateInput.image_input = referenceImageUrls
+    if (referenceImageInputs.length) {
+      replicateInput.image_input = referenceImageInputs
     }
 
-    console.log('🎨 Calling Replicate model...', { model: replicateModel, hasRefs: referenceImageUrls.length > 0 })
+    const performPrediction = async (input: Record<string, unknown>, attemptLabel: string) => {
+      const maybeRefs = input['image_input']
+      const hasRefs = Array.isArray(maybeRefs) && maybeRefs.length > 0
+      console.log('🎨 Calling Replicate model...', { model: replicateModel, hasRefs, attempt: attemptLabel })
 
-    type ReplicatePredictionStatus = 'starting' | 'processing' | 'succeeded' | 'failed' | 'canceled'
-    interface ReplicatePrediction {
-      id: string
-      status: ReplicatePredictionStatus
-      output?: unknown
-      error?: string | null
-    }
-
-    const prediction = await replicate.predictions.create({
-      model: replicateModel,
-      input: replicateInput,
-      stream: false
-    }) as ReplicatePrediction
-
-    console.log('⏳ Replicate prediction queued', { id: prediction.id, status: prediction.status })
-
-    const terminalStatuses: ReplicatePredictionStatus[] = ['succeeded', 'failed', 'canceled']
-    let currentPrediction: ReplicatePrediction = prediction
-    const startedAt = Date.now()
-    const MAX_WAIT_MS = 120_000
-    const POLL_INTERVAL_MS = 2_000
-
-    while (!terminalStatuses.includes(currentPrediction.status)) {
-      if (Date.now() - startedAt > MAX_WAIT_MS) {
-        throw new Error('Replicate prediction timed out')
+      type ReplicatePredictionStatus = 'starting' | 'processing' | 'succeeded' | 'failed' | 'canceled'
+      interface ReplicatePrediction {
+        id: string
+        status: ReplicatePredictionStatus
+        output?: unknown
+        error?: string | null
       }
-      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
-      currentPrediction = await replicate.predictions.get(currentPrediction.id) as ReplicatePrediction
-      console.log('⏳ Replicate status update', { status: currentPrediction.status })
+
+      const prediction = await replicate.predictions.create({
+        model: replicateModel,
+        input,
+        stream: false
+      }) as ReplicatePrediction
+
+      console.log('⏳ Replicate prediction queued', { id: prediction.id, status: prediction.status, attempt: attemptLabel })
+
+      const terminalStatuses: ReplicatePredictionStatus[] = ['succeeded', 'failed', 'canceled']
+      let currentPrediction: ReplicatePrediction = prediction
+      const startedAt = Date.now()
+      const MAX_WAIT_MS = 120_000
+      const POLL_INTERVAL_MS = 2_000
+
+      while (!terminalStatuses.includes(currentPrediction.status)) {
+        if (Date.now() - startedAt > MAX_WAIT_MS) {
+          throw new Error('Replicate prediction timed out')
+        }
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
+        currentPrediction = await replicate.predictions.get(currentPrediction.id) as ReplicatePrediction
+        console.log('⏳ Replicate status update', { status: currentPrediction.status, attempt: attemptLabel })
+      }
+
+      if (currentPrediction.status !== 'succeeded') {
+        const replicateError = currentPrediction.error || `Replicate prediction ${currentPrediction.status}`
+        const err = new Error(replicateError)
+        ;(err as { status?: ReplicatePredictionStatus }).status = currentPrediction.status
+        throw err
+      }
+
+      return currentPrediction
     }
 
-    if (currentPrediction.status !== 'succeeded') {
-      const replicateError = currentPrediction.error || `Replicate prediction ${currentPrediction.status}`
-      console.error('❌ Replicate prediction did not succeed', { status: currentPrediction.status, error: replicateError })
-      return { ok: false, error: replicateError }
+    let currentPrediction: Awaited<ReturnType<typeof performPrediction>>
+    try {
+      currentPrediction = await performPrediction(replicateInput, 'initial')
+    } catch (primaryError) {
+      const message = primaryError instanceof Error ? primaryError.message : String(primaryError)
+      const status = (primaryError as { status?: string }).status
+      const isInvalidInput = /invalid/i.test(message) || status === 'failed'
+      if (referenceImageInputs.length && isInvalidInput) {
+        console.warn('⚠️ Replicate rejected reference images, retrying without them...', { message })
+  const retryInput: Record<string, unknown> = { ...replicateInput }
+  delete retryInput['image_input']
+        currentPrediction = await performPrediction(retryInput, 'fallback-no-refs')
+      } else {
+        console.error('❌ Replicate prediction did not succeed', { error: primaryError })
+        return { ok: false, error: message }
+      }
     }
 
     const extractHttpUrls = (value: unknown): string[] => {
@@ -299,7 +329,7 @@ export async function generateProductImageWithOpenAI(params: {
       return []
     }
 
-    const rawOutput = currentPrediction.output
+  const rawOutput = currentPrediction.output
     console.log('✅ Replicate prediction completed')
     const candidateUrls = extractHttpUrls(rawOutput)
     const preferredUrls = candidateUrls.filter(url => url.includes('replicate') || url.includes('replicate.delivery'))

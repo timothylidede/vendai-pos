@@ -16,6 +16,7 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { getInvitation, acceptInvitation } from '@/lib/invitation-operations';
 import { createOrgScaffold, ensureUniqueOrgId } from '@/lib/org-operations';
 import { notifyInvitationAccepted, notifyMemberJoined } from '@/lib/notification-operations';
+import { UniversalLoading } from '@/components/universal-loading';
 
 type UserRole = 'retailer' | 'distributor' | null;
 
@@ -279,12 +280,7 @@ export default function OnboardingPage() {
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900">
       {/* Loading state */}
       {loading && (
-        <div className="min-h-screen w-full flex items-center justify-center">
-          <div className="text-center">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-400" />
-            <p className="text-slate-400">Setting up your workspace...</p>
-          </div>
-        </div>
+        <UniversalLoading type="initializing" message="Setting up your workspace..." />
       )}
 
       {/* Main onboarding flow */}

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Auth Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a1a; color: white; }
+        button { padding: 10px 20px; margin: 10px; background: #4285F4; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .error { color: #ff6b6b; }
+        .success { color: #51cf66; }
+        .info { margin: 10px 0; padding: 10px; background: #333; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>Firebase Authentication Test</h1>
+    
+    <div id="status" class="info">
+        <p>Loading...</p>
+    </div>
+    
+    <button onclick="testGoogleAuth()">Test Google Sign In</button>
+    <button onclick="signOutUser()">Sign Out</button>
+    
+    <div id="user-info"></div>
+    <div id="error-log"></div>
+    
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js'
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js'
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyDAH3xcghGGn1pQez0fczy6rBP9qqBWfx0",
+            authDomain: "vendai-fa58c.firebaseapp.com",
+            projectId: "vendai-fa58c",
+            storageBucket: "vendai-fa58c.firebasestorage.app",
+            messagingSenderId: "1002924595563",
+            appId: "1:1002924595563:web:69923ed21eb2d2a075142e"
+        }
+        
+        const app = initializeApp(firebaseConfig)
+        const auth = getAuth(app)
+        const provider = new GoogleAuthProvider()
+        
+        // Add scopes
+        provider.addScope('email')
+        provider.addScope('profile')
+        provider.setCustomParameters({
+            prompt: 'select_account'
+        })
+        
+        // Monitor auth state
+        onAuthStateChanged(auth, (user) => {
+            const statusEl = document.getElementById('status')
+            const userInfoEl = document.getElementById('user-info')
+            
+            if (user) {
+                statusEl.innerHTML = '<p class="success">✅ User is signed in</p>'
+                userInfoEl.innerHTML = `
+                    <div class="info">
+                        <h3>User Information:</h3>
+                        <p><strong>UID:</strong> ${user.uid}</p>
+                        <p><strong>Email:</strong> ${user.email}</p>
+                        <p><strong>Display Name:</strong> ${user.displayName}</p>
+                        <p><strong>Email Verified:</strong> ${user.emailVerified}</p>
+                    </div>
+                `
+            } else {
+                statusEl.innerHTML = '<p>❌ No user signed in</p>'
+                userInfoEl.innerHTML = ''
+            }
+        })
+        
+        window.testGoogleAuth = async function() {
+            const errorEl = document.getElementById('error-log')
+            errorEl.innerHTML = ''
+            
+            try {
+                console.log('Attempting Google sign-in...')
+                const result = await signInWithPopup(auth, provider)
+                console.log('Sign-in successful:', result)
+                
+                errorEl.innerHTML = '<p class="success">✅ Sign-in successful!</p>'
+            } catch (error) {
+                console.error('Sign-in error:', error)
+                
+                let friendlyMessage = error.message
+                if (error.code === 'auth/popup-blocked') {
+                    friendlyMessage = 'Pop-up was blocked. Please allow pop-ups and try again.'
+                } else if (error.code === 'auth/popup-closed-by-user') {
+                    friendlyMessage = 'Sign-in was cancelled by user.'
+                } else if (error.code === 'auth/unauthorized-domain') {
+                    friendlyMessage = 'This domain is not authorized for Google sign-in.'
+                } else if (error.message.includes('The requested action is invalid')) {
+                    friendlyMessage = 'Sign-in request expired or invalid. Please try again.'
+                }
+                
+                errorEl.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Sign-in Error:</h4>
+                        <p><strong>Code:</strong> ${error.code}</p>
+                        <p><strong>Message:</strong> ${friendlyMessage}</p>
+                        <details>
+                            <summary>Full Error Details</summary>
+                            <pre>${JSON.stringify(error, null, 2)}</pre>
+                        </details>
+                    </div>
+                `
+            }
+        }
+        
+        window.signOutUser = async function() {
+            try {
+                await signOut(auth)
+                document.getElementById('error-log').innerHTML = '<p class="success">✅ Signed out successfully</p>'
+            } catch (error) {
+                console.error('Sign-out error:', error)
+            }
+        }
+        
+        console.log('Firebase Auth Test initialized')
+    </script>
+</body>
+</html>

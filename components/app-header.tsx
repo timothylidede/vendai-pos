@@ -7,18 +7,20 @@ import { ConditionalElectronComponents } from '@/components/conditional-electron
 
 export function AppHeader() {
   const [isElectron, setIsElectron] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
+    setIsMounted(true)
     setIsElectron(detectElectron())
   }, [])
 
   const dragRegionStyle = useMemo(() => {
-    return isElectron ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined
-  }, [isElectron])
+    return (isMounted && isElectron) ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined
+  }, [isMounted, isElectron])
 
   const interactiveRegionStyle = useMemo(() => {
-    return isElectron ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined
-  }, [isElectron])
+    return (isMounted && isElectron) ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined
+  }, [isMounted, isElectron])
 
   return (
     <header
@@ -29,7 +31,7 @@ export function AppHeader() {
         <a href="/modules" aria-label="Go to Modules Dashboard">
           <Image
             src="/images/logo-icon.png"
-            alt="VendAI"
+            alt="vendai"
             width={24}
             height={24}
             className="rounded-sm transition-transform hover:rotate-180 duration-500 cursor-pointer"
@@ -38,7 +40,7 @@ export function AppHeader() {
       </div>
 
       <div className="flex items-center space-x-2" style={interactiveRegionStyle}>
-        <ConditionalElectronComponents />
+        {isMounted && <ConditionalElectronComponents />}
       </div>
     </header>
   )

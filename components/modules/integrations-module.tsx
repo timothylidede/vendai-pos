@@ -80,7 +80,7 @@ export function IntegrationsModule() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-200 mb-2">Integrations</h2>
-          <p className="text-slate-400">Connect VendAI with your business tools</p>
+          <p className="text-slate-400">Connect vendai with your business tools</p>
         </div>
         <button
           onClick={() => setShowAddIntegration(true)}

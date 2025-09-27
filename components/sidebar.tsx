@@ -18,7 +18,7 @@ import {
 import { NotificationSystem } from '@/components/notification-system'
 import { OrganizationSettings } from '@/components/organization-settings'
 import { ProfileManagement } from '@/components/profile-management'
-// Assistant panel is now hosted by `VendaiPanel` which listens for the
+// Assistant panel is now hosted by `vendai Panel` which listens for the
 // global 'vendai:open-assistant' event. The sidebar should dispatch that
 // event instead of rendering its own assistant instance.
 

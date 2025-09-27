@@ -295,7 +295,7 @@ export function AIAssistant({ isExpanded, onClose }: AIAssistantProps) {
             onClick={() => setMessages([{
               id: '1',
               type: 'system',
-              content: '👋 VendAI Agent ready! I can help you with tasks like inventory management, creating orders, generating reports, and more. Try asking me to do something specific!',
+              content: '👋 vendai Agent ready! I can help you with tasks like inventory management, creating orders, generating reports, and more. Try asking me to do something specific!',
               timestamp: new Date()
             }])}
           >
@@ -411,7 +411,7 @@ export function AIAssistant({ isExpanded, onClose }: AIAssistantProps) {
                     </motion.div>
                     
                     <h3 className="text-xl font-semibold text-white mb-2">
-                      {mode === "agent" ? "VendAI Agent" : "Ask VendAI"}
+                      {mode === "agent" ? "vendai Agent" : "Ask vendai"}
                     </h3>
                     
                     <p className="text-slate-300 text-sm max-w-sm leading-relaxed">

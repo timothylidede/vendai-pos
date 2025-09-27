@@ -10,7 +10,7 @@ import { AppHeader } from '@/components/app-header'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'VendAI - AI-Powered POS & ERP',
+  title: 'vendai - AI-Powered POS & ERP',
   description: 'Modern point of sale and ERP system with integrated AI assistance',
   generator: 'v0.app',
 }
@@ -55,7 +55,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </ErrorBoundary>
           </AuthProvider>
           
-          {/* Vendai Panel */}
+          {/* vendai Panel */}
           <VendaiPanel />
           
           {/* AI Assistant is hosted by VendaiPanel */}

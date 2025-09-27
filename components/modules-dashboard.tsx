@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from './ui/card'
 import { 
@@ -91,6 +91,22 @@ const distributorModules = [
   }
 ]
 
+const moduleRouteMap: Record<string, string> = {
+  'Point of Sale': '/modules/pos',
+  'Inventory': '/modules/inventory',
+  'Suppliers': '/modules/suppliers',
+  'Logistics': '/modules/logistics',
+  'Retailers': '/modules/retailers'
+}
+
+const moduleBundlePrefetchers: Record<string, () => Promise<unknown>> = {
+  'Point of Sale': () => import('@/components/modules/pos-page'),
+  'Inventory': () => import('@/components/modules/inventory-module'),
+  'Suppliers': () => import('@/components/modules/supplier-module'),
+  'Logistics': () => Promise.resolve(),
+  'Retailers': () => Promise.resolve()
+}
+
 export function ModulesDashboard() {
   const { user, userData, loading } = useAuth();
   const [showChatbot, setShowChatbot] = useState(false);
@@ -107,6 +123,37 @@ export function ModulesDashboard() {
   const router = useRouter();
   const [needsInventory, setNeedsInventory] = useState(false)
   const orgId = useMemo(() => userData?.organizationName || 'default', [userData?.organizationName])
+  const prefetchedRoutesRef = useRef<Set<string>>(new Set())
+  const prefetchedBundlesRef = useRef<Set<string>>(new Set())
+
+  const currentModules = useMemo(() => {
+    if (!userData?.role) return []
+    return userData.role === 'retailer' ? retailerModules : distributorModules
+  }, [userData?.role])
+
+  const prefetchModuleResources = useCallback((moduleTitle: string) => {
+    const route = moduleRouteMap[moduleTitle]
+    if (route && !prefetchedRoutesRef.current.has(route)) {
+      try {
+        router.prefetch(route)
+      } catch (error: unknown) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('Module route prefetch failed', { route, error })
+        }
+      }
+      prefetchedRoutesRef.current.add(route)
+    }
+
+    const bundlePrefetch = moduleBundlePrefetchers[moduleTitle]
+    if (bundlePrefetch && !prefetchedBundlesRef.current.has(moduleTitle)) {
+      bundlePrefetch().catch((error: unknown) => {
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('Module bundle prefetch failed', { moduleTitle, error })
+        }
+      })
+      prefetchedBundlesRef.current.add(moduleTitle)
+    }
+  }, [router])
 
   // Handle routing based on auth state
   useEffect(() => {
@@ -203,30 +250,24 @@ export function ModulesDashboard() {
     if (isExiting) return; // Prevent multiple clicks during animation
     // Gate all modules except Inventory until inventory exists
     if (needsInventory && moduleTitle !== 'Inventory') return;
+    prefetchModuleResources(moduleTitle)
     setClickedModule(moduleTitle);
     setIsExiting(true);
     setTimeout(() => {
-      if (moduleTitle === 'Point of Sale') {
-        router.push('/modules/pos');
-      } else if (moduleTitle === 'Inventory') {
-        router.push('/modules/inventory');
-      } else if (moduleTitle === 'Suppliers') {
-        router.push('/modules/suppliers');
-      } else if (moduleTitle === 'Logistics') {
-        router.push('/modules/logistics');
-      } else if (moduleTitle === 'Retailers') {
-        router.push('/modules/retailers');
+      const target = moduleRouteMap[moduleTitle]
+      if (target) {
+        router.push(target);
       }
     }, 200); // Wait for exit animation to complete
-  }, [isExiting, router, needsInventory]);
+  }, [isExiting, router, needsInventory, prefetchModuleResources]);
 
-  // Get modules based on user role
-  const getCurrentModules = () => {
-    if (!userData?.role) return [];
-    const base = userData.role === 'retailer' ? retailerModules : distributorModules;
-    // Keep the defined order; Inventory remains second where defined
-    return base
-  };
+  const handleModuleHover = useCallback((moduleTitle: string) => {
+    prefetchModuleResources(moduleTitle)
+  }, [prefetchModuleResources])
+
+  useEffect(() => {
+    currentModules.forEach(module => prefetchModuleResources(module.title))
+  }, [currentModules, prefetchModuleResources])
 
   // Show loading state while checking authentication
   if (loading) {
@@ -442,7 +483,7 @@ export function ModulesDashboard() {
       {/* Modules Grid */}
       <div className="flex flex-col items-center mb-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 max-w-6xl w-full place-items-center">
-          {getCurrentModules().map((module, index) => {
+          {currentModules.map((module, index) => {
             const Icon = module.icon
             const isClicked = clickedModule === module.title;
             // Only show gating tooltip on the Inventory module. For other modules, show tooltip only when not gated.
@@ -463,6 +504,8 @@ export function ModulesDashboard() {
                   transition: { duration: 0.3, ease: "easeOut" }
                 } : {}}
                 onClick={() => handleModuleClick(module.title)}
+                onMouseEnter={() => handleModuleHover(module.title)}
+                onFocus={() => handleModuleHover(module.title)}
                 style={{ pointerEvents: isExiting ? 'none' : (gated ? 'none' : 'auto') }}
               >
                 {/* First-time user tooltip */}

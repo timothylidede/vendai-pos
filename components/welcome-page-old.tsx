@@ -171,7 +171,7 @@ export function WelcomePage() {
               >
                 <Image
                   src="/images/logo-icon-remove.png"
-                  alt="VendAI Logo"
+                  alt="vendai Logo"
                   width={80}
                   height={80}
                   className="w-full h-full object-contain drop-shadow-lg"

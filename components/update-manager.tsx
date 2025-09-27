@@ -257,7 +257,7 @@ const UpdateManager: React.FC = () => {
               <CheckCircle className="h-4 w-4" />
               <AlertTitle>Up to Date</AlertTitle>
               <AlertDescription>
-                You're running the latest version of VendAI POS.
+                You're running the latest version of vendai POS.
               </AlertDescription>
             </Alert>
           )}

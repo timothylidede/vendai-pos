@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Card } from '@/components/ui/card'
@@ -22,7 +22,7 @@ export default function ChooseOnboardingPage() {
   useEffect(() => {
     if (!loading) {
       if (!user) {
-        router.push('/login')
+        router.replace('/')
         return
       }
       // If already onboarded, go to modules
@@ -46,7 +46,7 @@ export default function ChooseOnboardingPage() {
     try {
       await signOut(auth)
     } finally {
-      router.push('/login')
+      router.replace('/')
     }
   }
 

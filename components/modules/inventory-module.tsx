@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Package, AlertTriangle, TrendingUp, Upload, FileText, PlusCircle, Download, Check, ArrowLeft, Wand2 } from "lucide-react"
 import { motion } from "framer-motion"
@@ -44,6 +44,11 @@ const getStatusIcon = (status: string) => {
       return <Package className="w-4 h-4" />
   }
 }
+
+const INVENTORY_CACHE_PREFIX = 'inventory-cache-v1'
+const INVENTORY_CACHE_TTL_MS = 60_000
+
+const getCacheKey = (orgId: string) => `${INVENTORY_CACHE_PREFIX}:${orgId}`
 
 export function InventoryModule() {
   const [activeTab, setActiveTab] = useState<'products' | 'new'>('products')
@@ -99,33 +104,59 @@ export function InventoryModule() {
     }
   }, [userData?.organizationName])
 
+  const hydrateFromCache = useCallback((org: string) => {
+    if (typeof window === 'undefined' || !org) return false
+    try {
+      const cached = window.sessionStorage.getItem(getCacheKey(org))
+      if (!cached) return false
+      const parsed = JSON.parse(cached)
+      if (!parsed?.products) return false
+
+      setProducts(parsed.products)
+      setInvMap(parsed.invMap || {})
+      setHasPricelist(!!parsed.hasPricelist)
+      setShowMissingStockAlert(!!parsed.showMissingStockAlert)
+      setLoadingProducts(false)
+
+      return parsed.timestamp && Date.now() - parsed.timestamp < INVENTORY_CACHE_TTL_MS
+    } catch (error) {
+      console.warn('Failed to hydrate inventory cache', error)
+      return false
+    }
+  }, [])
+
   // Helper: load products and inventory without composite index
-  const loadOrgProducts = async (org: string) => {
+  const loadOrgProducts = async (org: string, options: { background?: boolean } = {}) => {
+    const { background = false } = options
     if (!org) {
       setProducts([])
       setHasPricelist(false)
       setShowMissingStockAlert(false)
+      if (!background) setLoadingProducts(false)
       return
     }
     try {
-      setLoadingProducts(true)
+      if (!background) setLoadingProducts(true)
       // Products for specific org only (no orderBy to avoid composite index)
-      const qy = query(
+      const productQuery = query(
         collection(db, POS_PRODUCTS_COL),
         where('orgId', '==', org),
         limit(1000)
       )
-      const snap = await getDocs(qy)
+      const inventoryQuery = query(collection(db, INVENTORY_COL), where('orgId', '==', org), limit(1000))
+
+      const [productsSnap, inventorySnap] = await Promise.all([
+        getDocs(productQuery),
+        getDocs(inventoryQuery)
+      ])
+
       // Client-side sort by updatedAt desc when present
-      const prods = snap.docs
+      const prods = productsSnap.docs
         .map(d => ({ id: d.id, ...d.data() as any }))
         .sort((a: any, b: any) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
 
-      // Inventory for this org
-      const invQ = query(collection(db, INVENTORY_COL), where('orgId', '==', org), limit(1000))
-      const invSnap = await getDocs(invQ)
       const map: Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }> = {}
-      invSnap.docs.forEach(d => {
+      inventorySnap.docs.forEach(d => {
         const v: any = d.data()
         if (v?.productId) map[v.productId] = { qtyBase: v.qtyBase || 0, qtyLoose: v.qtyLoose || 0, unitsPerBase: v.unitsPerBase || 1 }
       })
@@ -148,22 +179,46 @@ export function InventoryModule() {
 
       setProducts(augmented)
       setInvMap(map)
-      const anyInventory = invSnap.size > 0
+      const anyInventory = inventorySnap.size > 0
       const anyProducts = prods.length > 0
       setHasPricelist(anyProducts || anyInventory)
       setShowMissingStockAlert(anyProducts && !anyInventory)
+
+      if (typeof window !== 'undefined') {
+        try {
+          window.sessionStorage.setItem(
+            getCacheKey(org),
+            JSON.stringify({
+              products: augmented,
+              invMap: map,
+              hasPricelist: anyProducts || anyInventory,
+              showMissingStockAlert: anyProducts && !anyInventory,
+              timestamp: Date.now()
+            })
+          )
+        } catch (error) {
+          console.warn('Failed to cache inventory data', error)
+        }
+      }
     } catch (e) {
       // noop
     } finally {
-      setLoadingProducts(false)
+      if (!background) setLoadingProducts(false)
     }
   }
 
   // Fetch products and inventory for org
   useEffect(() => {
+    if (!orgId) return
+    const isFresh = hydrateFromCache(orgId)
+    if (isFresh) {
+      const t = window.setTimeout(() => {
+        loadOrgProducts(orgId, { background: true })
+      }, 150)
+      return () => window.clearTimeout(t)
+    }
     loadOrgProducts(orgId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId])
+  }, [orgId, hydrateFromCache])
 
   const handleGenerateImage = async (productId: string) => {
     if (!orgId || generatingId) return

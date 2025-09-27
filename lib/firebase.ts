@@ -23,6 +23,7 @@ if (process.env.NODE_ENV === 'development') {
   console.log('- Environment:', process.env.NODE_ENV);
   console.log('- Project ID:', firebaseConfig.projectId);
   console.log('- Auth Domain:', firebaseConfig.authDomain);
+  console.log('- API Key (last 4):', firebaseConfig.apiKey?.slice(-4) || 'missing');
   console.log('- Using fallback config:', !process.env.NEXT_PUBLIC_FIREBASE_API_KEY);
 }
 
@@ -45,6 +46,13 @@ try {
   auth = getAuth(app);
   db = getFirestore(app);
   googleProvider = new GoogleAuthProvider();
+  
+  // Add additional scopes and custom parameters for better OAuth flow
+  googleProvider.addScope('email');
+  googleProvider.addScope('profile');
+  googleProvider.setCustomParameters({
+    prompt: 'select_account'
+  });
   
   console.log('✅ Firebase initialized successfully');
 } catch (error) {

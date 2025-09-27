@@ -10,11 +10,24 @@ import { AIAssistant } from './ai-assistant'
 export function VendaiPanel() {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isSpinning, setIsSpinning] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
   const btnRef = useRef<HTMLButtonElement | null>(null)
   const pathname = usePathname()
   
   // Check if we should hide the panel on certain pages
-  const shouldHidePanel = pathname === '/' || pathname.startsWith('/onboarding') || pathname === '/test-auth'
+  const shouldHidePanel = pathname === '/' || 
+                          pathname === '/login' || 
+                          pathname === '/signup' ||
+                          pathname.startsWith('/onboarding') || 
+                          pathname === '/test-auth' || 
+                          pathname === '/terms' || 
+                          pathname === '/privacy' ||
+                          pathname.startsWith('/handoff') ||
+                          pathname.startsWith('/download')
+  
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
   
   const handleToggle = () => {
     // Spin the logo for feedback
@@ -95,8 +108,8 @@ export function VendaiPanel() {
     return () => window.removeEventListener('vendai:open-assistant', handleOpen)
   }, [])
 
-  // Don't render anything if we should hide the panel
-  if (shouldHidePanel) {
+  // Don't render anything if we should hide the panel or not mounted yet
+  if (shouldHidePanel || !isMounted) {
     return null
   }
   
@@ -108,11 +121,11 @@ export function VendaiPanel() {
         style={{ touchAction: 'manipulation' }}
         className={`${styles.toggleButton} fixed bottom-6 right-6 z-[9999] p-4 rounded-full bg-slate-800 shadow-2xl border-2 border-slate-600 hover:bg-slate-700 transform hover:scale-110 active:scale-95 focus:outline-none ${isSpinning ? 'animate-spin-continuous' : ''}`}
         data-expanded={isExpanded}
-        aria-label="Open Vendai Assistant"
+        aria-label="Open vendai Assistant"
       >
         <Image
           src="/images/logo-icon-remove.png"
-          alt="Vendai Logo"
+          alt="vendai Logo"
           width={40}
           height={40}
           className="w-10 h-10 object-contain"

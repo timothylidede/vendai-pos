@@ -7,9 +7,10 @@ import { doc, getDoc } from "firebase/firestore"
 import { auth, db } from "@/lib/firebase"
 import { WelcomePage } from "@/components/welcome-page"
 import { MainDashboard } from "@/components/main-dashboard"
-// Assistant is now hosted globally by `VendaiPanel` (components/vendai-panel.tsx)
+// Assistant is now hosted globally by `vendai Panel` (components/vendai-panel.tsx)
 import { NotificationDots } from "@/components/notification-dots"
 import { Sidebar } from "@/components/sidebar"
+import { UniversalLoading } from "@/components/universal-loading"
 
 export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
@@ -61,11 +62,7 @@ export default function HomePage() {
 
   // Show loading while checking authentication
   if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-900">
-        <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    )
+    return <UniversalLoading type="auth" message="Checking authentication..." />;
   }
 
   // Show welcome page for non-authenticated users

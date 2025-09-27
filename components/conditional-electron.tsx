@@ -7,12 +7,14 @@ import UpdateManager from './update-manager'
 
 export function ConditionalElectronComponents() {
   const [isElectron, setIsElectron] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
+    setIsMounted(true)
     setIsElectron(detectElectron())
   }, [])
 
-  if (!isElectron) {
+  if (!isMounted || !isElectron) {
     return null
   }
 

@@ -2,13 +2,17 @@
 
 # dependencies
 node_modules/
+/node_modules
 
-# next.js build output
+# next.js build output and cache
 .next/
+/.next
 out/
+/out
 
 # electron distribution builds (not needed for Vercel)
 dist/
+/dist
 
 # environment files (NEVER commit these)
 .env*
@@ -18,6 +22,7 @@ dist/
 
 # deployment
 .vercel/
+/.vercel
 
 # typescript
 *.tsbuildinfo
@@ -36,3 +41,18 @@ Thumbs.db
 # IDE files
 .vscode/
 .idea/
+
+# additional build artifacts that can be large
+*.exe
+*.dmg
+*.deb
+*.rpm
+*.pkg
+*.app
+*.asar
+
+# cache directories
+.cache/
+cache/
+tmp/
+temp/

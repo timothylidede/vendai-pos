@@ -1,0 +1,120 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Gradient for main background -->
+    <linearGradient id="mainGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#667eea"/>
+      <stop offset="100%" stop-color="#764ba2"/>
+    </linearGradient>
+    
+    <!-- Gradient for accent -->
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.1"/>
+    </linearGradient>
+    
+    <!-- Drop shadow filter -->
+    <filter id="dropShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="8"/>
+      <feOffset dx="0" dy="8" result="offset"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.3"/>
+      </feComponentTransfer>
+      <feMerge> 
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/> 
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Rounded square background -->
+  <rect width="1024" height="1024" rx="180" ry="180" fill="url(#mainGradient)"/>
+  
+  <!-- Main content container -->
+  <g transform="translate(512, 512)">
+    
+    <!-- POS Terminal/Register Shape -->
+    <g filter="url(#dropShadow)">
+      <!-- Main terminal body -->
+      <rect x="-240" y="-140" width="480" height="200" rx="24" ry="24" fill="white" opacity="0.95"/>
+      
+      <!-- Screen -->
+      <rect x="-200" y="-120" width="280" height="160" rx="12" ry="12" fill="#1a1a1a"/>
+      
+      <!-- Screen glow -->
+      <rect x="-190" y="-110" width="260" height="140" rx="8" ry="8" fill="#667eea" opacity="0.3"/>
+      
+      <!-- Screen content lines -->
+      <rect x="-170" y="-90" width="80" height="8" rx="4" fill="white" opacity="0.6"/>
+      <rect x="-170" y="-70" width="120" height="8" rx="4" fill="white" opacity="0.4"/>
+      <rect x="-170" y="-50" width="100" height="8" rx="4" fill="white" opacity="0.3"/>
+      
+      <!-- Keypad -->
+      <g transform="translate(120, -60)">
+        <!-- Keypad background -->
+        <rect x="-40" y="-40" width="80" height="100" rx="8" fill="url(#accentGradient)"/>
+        
+        <!-- Keys -->
+        <circle cx="-20" cy="-20" r="8" fill="white" opacity="0.8"/>
+        <circle cx="0" cy="-20" r="8" fill="white" opacity="0.8"/>
+        <circle cx="20" cy="-20" r="8" fill="white" opacity="0.8"/>
+        
+        <circle cx="-20" cy="0" r="8" fill="white" opacity="0.8"/>
+        <circle cx="0" cy="0" r="8" fill="white" opacity="0.8"/>
+        <circle cx="20" cy="0" r="8" fill="white" opacity="0.8"/>
+        
+        <circle cx="-20" cy="20" r="8" fill="white" opacity="0.8"/>
+        <circle cx="0" cy="20" r="8" fill="white" opacity="0.8"/>
+        <circle cx="20" cy="20" r="8" fill="white" opacity="0.8"/>
+        
+        <rect x="-30" y="35" width="60" height="15" rx="7" fill="white" opacity="0.8"/>
+      </g>
+      
+      <!-- AI Brain/Neural Network Symbol -->
+      <g transform="translate(-120, 80)">
+        <!-- Central node -->
+        <circle cx="0" cy="0" r="16" fill="white"/>
+        <circle cx="0" cy="0" r="12" fill="#667eea"/>
+        
+        <!-- Connection nodes -->
+        <circle cx="-40" cy="-30" r="8" fill="white" opacity="0.9"/>
+        <circle cx="40" cy="-30" r="8" fill="white" opacity="0.9"/>
+        <circle cx="-50" cy="20" r="8" fill="white" opacity="0.9"/>
+        <circle cx="50" cy="20" r="8" fill="white" opacity="0.9"/>
+        <circle cx="0" cy="50" r="8" fill="white" opacity="0.9"/>
+        
+        <!-- Connection lines -->
+        <line x1="0" y1="0" x2="-40" y2="-30" stroke="white" stroke-width="3" opacity="0.6"/>
+        <line x1="0" y1="0" x2="40" y2="-30" stroke="white" stroke-width="3" opacity="0.6"/>
+        <line x1="0" y1="0" x2="-50" y2="20" stroke="white" stroke-width="3" opacity="0.6"/>
+        <line x1="0" y1="0" x2="50" y2="20" stroke="white" stroke-width="3" opacity="0.6"/>
+        <line x1="0" y1="0" x2="0" y2="50" stroke="white" stroke-width="3" opacity="0.6"/>
+        
+        <!-- Inter-node connections -->
+        <line x1="-40" y1="-30" x2="40" y2="-30" stroke="white" stroke-width="2" opacity="0.4"/>
+        <line x1="-50" y1="20" x2="50" y2="20" stroke="white" stroke-width="2" opacity="0.4"/>
+      </g>
+      
+      <!-- Shopping cart/retail symbol -->
+      <g transform="translate(120, 80)">
+        <!-- Cart body -->
+        <path d="M-20,-10 L-15,-10 L-10,15 L15,15 L20,-5 L-5,-5" 
+              fill="none" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+        
+        <!-- Cart wheels -->
+        <circle cx="-5" cy="25" r="6" fill="white"/>
+        <circle cx="10" cy="25" r="6" fill="white"/>
+        
+        <!-- Cart handle -->
+        <line x1="-20" y1="-10" x2="-20" y2="-20" stroke="white" stroke-width="4" stroke-linecap="round"/>
+        <line x1="-20" y1="-20" x2="-10" y2="-20" stroke="white" stroke-width="4" stroke-linecap="round"/>
+      </g>
+    </g>
+    
+    <!-- Brand letter "V" overlay -->
+    <text x="0" y="-250" text-anchor="middle" font-family="Arial, sans-serif" 
+          font-size="120" font-weight="bold" fill="white" opacity="0.9">V</text>
+  </g>
+  
+  <!-- Subtle highlight overlay -->
+  <rect width="1024" height="200" rx="180" ry="180" fill="url(#accentGradient)" opacity="0.3"/>
+</svg>

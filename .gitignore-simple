@@ -5,7 +5,6 @@ node_modules/
 
 # next.js build output
 .next/
-out/
 
 # electron distribution builds (not needed for Vercel)
 dist/

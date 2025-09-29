@@ -154,8 +154,8 @@ export async function generateProductImageWithOpenAI(params: {
     return { ok: false, error: 'Product has no name' }
   }
 
-  // Standardized prompt: slate background on wooden shelf
-  const basePrompt = params.promptStyle || `Photorealistic product photo; single centered product on a floating glass shelf; uniform slate background (#1f2937) matching the Vendai interface; cool teal-accent studio lighting; no text, hands, or additional props; background color must remain constant.`
+  // Standardized prompt: uniform, rich, slightly grainy, glass shelf, slate background
+  const basePrompt = params.promptStyle || `Studio product photo, single centered product on a floating glass shelf, uniform slate background (#1f2937) matching the Vendai dashboard, cool teal-accent studio lighting, high detail, rich color, subtle grain, no text, props, hands, or accessories, background color must remain constant, consistent shadow and lighting, modern, e-commerce ready.`
   const title = `${brand ? brand + ' ' : ''}${name}`.trim()
   // Simple prompt demanding a strict slate background to match the app aesthetic
   const enhancedPrompt = `${basePrompt}. Product: ${title}${category ? '. Category: ' + category : ''}. Maintain an unbroken slate backdrop (#1f2937) with subtle glass reflection; no alternative backgrounds.`

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { runProcessingChain } from '@/lib/ai/prompt-chain'
-import { generateProductImageWithOpenAI } from '@/lib/images/openai-image'
 import { adminDb, adminStorage } from '@/lib/firebase-admin'
 
 export const runtime = 'nodejs'
@@ -63,26 +62,6 @@ export async function POST(req: NextRequest) {
       } catch (storageError) {
         console.error('Pricelist storage error:', storageError)
       }
-    }
-
-    // Optional: auto-generate images for newly created products using OpenAI (non-blocking)
-    if (
-      process.env.OPENAI_API_KEY &&
-      process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET &&
-      (chain.ctx.upsertProductIds?.length || 0) > 0
-    ) {
-      const createdIds = (chain.ctx.upsertProductIds || [])
-        .filter((x: any) => x.created)
-        .map((x: any) => x.id as string)
-      const limit = Math.min(createdIds.length, Number(process.env.IMAGE_AUTOGEN_LIMIT || '10'))
-      const subset = createdIds.slice(0, limit)
-      // Fire and forget
-      const uniformPrompt = `Studio product photo, single centered product on a floating glass shelf, uniform slate background (#1f2937) matching the Vendai dashboard, cool teal-accent studio lighting, high detail, rich color, subtle grain, no text, props, hands, or accessories, background color must remain constant, consistent shadow and lighting, modern, e-commerce ready.`;
-      void Promise.allSettled(
-        subset.map((productId: string) =>
-          generateProductImageWithOpenAI({ orgId, productId, useGoogleRefs: true, promptStyle: uniformPrompt })
-        )
-      )
     }
 
     return NextResponse.json({

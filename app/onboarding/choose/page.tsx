@@ -81,80 +81,115 @@ export default function ChooseOnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-6 bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900 relative">
+    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-6 py-16 lg:px-12">
+      <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute inset-0 bg-slate-950/55 backdrop-blur-[120px]" />
+        <div className="absolute -top-36 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-sky-500/18 blur-[120px]" />
+        <div className="absolute bottom-[-20%] right-[-10%] h-96 w-96 rounded-full bg-indigo-500/18 blur-[140px]" />
+        <div className="absolute top-1/3 -left-32 h-64 w-64 rounded-full bg-cyan-400/14 blur-[120px]" />
+      </div>
+
       {/* Logout button top-right */}
-      <div className="absolute top-6 right-6">
-        <Button onClick={onLogout} variant="outline" className="border-slate-600 text-slate-300 hover:text-white">
-          <LogOut className="w-4 h-4 mr-2" /> Logout
+      <div className="absolute top-6 right-6 z-20">
+        <Button
+          onClick={onLogout}
+          variant="outline"
+          className="border-white/15 bg-white/5 text-slate-100 backdrop-blur-xl transition hover:border-sky-200/40 hover:bg-white/10"
+        >
+          <LogOut className="mr-2 h-4 w-4" /> Logout
         </Button>
       </div>
 
-      <div className="max-w-5xl w-full grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Create Organization */}
-        <Card className="relative overflow-hidden backdrop-blur-xl bg-slate-900/80 border border-slate-600/50 rounded-2xl p-8 shadow-[0_20px_48px_-12px_rgba(0,0,0,0.8)]">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-purple-500/10" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center">
-                <Building className="w-6 h-6 text-blue-400" />
-              </div>
-              <h2 className="text-xl font-semibold text-white">Create a new organization</h2>
-            </div>
-            <p className="text-slate-300 text-sm mb-6">Start fresh and set up your organization details. You can invite teammates after.</p>
-            <Button
-              onClick={() => router.push('/onboarding')}
-              className="bg-white text-black hover:bg-gray-100"
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              Create Organization
-            </Button>
-          </div>
-        </Card>
+      <div className="relative z-10 flex w-full max-w-5xl flex-col gap-12">
+        <div className="mx-auto flex max-w-xl flex-col items-center gap-4 text-center">
+          <span className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.35em] text-slate-200/80 backdrop-blur-md">
+            onboarding
+          </span>
+          <h1 className="text-3xl font-semibold text-slate-100 md:text-4xl">Let&rsquo;s get started</h1>
+          <p className="text-sm text-slate-300/80 md:text-base">Spin up a fresh workspace or join your team in one tap.</p>
+        </div>
 
-        {/* View Invitations */}
-        <Card className="relative overflow-hidden backdrop-blur-xl bg-slate-900/80 border border-slate-600/50 rounded-2xl p-8 shadow-[0_20px_48px_-12px_rgba(0,0,0,0.8)]">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-cyan-500/10" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center">
-                <Mail className="w-6 h-6 text-emerald-400" />
-              </div>
-              <h2 className="text-xl font-semibold text-white">Join an organization</h2>
-            </div>
-            <p className="text-slate-300 text-sm mb-4">Review invitations sent to your email and accept to join.</p>
-
-            {loadingInvites ? (
-              <div className="flex items-center text-slate-400 text-sm">
-                <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin mr-2"></div>
-                Loading invitations...
-              </div>
-            ) : hasInvites ? (
-              <div className="space-y-3 mb-4 max-h-60 overflow-y-auto pr-1">
-                {invites!.map((inv) => (
-                  <div key={inv.id} className="flex items-center justify-between p-3 bg-slate-800/30 rounded-xl border border-white/5">
-                    <div>
-                      <div className="text-white text-sm font-medium">{inv.organizationName}</div>
-                      <div className="text-slate-400 text-xs">Role: {inv.role} • Invited by {inv.inviterName}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        onClick={() => onAccept(inv)}
-                        disabled={acceptingId === inv.id}
-                        className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-70"
-                      >
-                        {acceptingId === inv.id ? 'Accepting…' : 'Accept'}
-                      </Button>
-                    </div>
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+          >
+            <Card className="group relative overflow-hidden rounded-3xl border border-white/12 bg-white/[0.06] px-8 py-9 shadow-[0_30px_90px_-45px_rgba(10,17,31,0.9)] backdrop-blur-3xl transition-all duration-500 hover:border-sky-200/30 hover:bg-white/[0.09]">
+              <div className="pointer-events-none absolute inset-px rounded-[calc(1.5rem-1px)] bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.22),transparent_60%)] opacity-70 transition-opacity duration-500 group-hover:opacity-100" />
+              <div className="relative z-10 flex flex-col gap-8">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-sky-200/30 bg-sky-500/15 text-sky-200">
+                    <Building className="h-7 w-7" />
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-slate-400 text-sm mb-4">No invitations found for your account.</div>
-            )}
+                  <div className="text-left">
+                    <h2 className="text-xl font-semibold text-slate-100">Create a new organization</h2>
+                    <p className="text-sm text-slate-300/75">Set your team up with a clean slate and tailor Vendai to your workflows.</p>
+                  </div>
+                </div>
 
-            {/* Removed the "Or create a new organization" button */}
-          </div>
-        </Card>
+                <Button
+                  onClick={() => router.push('/onboarding')}
+                  className="group/button inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-500/80 px-6 py-3 text-sm font-medium text-slate-950 shadow-[0_10px_30px_-12px_rgba(56,189,248,0.8)] transition hover:bg-sky-400"
+                >
+                  <Sparkles className="h-4 w-4 transition-transform group-hover/button:translate-x-0.5" />
+                  <span>Create organization</span>
+                </Button>
+              </div>
+            </Card>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: 'easeOut', delay: 0.1 }}
+          >
+            <Card className="group relative overflow-hidden rounded-3xl border border-white/12 bg-white/[0.06] px-8 py-9 shadow-[0_30px_90px_-45px_rgba(10,17,31,0.9)] backdrop-blur-3xl transition-all duration-500 hover:border-sky-200/30 hover:bg-white/[0.09]">
+              <div className="pointer-events-none absolute inset-px rounded-[calc(1.5rem-1px)] bg-[radial-gradient(circle_at_top_right,rgba(165,243,252,0.25),transparent_60%)] opacity-70 transition-opacity duration-500 group-hover:opacity-100" />
+              <div className="relative z-10 flex flex-col gap-6">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-200/30 bg-cyan-500/15 text-cyan-100">
+                    <Mail className="h-7 w-7" />
+                  </div>
+                  <div className="text-left">
+                    <h2 className="text-xl font-semibold text-slate-100">Join an organization</h2>
+                    <p className="text-sm text-slate-300/75">Accept an invite to jump into the workspace your team already set up.</p>
+                  </div>
+                </div>
+
+                {loadingInvites ? (
+                  <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200/80">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200/30 border-t-transparent" />
+                    Loading invitations…
+                  </div>
+                ) : hasInvites ? (
+                  <div className="thin-scroll space-y-3">
+                    {invites!.map((inv) => (
+                      <div key={inv.id} className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/10 p-4 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-slate-100">{inv.organizationName}</div>
+                          <div className="text-xs text-slate-300/70">Role: {inv.role} • Invited by {inv.inviterName}</div>
+                        </div>
+                        <Button
+                          onClick={() => onAccept(inv)}
+                          disabled={acceptingId === inv.id}
+                          className="h-9 shrink-0 rounded-xl bg-cyan-500/80 px-4 text-sm font-medium text-slate-950 transition hover:bg-cyan-400 disabled:opacity-70"
+                        >
+                          {acceptingId === inv.id ? 'Accepting…' : 'Accept invite'}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-slate-300/75">
+                    <ClipboardList className="mx-auto mb-3 h-5 w-5 text-slate-300/60" />
+                    No invitations found for your account yet.
+                  </div>
+                )}
+              </div>
+            </Card>
+          </motion.div>
+        </div>
       </div>
     </div>
   )

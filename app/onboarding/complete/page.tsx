@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, Sparkles, ArrowRight, Store, Truck } from 'lucide-react';
+import { CheckCircle, Sparkles, ArrowRight, Store, Truck, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
 import { useState, useEffect } from 'react';
 import { auth, db } from '@/lib/firebase';
@@ -62,10 +62,18 @@ export default function OnboardingCompletePage() {
   // Show loading while checking status
   if (loading) {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-400">Loading...</p>
+      <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-6 py-16 sm:px-10 lg:px-16">
+        <div className="pointer-events-none absolute inset-0 -z-10">
+          <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[140px]" />
+          <div className="absolute -top-24 left-1/2 h-[22rem] w-[22rem] -translate-x-1/2 rounded-full bg-sky-500/18 blur-[140px]" />
+          <div className="absolute bottom-[-18%] right-[-10%] h-[24rem] w-[24rem] rounded-full bg-indigo-500/16 blur-[150px]" />
+          <div className="absolute top-1/3 -left-16 h-64 w-64 rounded-full bg-cyan-400/14 blur-[130px]" />
+        </div>
+        <div className="relative z-10 text-center">
+          <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-sky-300/70 border-t-transparent" />
+          </div>
+          <p className="text-sm font-medium text-slate-200/80">Loading your workspace…</p>
         </div>
       </div>
     );
@@ -81,27 +89,33 @@ export default function OnboardingCompletePage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900 flex items-center justify-center p-6 relative overflow-hidden">
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 opacity-20">
-        {Array.from({ length: 20 }).map((_, i) => (
+    <div className="relative min-h-screen w-full overflow-hidden px-6 py-16 sm:px-10 lg:px-16">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[140px]" />
+        <div className="absolute -top-24 left-1/2 h-[30rem] w-[30rem] -translate-x-1/2 rounded-full bg-sky-500/18 blur-[160px]" />
+        <div className="absolute bottom-[-18%] right-[-10%] h-[28rem] w-[28rem] rounded-full bg-indigo-500/16 blur-[170px]" />
+        <div className="absolute top-1/3 -left-20 h-72 w-72 rounded-full bg-cyan-400/14 blur-[150px]" />
+      </div>
+      {/* Animated light specks */}
+      <div className="pointer-events-none absolute inset-0 opacity-30">
+        {Array.from({ length: 24 }).map((_, i) => (
           <motion.div
             key={i}
             initial={{ scale: 0, rotate: 0, opacity: 0 }}
             animate={{
-              scale: [0, 1.2, 1],
-              rotate: [0, 180, 360],
-              opacity: [0, 1, 0.8],
-              y: [0, -50, 0],
+              scale: [0, 1.15, 1],
+              rotate: [0, 120, 240],
+              opacity: [0, 1, 0.7],
+              y: [0, -36, 0],
             }}
             transition={{
-              delay: i * 0.1,
-              duration: 0.8,
-              ease: "easeOut",
+              delay: i * 0.12,
+              duration: 1,
+              ease: 'easeOut',
               repeat: Infinity,
-              repeatDelay: 2
+              repeatDelay: 2.4,
             }}
-            className="absolute w-2 h-2 bg-gradient-to-r from-blue-400 to-purple-400 rounded-full"
+            className="absolute h-2 w-2 rounded-full bg-gradient-to-r from-sky-300 to-indigo-300"
             style={{
               left: `${Math.random() * 100}%`,
               top: `${Math.random() * 100}%`,
@@ -110,27 +124,37 @@ export default function OnboardingCompletePage() {
         ))}
       </div>
 
-      <div className="max-w-lg w-full relative z-10">
+      <div className="relative z-10 w-full max-w-4xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
         >
+          {error && (
+            <div className="mb-6 flex items-center gap-3 rounded-xl border border-red-400/25 bg-red-500/10 px-5 py-4 backdrop-blur-lg">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 text-red-300" />
+              <div>
+                <p className="text-sm font-semibold text-red-200">Error</p>
+                <p className="text-xs text-red-300/80">{error}</p>
+              </div>
+            </div>
+          )}
+
           {/* Success Animation */}
-          <div className="text-center mb-8">
+          <div className="mb-10 text-center">
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.3, duration: 0.5, ease: "backOut" }}
-              className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-green-500/30 to-blue-500/30 backdrop-blur-sm border border-green-400/30 flex items-center justify-center shadow-2xl shadow-green-500/30 mb-6 relative"
+              className="relative mx-auto mb-7 flex h-20 w-20 items-center justify-center rounded-full border border-sky-300/40 bg-gradient-to-br from-sky-500/20 to-emerald-500/20 shadow-[0_25px_60px_-30px_rgba(16,185,129,0.6)] backdrop-blur-lg"
             >
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ delay: 0.6, duration: 0.3 }}
-                className="absolute inset-0 rounded-full bg-gradient-to-br from-green-400/20 to-blue-400/20 animate-pulse"
+                className="absolute inset-0 rounded-full bg-gradient-to-br from-sky-400/25 to-indigo-400/25 blur-[2px]"
               />
-              <CheckCircle className="w-10 h-10 text-green-400 relative z-10" />
+              <CheckCircle className="relative z-10 h-10 w-10 text-emerald-300" />
             </motion.div>
 
             <motion.div
@@ -139,30 +163,31 @@ export default function OnboardingCompletePage() {
               transition={{ delay: 0.8, duration: 0.5 }}
               className="space-y-2"
             >
-              <div className="flex items-center justify-center space-x-2 mb-4">
-                <Sparkles className="w-6 h-6 text-yellow-400" />
-                <h1 className="text-3xl font-bold text-white">You're All Set!</h1>
-                <Sparkles className="w-6 h-6 text-yellow-400" />
+              <div className="mb-4 flex items-center justify-center gap-3 text-slate-100">
+                <Sparkles className="h-6 w-6 text-sky-200" />
+                <h1 className="text-3xl font-bold tracking-tight text-slate-50">You&rsquo;re all set!</h1>
+                <Sparkles className="h-6 w-6 text-sky-200" />
               </div>
-              <p className="text-lg text-slate-300">
-                <span className="text-blue-400 font-semibold">{businessName}</span> is ready to go
+              <p className="text-base text-slate-300/85">
+                <span className="font-semibold text-sky-200">{businessName}</span> is ready to operate on Vendai.
               </p>
             </motion.div>
           </div>
 
           {/* Completion Card */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 1, duration: 0.5 }}
+            transition={{ delay: 1, duration: 0.5, ease: "easeOut" }}
           >
-            <Card className="backdrop-blur-xl bg-gradient-to-br from-slate-900/60 via-slate-800/40 to-slate-900/70 border border-slate-700/40 rounded-2xl p-8 shadow-[0_20px_48px_-12px_rgba(0,0,0,0.6)] relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-blue-500/5 pointer-events-none"></div>
-              
-              <div className="relative z-10 space-y-6">
+            <Card className="group relative overflow-hidden rounded-[28px] border border-white/12 bg-white/[0.06] px-8 py-10 shadow-[0_35px_120px_-45px_rgba(12,24,46,0.85)] backdrop-blur-3xl">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(125,211,252,0.22),transparent_65%)] opacity-80 transition-opacity duration-500 group-hover:opacity-100" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(16,185,129,0.18),transparent_70%)] opacity-60" />
+
+              <div className="relative z-10 space-y-7">
                 {/* Welcome Message */}
                 <div className="text-center">
-                  <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-blue-500/20 via-purple-500/15 to-slate-600/20 backdrop-blur-sm border border-blue-400/20 flex items-center justify-center shadow-xl mb-4">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/15 bg-white/8 shadow-[0_20px_50px_-30px_rgba(56,189,248,0.8)]">
                     <Image
                       src="/images/logo-icon-remove.png"
                       alt="VendAI Logo"
@@ -171,53 +196,53 @@ export default function OnboardingCompletePage() {
                       className="w-8 h-8 object-contain"
                     />
                   </div>
-                  <h2 className="text-xl font-semibold text-white mb-2">
+                  <h2 className="mb-2 text-xl font-semibold text-slate-100">
                     Welcome to VendAI, {businessName}!
                   </h2>
-                  <p className="text-slate-400 text-sm">
+                  <p className="text-sm text-slate-300/80">
                     {userRole === 'retailer' 
-                      ? 'Your POS system is ready to process sales and manage inventory'
-                      : 'Your distribution platform is ready to manage orders and catalog'
+                      ? 'Your POS workspace is ready for fast checkouts and live stock tracking.'
+                      : 'Your distribution hub is set to manage orders, inventory, and deliveries.'
                     }
                   </p>
                 </div>
 
                 {/* Features Summary */}
                 <div className="space-y-3">
-                  <div className="flex items-center space-x-3 p-3 bg-slate-800/20 rounded-lg border border-slate-700/30">
-                    <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
-                      <CheckCircle className="w-4 h-4 text-green-400" />
+                  <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/8 p-4">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-200">
+                      <CheckCircle className="h-4 w-4" />
                     </div>
                     <div>
-                      <div className="text-white text-sm font-medium">Business Profile Created</div>
-                      <div className="text-slate-400 text-xs">
-                        {userRole === 'retailer' ? 'Retail store profile' : 'Distribution business profile'}
+                      <div className="text-sm font-medium text-slate-100">Business profile created</div>
+                      <div className="text-xs text-slate-300/75">
+                        {userRole === 'retailer' ? 'Retail store profile' : 'Distribution profile'} now live
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-3 p-3 bg-slate-800/20 rounded-lg border border-slate-700/30">
-                    <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                      <CheckCircle className="w-4 h-4 text-blue-400" />
+                  <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/8 p-4">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/20 text-sky-200">
+                      <CheckCircle className="h-4 w-4" />
                     </div>
                     <div>
-                      <div className="text-white text-sm font-medium">Location Set</div>
-                      <div className="text-slate-400 text-xs">Ready for local business connections</div>
+                      <div className="text-sm font-medium text-slate-100">Location set</div>
+                      <div className="text-xs text-slate-300/75">Ready for local matching and alerts</div>
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-3 p-3 bg-slate-800/20 rounded-lg border border-slate-700/30">
-                    <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                      {userRole === 'retailer' ? <Store className="w-4 h-4 text-purple-400" /> : <Truck className="w-4 h-4 text-purple-400" />}
+                  <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/8 p-4">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-200">
+                      {userRole === 'retailer' ? <Store className="h-4 w-4" /> : <Truck className="h-4 w-4" />}
                     </div>
                     <div>
-                      <div className="text-white text-sm font-medium">
-                        {userRole === 'retailer' ? 'POS System Ready' : 'Distribution Platform Ready'}
+                      <div className="text-sm font-medium text-slate-100">
+                        {userRole === 'retailer' ? 'POS system ready' : 'Distribution tools ready'}
                       </div>
-                      <div className="text-slate-400 text-xs">
+                      <div className="text-xs text-slate-300/75">
                         {userRole === 'retailer' 
-                          ? 'Start processing sales immediately'
-                          : 'Manage orders and inventory'
+                          ? 'Start processing sales immediately.'
+                          : 'Manage orders, inventory, and deliveries.'
                         }
                       </div>
                     </div>
@@ -225,19 +250,19 @@ export default function OnboardingCompletePage() {
                 </div>
 
                 {/* Next Steps */}
-                <div className="p-4 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-xl">
-                  <h3 className="text-white font-medium mb-2">🚀 What's Next?</h3>
-                  <ul className="space-y-1 text-sm text-slate-300">
+                <div className="rounded-2xl border border-white/10 bg-gradient-to-r from-sky-500/15 via-cyan-500/15 to-indigo-500/15 p-5">
+                  <h3 className="mb-2 text-sm font-semibold text-slate-100">🚀 What&rsquo;s next?</h3>
+                  <ul className="space-y-1 text-sm text-slate-200/80">
                     {userRole === 'retailer' ? (
                       <>
-                        <li>• Process your first sale with the POS system</li>
-                        <li>• Track inventory and get reorder alerts</li>
+                        <li>• Process your first sale in the POS</li>
+                        <li>• Track inventory and set reorder alerts</li>
                         <li>• Connect with nearby suppliers</li>
                       </>
                     ) : (
                       <>
-                        <li>• Manage your product catalog</li>
-                        <li>• Process retailer orders</li>
+                        <li>• Upload or refine your product catalogue</li>
+                        <li>• Process retailer orders and invoices</li>
                         <li>• Track deliveries and payments</li>
                       </>
                     )}
@@ -247,17 +272,17 @@ export default function OnboardingCompletePage() {
                 {/* CTA Button */}
                 <Button
                   onClick={handleGoToDashboard}
-                  className="w-full py-4 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02] flex items-center justify-center space-x-2"
+                  className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-400/90 via-sky-400/95 to-indigo-500/90 px-6 py-4 text-sm font-semibold text-slate-950 shadow-[0_25px_60px_-35px_rgba(14,165,233,0.9)] transition hover:shadow-[0_30px_70px_-35px_rgba(14,165,233,1)]"
                 >
-                  <span>Go to Dashboard</span>
-                  <ArrowRight className="w-5 h-5" />
+                  <span>Enter dashboard</span>
+                  <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-0.5" />
                 </Button>
 
                 {/* Help Text */}
                 <div className="text-center">
-                  <p className="text-slate-500 text-xs">
+                  <p className="text-xs text-slate-300/70">
                     Need help getting started? Check out our{' '}
-                    <span className="text-blue-400 hover:text-blue-300 cursor-pointer">quick start guide</span>
+                    <span className="cursor-pointer text-sky-200 hover:text-sky-100">quick start guide</span>
                   </p>
                 </div>
               </div>
@@ -271,8 +296,8 @@ export default function OnboardingCompletePage() {
             transition={{ delay: 1.5, duration: 0.5 }}
             className="text-center mt-6"
           >
-            <p className="text-slate-400 text-sm">
-              🎉 Thank you for choosing VendAI for your business
+            <p className="text-sm text-slate-300/75">
+              🎉 Thanks for choosing VendAI to power your operations.
             </p>
           </motion.div>
         </motion.div>

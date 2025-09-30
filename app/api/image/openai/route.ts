@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     console.log('✅ Product found:', { id: productId, name: p.name, brand: p.brand })
 
     // Provide default promptStyle if none specified
-    const finalPromptStyle = promptStyle || `Photorealistic product photo; single centered product on a brown mahogany wooden shelf (visible grain); matte slate background (#2b2f33); warm studio lighting from top-left; 50mm lens slight 10° angle; high detail; natural highlights; no extra props`
+  const finalPromptStyle = promptStyle || `Photorealistic product photo; single centered product captured close-up on a brown mahogany wooden shelf (visible grain); product fills most of the frame with crisp focus and soft depth falloff; matte slate background (#2b2f33); warm studio lighting from top-left; 50mm lens slight 10° angle; high detail; natural highlights; no extra props`
     
     console.log('🎭 Using prompt style:', promptStyle ? 'Custom provided' : 'Default fallback')
 

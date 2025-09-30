@@ -2,14 +2,29 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Package, AlertTriangle, TrendingUp, Upload, FileText, PlusCircle, Download, Check, ArrowLeft, Wand2, Pencil, ShoppingCart, ExternalLink, MapPin, X } from "lucide-react"
+import { Package, AlertCircle, Upload, FileText, PlusCircle, Download, Check, ArrowLeft, Wand2, Pencil, ShoppingCart, MapPin, X } from "lucide-react"
 import { motion } from "framer-motion"
 import { AIProcessingModal } from "../ai-processing-modal"
 import { LoadingSpinner } from "../loading-spinner"
 import { db } from "@/lib/firebase"
-import { collection, collectionGroup, getDocs, query, where, limit, doc, setDoc, addDoc, deleteDoc, getDoc } from "firebase/firestore"
+import {
+  collection,
+  collectionGroup,
+  getDocs,
+  query,
+  where,
+  limit,
+  doc,
+  setDoc,
+  addDoc,
+  deleteDoc,
+  getDoc,
+  type QueryConstraint,
+  type QuerySnapshot
+} from "firebase/firestore"
 import { POS_PRODUCTS_COL, INVENTORY_COL } from "@/lib/pos-operations"
 import { useAuth } from "@/contexts/auth-context"
+import type { ProcessedProduct } from "@/data/products-data"
 
 interface ProcessingStep {
   id: string;
@@ -19,6 +34,16 @@ interface ProcessingStep {
   progress?: number;
 }
 // Products are sourced from Firestore only. No static fallback inventory.
+
+interface ProcessingStats {
+  totalProducts: number
+  productsAdded: number
+  productsUpdated: number
+  duplicatesFound: number
+  estimatedTimeRemaining: number
+  suppliersAnalyzed: number
+  locationMatches: number
+}
 
 type PricelistInfo = {
   fileName: string;
@@ -50,43 +75,30 @@ type SupplierOffer = {
   coordinates?: { lat: number; lng: number } | null;
 };
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "good":
-      return "text-blue-400 bg-blue-500/20 border-blue-500/30"
-    case "low":
-      return "text-orange-400 bg-orange-500/20 border-orange-500/30"
-    case "out":
-      return "text-red-400 bg-red-500/20 border-red-500/30"
-    default:
-      return "text-slate-400 bg-slate-500/20 border-slate-500/30"
-  }
-}
-
-const getStatusIcon = (status: string) => {
-  switch (status) {
-    case "good":
-      return <TrendingUp className="w-4 h-4" />
-    case "low":
-      return <AlertTriangle className="w-4 h-4" />
-    case "out":
-      return <AlertTriangle className="w-4 h-4" />
-    default:
-      return <Package className="w-4 h-4" />
-  }
-}
+type PricelistViewerState = {
+  status: 'idle' | 'loading' | 'ready' | 'error'
+  type: 'pdf' | 'csv' | 'other'
+  url?: string
+  rows?: string[][]
+  message?: string
+  fileName?: string
+  mimeType?: string
+};
 
 const INVENTORY_CACHE_PREFIX = 'inventory-cache-v1'
 const INVENTORY_CACHE_TTL_MS = 60_000
 
 const getCacheKey = (orgId: string) => `${INVENTORY_CACHE_PREFIX}:${orgId}`
 
-const DEFAULT_IMAGE_PROMPT = `Studio product photo, single centered product on a floating glass shelf, uniform slate background (#1f2937) matching the Vendai dashboard, cool teal-accent studio lighting, high detail, rich color, subtle grain, no text, props, hands, or accessories, background color must remain constant, consistent shadow and lighting, modern, e-commerce ready.`
+const DEFAULT_IMAGE_PROMPT = `Studio product photo, single centered product captured with a tight crop (product fills ~75% of frame) on a floating glass shelf, uniform slate background (#1f2937) matching the Vendai dashboard, crisp focus across the product with gentle depth falloff, cool teal-accent studio lighting, high detail, rich color, subtle grain, no text, props, hands, or accessories, background color must remain constant, consistent shadow and lighting, modern, e-commerce ready.`
 
-const toIsoString = (value: any | undefined): string | undefined => {
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+const toIsoString = (value: unknown): string | undefined => {
   if (!value) return undefined
   if (typeof value === 'string') return value
-  if (typeof value?.toDate === 'function') {
+  if (isRecord(value) && typeof value.toDate === 'function') {
     try {
       return value.toDate().toISOString()
     } catch {
@@ -95,6 +107,99 @@ const toIsoString = (value: any | undefined): string | undefined => {
   }
   return undefined
 }
+
+type FirestoreRecord = Record<string, unknown>
+
+interface InventoryProduct {
+  id: string
+  name?: string
+  brand?: string
+  category?: string
+  supplier?: string
+  orgId?: string
+  pieceBarcode?: string
+  cartonBarcode?: string
+  retailUOM?: string
+  baseUOM?: string
+  unitsPerBase?: number
+  wholesaleQuantity?: number
+  minStock?: number
+  piecePrice?: number | string
+  wholesalePrice?: number | string
+  updatedAt?: string
+  image?: string
+  image_url?: string
+  imageUrl?: string
+  status?: string
+  stock?: number
+  stockPieces?: number
+  [key: string]: unknown
+}
+
+interface InventoryStockRecord {
+  productId?: string
+  qtyBase?: number
+  qtyLoose?: number
+  unitsPerBase?: number
+}
+
+interface InventoryCachePayload {
+  products: InventoryProduct[]
+  pricelistInfo: PricelistInfo | null
+  showMissingStockAlert: boolean
+  timestamp: number
+}
+
+interface BulkEnqueueResponse {
+  ok?: boolean
+  queued?: number
+  totalRequested?: number
+  error?: string
+}
+
+interface SupplierProductRecord extends FirestoreRecord {
+  name?: string
+  productName?: string
+  brand?: string
+  category?: string
+  distributorName?: string
+  sku?: string
+  barcode?: string
+  pieceBarcode?: string
+  unitPrice?: number
+  price?: number
+  piecePrice?: number
+  unit?: string
+  unitLabel?: string
+  retailUom?: string
+  inStock?: boolean
+  leadTime?: string
+  location?: string
+  coordinates?: { lat?: number; lng?: number }
+}
+
+interface ProcessEnhancedResponse {
+  success?: boolean
+  preview?: ProcessedProduct[]
+  stats?: Partial<Pick<ProcessingStats, 'totalProducts' | 'productsAdded' | 'productsUpdated' | 'duplicatesFound' | 'estimatedTimeRemaining' | 'suppliersAnalyzed' | 'locationMatches'>> & {
+    total?: number
+  }
+  error?: string
+}
+
+const toNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
+}
+
+const toStringValue = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 
 const calculateDistanceKm = (
   from?: { lat: number; lng: number } | null,
@@ -140,24 +245,91 @@ const formatUploadedAt = (iso?: string): string => {
   }
 }
 
-const toPricelistInfo = (data: any | null | undefined): PricelistInfo | null => {
-  if (!data) return null
+const formatFileSize = (bytes?: number): string => {
+  if (!bytes || Number.isNaN(bytes)) return 'Unknown size'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let value = bytes
+  let unitIndex = 0
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+
+  const precision = value >= 10 || unitIndex === 0 ? 0 : 1
+  return `${value.toFixed(precision)} ${units[unitIndex]}`
+}
+
+const determineFileKind = (fileName?: string, contentType?: string): 'pdf' | 'csv' | 'other' => {
+  const normalizedType = (contentType || '').toLowerCase()
+  if (normalizedType.includes('pdf')) return 'pdf'
+  if (normalizedType.includes('csv')) return 'csv'
+
+  const extension = (fileName?.split('.').pop() || '').toLowerCase()
+  if (extension === 'pdf') return 'pdf'
+  if (extension === 'csv') return 'csv'
+  return 'other'
+}
+
+const parseCsvPreview = (input: string, limit = 50): string[][] => {
+  const sanitized = input.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const lines = sanitized.split('\n').slice(0, limit)
+  const rows: string[][] = []
+
+  for (const line of lines) {
+    if (!line.trim()) {
+      continue
+    }
+    const cells: string[] = []
+    let current = ''
+    let inQuotes = false
+
+    for (let i = 0; i < line.length; i += 1) {
+      const char = line[i]
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"'
+          i += 1
+        } else {
+          inQuotes = !inQuotes
+        }
+      } else if (char === ',' && !inQuotes) {
+        cells.push(current.trim().replace(/^"|"$/g, ''))
+        current = ''
+      } else {
+        current += char
+      }
+    }
+    cells.push(current.trim().replace(/^"|"$/g, ''))
+    if (cells.some(cell => cell.length > 0)) {
+      rows.push(cells)
+    }
+  }
+
+  return rows
+}
+
+const toPricelistInfo = (data: unknown): PricelistInfo | null => {
+  if (!isRecord(data)) return null
+
+  const stats = isRecord(data.stats) ? data.stats : undefined
+
   return {
-    fileName: data?.fileName || 'pricelist.csv',
-    downloadUrl: data?.downloadUrl || '',
-    storagePath: data?.storagePath,
-    uploadedAt: toIsoString(data?.uploadedAt) || data?.uploadedAt || undefined,
-    uploadedBy: data?.uploadedBy ?? null,
-    size: typeof data?.size === 'number' ? data.size : undefined,
-    contentType: data?.contentType,
-    stats: data?.stats
+    fileName: typeof data.fileName === 'string' && data.fileName.length > 0 ? data.fileName : 'pricelist.csv',
+    downloadUrl: typeof data.downloadUrl === 'string' ? data.downloadUrl : '',
+    storagePath: typeof data.storagePath === 'string' ? data.storagePath : undefined,
+    uploadedAt: toIsoString(data.uploadedAt) || (typeof data.uploadedAt === 'string' ? data.uploadedAt : undefined),
+    uploadedBy: typeof data.uploadedBy === 'string' ? data.uploadedBy : null,
+    size: typeof data.size === 'number' ? data.size : undefined,
+    contentType: typeof data.contentType === 'string' ? data.contentType : undefined,
+    stats: stats as PricelistInfo['stats']
   }
 }
 
 export function InventoryModule() {
   const [activeTab, setActiveTab] = useState<'products' | 'new'>('products')
   const [orgId, setOrgId] = useState<string>('')
-  const [products, setProducts] = useState<any[]>([])
+  const [products, setProducts] = useState<InventoryProduct[]>([])
   const [loadingProducts, setLoadingProducts] = useState<boolean>(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadComplete, setDownloadComplete] = useState(false)
@@ -165,16 +337,14 @@ export function InventoryModule() {
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([])
   const [currentStep, setCurrentStep] = useState<string>('')
   const [processingError, setProcessingError] = useState<string>('')
-  const [processedProducts, setProcessedProducts] = useState<any[]>([])
-  const [isEntering, setIsEntering] = useState(true)
+  const [processedProducts, setProcessedProducts] = useState<ProcessedProduct[]>([])
   const [isExiting, setIsExiting] = useState(false)
-  const [invMap, setInvMap] = useState<Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }>>({})
   const [bulkGenerating, setBulkGenerating] = useState<boolean>(false)
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 })
-  const [hasPricelist, setHasPricelist] = useState<boolean>(false)
+  const [bulkQueueInfo, setBulkQueueInfo] = useState<{ queued: number; total: number } | null>(null)
   const [pricelistInfo, setPricelistInfo] = useState<PricelistInfo | null>(null)
   const [showMissingStockAlert, setShowMissingStockAlert] = useState<boolean>(false)
-  const [processingStats, setProcessingStats] = useState({
+  const [processingStats, setProcessingStats] = useState<ProcessingStats>({
     totalProducts: 0,
     productsAdded: 0,
     productsUpdated: 0,
@@ -188,13 +358,67 @@ export function InventoryModule() {
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingProduct, setEditingProduct] = useState<any | null>(null)
+  const [editingProduct, setEditingProduct] = useState<InventoryProduct | null>(null)
   const [modalMode, setModalMode] = useState<'preview' | 'edit' | 'suppliers'>('preview')
   const [supplierOffers, setSupplierOffers] = useState<SupplierOffer[]>([])
   const [loadingSuppliers, setLoadingSuppliers] = useState(false)
   const [supplierError, setSupplierError] = useState<string | null>(null)
   const supplierCacheRef = useRef<Record<string, SupplierOffer[]>>({})
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
+  const [isPricelistViewerOpen, setIsPricelistViewerOpen] = useState(false)
+  const [pricelistViewer, setPricelistViewer] = useState<PricelistViewerState>({ status: 'idle', type: 'other' })
+  const csvPreviewRows = pricelistViewer.rows ?? []
+  const [isImageZoomed, setIsImageZoomed] = useState(false)
+  const [isRegeneratingImage, setIsRegeneratingImage] = useState(false)
+  const [regenerationQueued, setRegenerationQueued] = useState(false)
+  const [regenerateError, setRegenerateError] = useState<string | null>(null)
+  const isMountedRef = useRef(true)
+
+  const normalizedSupplierLabel = useMemo(() => {
+    if (!editingProduct) return 'No supplier assigned'
+    const supplierRaw = typeof editingProduct.supplier === 'string' ? editingProduct.supplier.trim() : ''
+    const brandRaw = typeof editingProduct.brand === 'string' ? editingProduct.brand.trim() : ''
+    if (!supplierRaw) return 'No supplier assigned'
+    if (brandRaw && supplierRaw.toLowerCase() === brandRaw.toLowerCase()) {
+      return 'No supplier assigned'
+    }
+    return supplierRaw
+  }, [editingProduct])
+
+  const renderMetaTile = (label: string, value: string | number | null | undefined, helper?: string) => {
+    const display = typeof value === 'number'
+      ? Number.isFinite(value) ? `${value}` : 'Not provided'
+      : value && String(value).trim().length
+        ? String(value).trim()
+        : 'Not provided'
+
+    const isEmpty = display === 'Not provided' || display === 'No supplier assigned'
+
+    return (
+      <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+        <span className="text-xs text-slate-300/80">{label}</span>
+        <p className={`mt-1 text-sm font-semibold ${isEmpty ? 'text-slate-400' : 'text-white'}`}>
+          {display}
+        </p>
+        {helper ? (
+          <p className="mt-1 text-[11px] text-slate-400/80">{helper}</p>
+        ) : null}
+      </div>
+    )
+  }
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    setRegenerateError(null)
+    setIsRegeneratingImage(false)
+    setRegenerationQueued(false)
+  }, [editingProduct?.id])
 
   const ensureUserLocation = useCallback(() => {
     if (userLocation || typeof window === 'undefined') return
@@ -225,7 +449,7 @@ export function InventoryModule() {
   )
 
   const fetchSupplierOffers = useCallback(
-    async (product: any | null) => {
+    async (product: InventoryProduct | null) => {
       if (!product) {
         setSupplierOffers([])
         return
@@ -240,15 +464,14 @@ export function InventoryModule() {
       setSupplierError(null)
       ensureUserLocation()
       try {
-        const queries = [] as Array<ReturnType<typeof query>>
-        const constraintsPrimary = [] as any[]
+        const primaryConstraints: QueryConstraint[] = []
         if (product.pieceBarcode) {
-          constraintsPrimary.push(where('sku', '==', product.pieceBarcode))
-          constraintsPrimary.push(where('barcode', '==', product.pieceBarcode))
+          primaryConstraints.push(where('sku', '==', product.pieceBarcode))
+          primaryConstraints.push(where('barcode', '==', product.pieceBarcode))
         }
 
-        let snapshot = null
-        for (const constraint of constraintsPrimary) {
+  let snapshot: QuerySnapshot<FirestoreRecord> | null = null
+        for (const constraint of primaryConstraints) {
           try {
             snapshot = await getDocs(query(collectionGroup(db, 'products'), constraint, limit(10)))
             if (snapshot && !snapshot.empty) break
@@ -257,11 +480,30 @@ export function InventoryModule() {
           }
         }
 
-        if (!snapshot || snapshot.empty) {
+        const productName = typeof product.name === 'string' ? product.name.trim() : ''
+        if ((!snapshot || snapshot.empty) && productName) {
           try {
-            snapshot = await getDocs(query(collectionGroup(db, 'products'), where('name', '==', product.name), limit(12)))
+            snapshot = await getDocs(query(collectionGroup(db, 'products'), where('name', '==', productName), limit(12)))
           } catch (error) {
             console.warn('Supplier lookup failed for name constraint', error)
+          }
+        }
+
+        const productBrand = typeof product.brand === 'string' ? product.brand.trim() : ''
+        if ((!snapshot || snapshot.empty) && productBrand) {
+          try {
+            snapshot = await getDocs(query(collectionGroup(db, 'products'), where('brand', '==', productBrand), limit(15)))
+          } catch (error) {
+            console.warn('Supplier lookup failed for brand constraint', error)
+          }
+        }
+
+        const productCategory = typeof product.category === 'string' ? product.category.trim() : ''
+        if ((!snapshot || snapshot.empty) && productCategory) {
+          try {
+            snapshot = await getDocs(query(collectionGroup(db, 'products'), where('category', '==', productCategory), limit(15)))
+          } catch (error) {
+            console.warn('Supplier lookup failed for category constraint', error)
           }
         }
 
@@ -271,12 +513,14 @@ export function InventoryModule() {
           return
         }
 
-        const rows = snapshot.docs.map(docSnap => ({
+        const rows = snapshot.docs.map((docSnap) => ({
           docSnap,
           distributorRef: docSnap.ref.parent?.parent ?? null
         })).filter(entry => entry.distributorRef)
 
         const distributorIds = Array.from(new Set(rows.map(entry => entry.distributorRef!.id)))
+        const distributorMap = new Map<string, FirestoreRecord>()
+
         const distributorDocs = await Promise.all(
           distributorIds.map(async (id) => {
             try {
@@ -287,19 +531,29 @@ export function InventoryModule() {
             }
           })
         )
-
-        const distributorMap = new Map<string, any>()
         distributorDocs.forEach((snap) => {
           if (snap?.exists()) {
-            distributorMap.set(snap.id, snap.data())
+            distributorMap.set(snap.id, snap.data() as FirestoreRecord)
           }
         })
 
-        const offers: SupplierOffer[] = rows.map(({ docSnap, distributorRef }) => {
-          const data = docSnap.data() as any
+        const normalizedNameTokens = typeof product.name === 'string'
+          ? product.name.toLowerCase().split(/\s+/).filter(Boolean)
+          : []
+        const normalizedBrand = typeof product.brand === 'string' ? product.brand.toLowerCase() : ''
+        const normalizedCategory = typeof product.category === 'string' ? product.category.toLowerCase() : ''
+
+        type WeightedOffer = SupplierOffer & { matchScore: number }
+
+        const offers: WeightedOffer[] = rows.map(({ docSnap, distributorRef }) => {
+          const data = docSnap.data() as SupplierProductRecord
           const distributorId = distributorRef!.id
-          const distributorData = distributorMap.get(distributorId) || {}
-          const coordSource = data?.coordinates || distributorData?.coordinates || distributorData?.locationCoordinates || null
+          const distributorData: FirestoreRecord = distributorMap.get(distributorId) ?? {}
+          const distributorCoordinates = isRecord(distributorData?.coordinates) ? distributorData.coordinates : undefined
+          const distributorLocationCoordinates = isRecord(distributorData?.locationCoordinates) ? distributorData.locationCoordinates : undefined
+          const coordSource = (data?.coordinates as { lat?: number; lng?: number } | undefined)
+            ?? (distributorCoordinates as { lat?: number; lng?: number } | undefined)
+            ?? (distributorLocationCoordinates as { lat?: number; lng?: number } | undefined)
           const coords = coordSource && typeof coordSource?.lat === 'number' && typeof coordSource?.lng === 'number'
             ? { lat: coordSource.lat, lng: coordSource.lng }
             : null
@@ -307,25 +561,77 @@ export function InventoryModule() {
           const distanceKm = calculateDistanceKm(viewerLocation, coords)
           const unitPrice = Number(data?.unitPrice ?? data?.price ?? data?.piecePrice ?? product.piecePrice ?? 0)
 
-          return {
+          const distributorName = typeof distributorData?.name === 'string'
+            ? distributorData.name
+            : typeof data?.distributorName === 'string'
+              ? data.distributorName
+              : distributorId
+
+          const distributorLeadTime = typeof distributorData?.leadTime === 'string'
+            ? distributorData.leadTime
+            : undefined
+
+          const distributorContact = isRecord(distributorData?.contact) ? distributorData.contact : undefined
+          const distributorAddress = typeof distributorContact?.address === 'string' ? distributorContact.address : undefined
+          const distributorLocation = typeof distributorData?.location === 'string' ? distributorData.location : undefined
+          const productLocation = typeof data?.location === 'string' ? data.location : undefined
+          const resolvedLocation = distributorAddress ?? distributorLocation ?? productLocation ?? 'Not specified'
+
+          const candidateName = typeof data?.name === 'string'
+            ? data.name.toLowerCase()
+            : typeof data?.productName === 'string'
+              ? data.productName.toLowerCase()
+              : ''
+          const candidateBrand = typeof data?.brand === 'string' ? data.brand.toLowerCase() : ''
+          const candidateCategory = typeof data?.category === 'string' ? data.category.toLowerCase() : ''
+
+          let matchScore = 0
+          if (product.pieceBarcode && (data?.pieceBarcode === product.pieceBarcode || data?.barcode === product.pieceBarcode)) {
+            matchScore += 3
+          }
+          if (normalizedBrand && candidateBrand && normalizedBrand === candidateBrand) {
+            matchScore += 2
+          }
+          if (normalizedCategory && candidateCategory && normalizedCategory === candidateCategory) {
+            matchScore += 1
+          }
+          if (candidateName && normalizedNameTokens.some(token => candidateName.includes(token))) {
+            matchScore += 1
+          }
+
+          const offer: WeightedOffer = {
             id: docSnap.id,
             productId: product.id,
             distributorId,
-            distributorName: distributorData?.name || data?.distributorName || distributorId,
+            distributorName,
             unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
-            unit: data?.unit || data?.unitLabel || data?.retailUom,
-            inStock: data?.inStock ?? true,
-            leadTime: data?.leadTime || distributorData?.leadTime || '1-3 days',
-            location: distributorData?.contact?.address || distributorData?.location || data?.location || 'Not specified',
+            unit: typeof data?.unit === 'string'
+              ? data.unit
+              : typeof data?.unitLabel === 'string'
+                ? data.unitLabel
+                : typeof data?.retailUom === 'string'
+                  ? data.retailUom
+                  : undefined,
+            inStock: typeof data?.inStock === 'boolean' ? data.inStock : true,
+            leadTime: typeof data?.leadTime === 'string'
+              ? data.leadTime
+              : distributorLeadTime ?? '1-3 days',
+            location: resolvedLocation,
             distanceKm,
-            coordinates: coords
+            coordinates: coords,
+            matchScore
           }
+
+          return offer
         })
 
-        // Deduplicate by distributor, keep lowest price / shortest distance
+        // Deduplicate by distributor, keep the best match then distance/price
         const deduped: SupplierOffer[] = []
         const seen = new Set<string>()
         const sorted = offers.sort((a, b) => {
+          if (a.matchScore !== b.matchScore) {
+            return b.matchScore - a.matchScore
+          }
           if (a.distanceKm != null && b.distanceKm != null && a.distanceKm !== b.distanceKm) {
             return (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity)
           }
@@ -333,7 +639,8 @@ export function InventoryModule() {
         })
         for (const offer of sorted) {
           if (!seen.has(offer.distributorId)) {
-            deduped.push(offer)
+            const { matchScore, ...rest } = offer
+            deduped.push(rest)
             seen.add(offer.distributorId)
           }
         }
@@ -353,14 +660,6 @@ export function InventoryModule() {
   const router = useRouter()
   const { userData } = useAuth()
 
-  // Handle entrance animation
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsEntering(false)
-    }, 100)
-    return () => clearTimeout(timer)
-  }, [])
-
   // Derive orgId from authenticated user, if available
   useEffect(() => {
     if (userData?.organizationName) {
@@ -379,17 +678,16 @@ export function InventoryModule() {
     try {
       const cached = window.sessionStorage.getItem(getCacheKey(org))
       if (!cached) return false
-      const parsed = JSON.parse(cached)
-      if (!parsed?.products) return false
+      const parsed = JSON.parse(cached) as Partial<InventoryCachePayload>
+      if (!parsed || !Array.isArray(parsed.products)) return false
 
-      setProducts(parsed.products)
-      setInvMap(parsed.invMap || {})
-  setHasPricelist(Boolean(parsed.hasPricelist || parsed.pricelistInfo))
-  setPricelistInfo(parsed.pricelistInfo ?? null)
-      setShowMissingStockAlert(!!parsed.showMissingStockAlert)
+      setProducts(parsed.products as InventoryProduct[])
+      setPricelistInfo(parsed.pricelistInfo ?? null)
+      setShowMissingStockAlert(Boolean(parsed.showMissingStockAlert))
       setLoadingProducts(false)
 
-      return parsed.timestamp && Date.now() - parsed.timestamp < INVENTORY_CACHE_TTL_MS
+      const timestamp = typeof parsed.timestamp === 'number' ? parsed.timestamp : 0
+      return timestamp > 0 && Date.now() - timestamp < INVENTORY_CACHE_TTL_MS
     } catch (error) {
       console.warn('Failed to hydrate inventory cache', error)
       return false
@@ -401,7 +699,6 @@ export function InventoryModule() {
     const { background = false } = options
     if (!org) {
       setProducts([])
-      setHasPricelist(false)
       setShowMissingStockAlert(false)
       if (!background) setLoadingProducts(false)
       return
@@ -422,34 +719,69 @@ export function InventoryModule() {
         getDoc(doc(db, 'org_pricelists', org)).catch(() => null)
       ])
 
-      // Client-side sort by updatedAt desc when present
-      const prods = productsSnap.docs
-        .map(d => ({ id: d.id, ...d.data() as any }))
-        .sort((a: any, b: any) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
+      const prods: InventoryProduct[] = productsSnap.docs
+        .map((snap) => {
+          const raw = snap.data() as FirestoreRecord
+          const updatedAt = toIsoString(raw?.updatedAt) ?? (typeof raw?.updatedAt === 'string' ? raw.updatedAt : undefined)
+          const image = toStringValue(raw?.image)
+          const imageUrl = toStringValue(raw?.imageUrl)
+          const image_url = toStringValue(raw?.image_url)
 
-      const map: Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }> = {}
-      inventorySnap.docs.forEach(d => {
-        const v: any = d.data()
-        if (v?.productId) map[v.productId] = { qtyBase: v.qtyBase || 0, qtyLoose: v.qtyLoose || 0, unitsPerBase: v.unitsPerBase || 1 }
+          return {
+            id: snap.id,
+            ...raw,
+            updatedAt,
+            image: image ?? imageUrl ?? image_url,
+            imageUrl: imageUrl ?? image ?? image_url,
+            image_url: image_url ?? image ?? imageUrl
+          } as InventoryProduct
+        })
+        .sort((a, b) => {
+          const aDate = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
+          const bDate = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
+          return bDate - aDate
+        })
+
+      const stockMap: Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }> = {}
+      inventorySnap.docs.forEach((snap) => {
+        const data = snap.data() as InventoryStockRecord
+        if (!data?.productId) return
+        stockMap[data.productId] = {
+          qtyBase: toNumber(data.qtyBase) ?? 0,
+          qtyLoose: toNumber(data.qtyLoose) ?? 0,
+          unitsPerBase: (() => {
+            const value = toNumber(data.unitsPerBase)
+            return value && value > 0 ? value : 1
+          })()
+        }
       })
 
       // Compute stock + status
-      const augmented = prods.map((p: any) => {
-        const inv = map[p.id]
-        const unitsPerBase = inv?.unitsPerBase || p.unitsPerBase || p.wholesaleQuantity || 1
-        const stockPieces: number = inv ? inv.qtyBase * unitsPerBase + inv.qtyLoose : 0
-        const status = inv
-          ? (stockPieces === 0 ? 'out' : (stockPieces < (p.minStock || unitsPerBase) ? 'low' : 'good'))
+      const augmented: InventoryProduct[] = prods.map((product) => {
+        const inventory = stockMap[product.id]
+        const resolvedUnitsPerBaseRaw = inventory?.unitsPerBase
+          ?? toNumber(product.unitsPerBase)
+          ?? toNumber(product.wholesaleQuantity)
+          ?? 1
+        const unitsPerBase = resolvedUnitsPerBaseRaw > 0 ? resolvedUnitsPerBaseRaw : 1
+        const stockPieces = inventory
+          ? inventory.qtyBase * unitsPerBase + inventory.qtyLoose
+          : 0
+        const minStock = toNumber(product.minStock) ?? unitsPerBase
+        const status = inventory
+          ? stockPieces === 0
+            ? 'out'
+            : stockPieces < minStock
+              ? 'low'
+              : 'good'
           : 'unknown'
-        const normalizedImage = p.image_url ?? p.imageUrl ?? p.image
-        const productData = normalizedImage
-          ? { ...p, image: normalizedImage, image_url: normalizedImage, imageUrl: normalizedImage }
-          : p
+
         return {
-          ...productData,
+          ...product,
           stock: stockPieces,
           status,
-          unitsPerBase
+          unitsPerBase,
+          stockPieces
         }
       })
 
@@ -459,12 +791,10 @@ export function InventoryModule() {
           : null
 
       setProducts(augmented)
-      setInvMap(map)
       setPricelistInfo(parsedPricelist)
       const anyInventory = inventorySnap.size > 0
       const anyProducts = prods.length > 0
       const hasPricelistFlag = Boolean(parsedPricelist || anyProducts || anyInventory)
-      setHasPricelist(hasPricelistFlag)
       setShowMissingStockAlert(anyProducts && !anyInventory)
 
       if (typeof window !== 'undefined') {
@@ -473,7 +803,6 @@ export function InventoryModule() {
             getCacheKey(org),
             JSON.stringify({
               products: augmented,
-              invMap: map,
               hasPricelist: hasPricelistFlag,
               pricelistInfo: parsedPricelist,
               showMissingStockAlert: anyProducts && !anyInventory,
@@ -506,44 +835,116 @@ export function InventoryModule() {
 
   const handleBulkGenerate = async () => {
     if (!orgId || bulkGenerating) return
-    const idsMissing = products.filter(p => !p.image).map(p => p.id)
-    if (idsMissing.length === 0) return
-  const BULK_LIMIT = 5
-  const CONCURRENCY = 1
-    const target = idsMissing.slice(0, BULK_LIMIT)
+    const idsMissing = products.filter(p => !p.image && p.id).map(p => p.id)
+    if (idsMissing.length === 0) {
+      return
+    }
+
+    setBulkQueueInfo(null)
     setBulkGenerating(true)
-    setBulkProgress({ done: 0, total: target.length })
+    setBulkProgress({ done: 0, total: idsMissing.length })
+
     try {
-      for (let i = 0; i < target.length; i += CONCURRENCY) {
-        const batch = target.slice(i, i + CONCURRENCY)
-        await Promise.all(batch.map(async (productId) => {
-          try {
-            const res = await fetch('/api/image/openai', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                orgId, 
-                productId, 
-                useGoogleRefs: true,
-                promptStyle: DEFAULT_IMAGE_PROMPT
-              })
-            })
-            const json = await res.json().catch(() => ({} as any))
-            const url = (json as any)?.url as string | undefined
-            if (url) {
-              setProducts(prev => prev.map(p => p.id === productId ? { ...p, image: url, image_url: url, imageUrl: url } : p))
-            }
-          } catch {
-            // ignore
-          } finally {
-            setBulkProgress(prev => ({ done: Math.min(prev.done + 1, prev.total), total: prev.total }))
-          }
-        }))
+      const payload = {
+        orgId,
+        productIds: idsMissing,
+        promptStyle: DEFAULT_IMAGE_PROMPT,
+        variant: 'inventory-bulk'
       }
-      // Final refresh to catch any lagging writes
-      await loadOrgProducts(orgId)
+
+      const response = await fetch('/api/image/enqueue-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      let result: BulkEnqueueResponse = {}
+      try {
+        result = (await response.json()) as BulkEnqueueResponse
+      } catch {
+        result = {}
+      }
+
+      if (!isMountedRef.current) {
+        return
+      }
+
+      if (!response.ok || !result?.ok) {
+        console.error('Failed to queue image generation jobs:', result?.error)
+        setBulkProgress({ done: 0, total: idsMissing.length })
+        setBulkQueueInfo({ queued: 0, total: idsMissing.length })
+        return
+      }
+
+      setBulkProgress({ done: Number(result.queued) || 0, total: Number(result.totalRequested) || idsMissing.length })
+      setBulkQueueInfo({ queued: Number(result.queued) || 0, total: Number(result.totalRequested) || idsMissing.length })
+      // Background refresh after short delay to pick up finished images later
+      window.setTimeout(() => {
+        if (isMountedRef.current) {
+          loadOrgProducts(orgId, { background: true }).catch(() => undefined)
+        }
+      }, 4000)
     } finally {
-      setBulkGenerating(false)
+      if (isMountedRef.current) {
+        setBulkGenerating(false)
+      }
+    }
+  }
+
+  const handleRegenerateImage = async () => {
+    if (!editingProduct?.id) return
+    const targetOrg = editingProduct.orgId || orgId
+    if (!targetOrg) {
+      setRegenerateError('Select an organization before regenerating an image.')
+      return
+    }
+    if (isRegeneratingImage) return
+
+    setIsRegeneratingImage(true)
+    setRegenerationQueued(false)
+    setRegenerateError(null)
+
+    try {
+      const payload = {
+        orgId: targetOrg,
+        productIds: [editingProduct.id],
+        promptStyle: DEFAULT_IMAGE_PROMPT,
+        variant: 'inventory-single-regenerate'
+      }
+
+      const response = await fetch('/api/image/enqueue-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      let result: BulkEnqueueResponse = {}
+      try {
+        result = (await response.json()) as BulkEnqueueResponse
+      } catch {
+        result = {}
+      }
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || 'Image regeneration failed to queue')
+      }
+
+      setRegenerationQueued(true)
+
+      window.setTimeout(() => {
+        if (isMountedRef.current) {
+          setRegenerationQueued(false)
+        }
+      }, 8000)
+
+      window.setTimeout(() => {
+        if (isMountedRef.current) {
+          loadOrgProducts(targetOrg, { background: true }).catch(() => undefined)
+        }
+      }, 5000)
+    } catch (error) {
+      setRegenerationQueued(false)
+      setRegenerateError(error instanceof Error ? error.message : 'Unable to queue image regeneration right now.')
+    } finally {
+      setIsRegeneratingImage(false)
     }
   }
 
@@ -554,6 +955,76 @@ export function InventoryModule() {
       router.push('/modules')
     }, 200)
   }
+
+  const closePricelistViewer = useCallback(() => {
+    setIsPricelistViewerOpen(false)
+    setPricelistViewer({ status: 'idle', type: 'other' })
+  }, [])
+
+  const handleViewPricelist = useCallback(async () => {
+    if (!pricelistInfo?.downloadUrl) {
+      return
+    }
+
+    const fileKind = determineFileKind(pricelistInfo.fileName, pricelistInfo.contentType)
+    setIsPricelistViewerOpen(true)
+    setPricelistViewer({
+      status: 'loading',
+      type: fileKind,
+      fileName: pricelistInfo.fileName,
+      mimeType: pricelistInfo.contentType,
+      url: pricelistInfo.downloadUrl
+    })
+
+    try {
+      if (fileKind === 'pdf') {
+        setPricelistViewer({
+          status: 'ready',
+          type: 'pdf',
+          url: pricelistInfo.downloadUrl,
+          fileName: pricelistInfo.fileName,
+          mimeType: pricelistInfo.contentType
+        })
+        return
+      }
+
+      if (fileKind === 'csv') {
+        const response = await fetch(pricelistInfo.downloadUrl, { cache: 'no-store' })
+        if (!response.ok) {
+          throw new Error(`Unable to fetch pricelist (${response.status})`)
+        }
+        const text = await response.text()
+        const rows = parseCsvPreview(text, 50)
+        setPricelistViewer({
+          status: 'ready',
+          type: 'csv',
+          url: pricelistInfo.downloadUrl,
+          rows,
+          fileName: pricelistInfo.fileName,
+          mimeType: pricelistInfo.contentType
+        })
+        return
+      }
+
+      setPricelistViewer({
+        status: 'ready',
+        type: fileKind,
+        url: pricelistInfo.downloadUrl,
+        fileName: pricelistInfo.fileName,
+        mimeType: pricelistInfo.contentType
+      })
+    } catch (error) {
+      console.error('Pricelist preview error:', error)
+      setPricelistViewer({
+        status: 'error',
+        type: fileKind,
+        url: pricelistInfo.downloadUrl,
+        fileName: pricelistInfo.fileName,
+        mimeType: pricelistInfo.contentType,
+        message: error instanceof Error ? error.message : 'Unable to load pricelist preview'
+      })
+    }
+  }, [pricelistInfo])
 
   // Compact, minimal steps for a faster UX
   const initializeProcessingSteps = (): ProcessingStep[] => [
@@ -666,7 +1137,12 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
       if (ext === 'csv') {
         // Call processing API
         const response = await fetch('/api/inventory/process-enhanced', { method: 'POST', body: formData })
-        const result = await response.json().catch(() => ({} as any))
+        let result: ProcessEnhancedResponse = {}
+        try {
+          result = (await response.json()) as ProcessEnhancedResponse
+        } catch {
+          result = {}
+        }
         
         if (!response.ok || !result?.success) {
           setProcessingError(result?.error || 'Enhanced processing failed')
@@ -679,18 +1155,16 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
         if (result?.stats) {
           setProcessingStats(prev => ({
             ...prev,
-            totalProducts: Number(result.stats.totalProducts ?? result.stats.total ?? prev.totalProducts) || prev.totalProducts,
-            productsAdded: Number(result.stats.productsAdded ?? prev.productsAdded) || prev.productsAdded,
-            productsUpdated: Number(result.stats.productsUpdated ?? prev.productsUpdated) || prev.productsUpdated,
-            duplicatesFound: Number(result.stats.duplicatesFound ?? prev.duplicatesFound) || prev.duplicatesFound,
+            totalProducts: Number(result.stats?.totalProducts ?? result.stats?.total ?? prev.totalProducts) || prev.totalProducts,
+            productsAdded: Number(result.stats?.productsAdded ?? prev.productsAdded) || prev.productsAdded,
+            productsUpdated: Number(result.stats?.productsUpdated ?? prev.productsUpdated) || prev.productsUpdated,
+            duplicatesFound: Number(result.stats?.duplicatesFound ?? prev.duplicatesFound) || prev.duplicatesFound,
             estimatedTimeRemaining: 0,
             suppliersAnalyzed: prev.suppliersAnalyzed,
             locationMatches: prev.locationMatches
           }))
         }
-        if (result?.pricelist) {
-          setPricelistInfo(toPricelistInfo(result.pricelist))
-        }
+        // Note: pricelist property handling removed - not part of ProcessEnhancedResponse interface
         updateStepStatus('ai_extraction', 'completed', 100)
       } else {
         setProcessingError('Currently, only CSV uploads are supported. PDF/Excel support coming soon.')
@@ -831,8 +1305,10 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                 <Wand2 className="w-5 h-5 text-slate-200 group-hover:text-white mr-2" />
                 <span className="text-slate-200 group-hover:text-white text-sm font-medium">
                   {bulkGenerating
-                    ? `Generating ${bulkProgress.done}/${bulkProgress.total}`
-                    : `Generate images (${products.filter(p => !p.image).length})`}
+                    ? `Queuing ${bulkProgress.total} jobs...`
+                    : bulkQueueInfo
+                      ? `Queued ${bulkQueueInfo.queued}/${bulkQueueInfo.total}`
+                      : `Generate images (${products.filter(p => !p.image).length})`}
                 </span>
               </button>
             </div>
@@ -846,7 +1322,7 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
           <div className="p-4">
             {showMissingStockAlert && (
               <div className="mb-4 rounded-xl border border-yellow-400/30 bg-yellow-500/10 text-yellow-200 px-4 py-3 backdrop-blur-md">
-                Stock counts aren't set for this org yet. Not mandatory, but add them for accurate POS and alerts.
+                Stock counts aren&rsquo;t set for this org yet. Not mandatory, but add them for accurate POS and alerts.
               </div>
             )}
             {loadingProducts ? (
@@ -883,6 +1359,7 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                     setModalMode('preview')
                     setSupplierOffers([])
                     setSupplierError(null)
+                    setIsImageZoomed(false)
                     setIsModalOpen(true)
                   }}
                 >
@@ -964,10 +1441,25 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                   </div>
                 </div>
               ) : (
-                <div className="group relative overflow-hidden rounded-3xl border border-cyan-400/16 bg-gradient-to-br from-slate-950/88 via-slate-950/74 to-cyan-950/38 backdrop-blur-2xl transition-all duration-500 shadow-[0_24px_60px_-32px_rgba(6,182,212,0.4)] hover:border-cyan-300/32 hover:shadow-[0_32px_72px_-28px_rgba(6,182,212,0.45)]">
-                  <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/15 via-cyan-500/08 to-blue-500/12 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div
+                  className="group relative overflow-hidden rounded-3xl border border-cyan-400/14 bg-gradient-to-br from-slate-950/88 via-slate-950/76 to-cyan-950/32 backdrop-blur-2xl transition-all duration-500 shadow-[0_14px_36px_-26px_rgba(6,182,212,0.28)] hover:border-cyan-300/28 hover:shadow-[0_18px_44px_-24px_rgba(6,182,212,0.32)] cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    if (pricelistInfo.downloadUrl) {
+                      void handleViewPricelist()
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if ((event.key === 'Enter' || event.key === ' ') && pricelistInfo.downloadUrl) {
+                      event.preventDefault()
+                      void handleViewPricelist()
+                    }
+                  }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/12 via-cyan-500/06 to-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   <div className="relative p-10 text-center space-y-4">
-                    <div className="w-24 h-24 mx-auto rounded-2xl backdrop-blur-2xl bg-gradient-to-br from-cyan-500/12 via-cyan-500/06 to-blue-500/10 border border-cyan-300/24 flex items-center justify-center group-hover:scale-105 transition-all duration-500 shadow-[0_10px_30px_-20px_rgba(6,182,212,0.35)]">
+                    <div className="w-24 h-24 mx-auto rounded-2xl backdrop-blur-2xl bg-gradient-to-br from-cyan-500/10 via-cyan-500/06 to-blue-500/08 border border-cyan-300/24 flex items-center justify-center group-hover:scale-105 transition-all duration-500 shadow-[0_8px_24px_-18px_rgba(6,182,212,0.28)]">
                       <FileText className="w-12 h-12 text-cyan-200/90 transition-all duration-500" />
                     </div>
                     <div className="space-y-2">
@@ -980,6 +1472,7 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                       <p className="text-xs text-slate-400/80">
                         Uploaded {formatUploadedAt(pricelistInfo.uploadedAt)}
                       </p>
+                      <p className="text-xs text-slate-400/70 italic">Click to preview without leaving the app.</p>
                     </div>
                     {pricelistInfo.stats && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-slate-200/90">
@@ -998,23 +1491,11 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                       </div>
                     )}
                     <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                      <button
-                        type="button"
-                        disabled={!pricelistInfo.downloadUrl}
-                        onClick={() => {
-                          if (pricelistInfo.downloadUrl) {
-                            window.open(pricelistInfo.downloadUrl, '_blank', 'noopener,noreferrer')
-                          }
-                        }}
-                        className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/24 bg-cyan-500/12 px-4 py-2 text-cyan-100/90 hover:border-cyan-300/40 hover:bg-cyan-500/18 transition-all duration-300 disabled:opacity-40"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                        View
-                      </button>
                       <a
                         href={pricelistInfo.downloadUrl || '#'}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={(event) => event.stopPropagation()}
                         className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-slate-100 hover:border-white/25 hover:bg-white/20 transition-all duration-300"
                       >
                         <Download className="w-4 h-4" />
@@ -1022,7 +1503,10 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                       </a>
                       <button
                         type="button"
-                        onClick={() => uploadInputRef.current?.click()}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          uploadInputRef.current?.click()
+                        }}
                         className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/24 bg-cyan-500/12 px-4 py-2 text-cyan-100/90 hover:border-cyan-300/40 hover:bg-cyan-500/18 transition-all duration-300"
                       >
                         <Upload className="w-4 h-4" />
@@ -1034,13 +1518,13 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
               )}
 
               <div
-                className="group relative overflow-hidden rounded-3xl border border-blue-400/18 bg-gradient-to-br from-slate-950/88 via-slate-950/74 to-blue-950/44 backdrop-blur-2xl transition-all duration-500 shadow-[0_24px_60px_-32px_rgba(59,130,246,0.4)] hover:border-blue-300/35 hover:shadow-[0_32px_72px_-28px_rgba(59,130,246,0.45)] cursor-pointer"
+                className="group relative overflow-hidden rounded-3xl border border-blue-400/16 bg-gradient-to-br from-slate-950/88 via-slate-950/76 to-blue-950/38 backdrop-blur-2xl transition-all duration-500 shadow-[0_14px_36px_-26px_rgba(59,130,246,0.28)] hover:border-blue-300/30 hover:shadow-[0_18px_44px_-24px_rgba(59,130,246,0.32)] cursor-pointer"
                 onClick={() => { setEditingProduct(null); setModalMode('edit'); setIsModalOpen(true) }}
               >
                 <div className="relative p-10">
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/15 via-blue-500/08 to-indigo-500/12 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/12 via-blue-500/06 to-indigo-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   <div className="relative text-center">
-                    <div className="w-24 h-24 mx-auto mb-6 rounded-2xl backdrop-blur-2xl bg-gradient-to-br from-blue-500/12 via-blue-500/06 to-indigo-500/10 border border-blue-300/24 flex items-center justify-center group-hover:scale-105 transition-all duration-500 shadow-[0_10px_30px_-20px_rgba(59,130,246,0.35)]">
+                    <div className="w-24 h-24 mx-auto mb-6 rounded-2xl backdrop-blur-2xl bg-gradient-to-br from-blue-500/10 via-blue-500/06 to-indigo-500/08 border border-blue-300/24 flex items-center justify-center group-hover:scale-105 transition-all duration-500 shadow-[0_8px_24px_-18px_rgba(59,130,246,0.28)]">
                       <PlusCircle className="w-12 h-12 text-blue-200/90 transition-all duration-500" />
                     </div>
                     <h4 className="text-lg font-semibold tracking-wide text-blue-100/90 group-hover:text-white transition-colors duration-300">Add manually</h4>
@@ -1109,8 +1593,8 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                     >
                       <div className="absolute inset-0 bg-gradient-to-br from-green-500/[0.03] via-transparent to-emerald-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                       <div className="aspect-square w-full bg-gradient-to-br from-slate-800/60 to-slate-700/40 flex items-center justify-center relative overflow-hidden">
-                        {product.image_url ? (
-                          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500" />
+                        {(product as any).image_url ? (
+                          <img src={(product as any).image_url} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500" />
                         ) : (
                           <Package className="w-16 h-16 text-slate-400 group-hover:scale-125 group-hover:text-green-300 group-hover:rotate-12 transition-all duration-500 relative z-10" />
                         )}
@@ -1118,8 +1602,8 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                       <div className="p-4 relative">
                         <h4 className="text-slate-200 font-medium text-sm truncate group-hover:text-white transition-colors duration-300">{product.name}</h4>
                         <div className="mt-2 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-2 group-hover:translate-y-0">
-                          <span className="text-xs text-slate-400 group-hover:text-slate-300">{product.brand || product.code || 'N/A'}</span>
-                          <span className="text-xs px-2 py-1 rounded-full border text-green-400 bg-green-500/20 border-green-500/30">${product.price_distributor}</span>
+                          <span className="text-xs text-slate-400 group-hover:text-slate-300">{product.brand || 'N/A'}</span>
+                          <span className="text-xs px-2 py-1 rounded-full border text-green-400 bg-green-500/20 border-green-500/30">${product.unitPrice}</span>
                         </div>
                       </div>
                     </div>
@@ -1163,73 +1647,136 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
             </div>
 
             {modalMode === 'preview' && editingProduct && (
-              <div className="grid md:grid-cols-[280px_1fr] gap-6">
-                <div className="relative">
-                  <div className="aspect-square w-full overflow-hidden rounded-2xl border border-white/12 bg-gradient-to-br from-slate-900/70 via-slate-900/50 to-slate-900/30 flex items-center justify-center">
+              <div className="space-y-6">
+                <div
+                  className={`relative grid gap-6 transition-all duration-300 ${
+                    isImageZoomed ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-[minmax(0,360px)_1fr]'
+                  }`}
+                >
+                  <div
+                    className={`relative rounded-2xl border border-white/12 bg-gradient-to-br from-slate-900/70 via-slate-900/50 to-slate-900/30 overflow-hidden shadow-[0_20px_60px_-30px_rgba(15,23,42,0.65)] transition-all duration-300 ${
+                      isImageZoomed ? 'max-w-3xl mx-auto md:max-h-[70vh]' : 'md:max-h-[420px]'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setIsImageZoomed(prev => !prev)}
+                      className="absolute top-4 left-4 z-10 inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/40 px-3 py-1.5 text-xs font-medium text-slate-100 hover:border-white/30 hover:bg-black/55 transition-all duration-200 backdrop-blur-sm"
+                    >
+                      {isImageZoomed ? 'Exit focus' : 'Image focus'}
+                    </button>
+                    {isImageZoomed && (
+                      <button
+                        type="button"
+                        onClick={handleRegenerateImage}
+                        disabled={isRegeneratingImage}
+                        className="absolute top-4 right-4 z-10 inline-flex items-center gap-2 rounded-full border border-purple-300/40 bg-black/45 px-3 py-1.5 text-xs font-medium text-purple-100 hover:border-purple-200/60 hover:bg-black/60 transition-all duration-200 backdrop-blur-sm disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isRegeneratingImage ? (
+                          <>
+                            <span className="h-4 w-4 rounded-full border border-purple-200/70 border-t-transparent animate-spin" />
+                            <span>Generating…</span>
+                          </>
+                        ) : regenerationQueued ? (
+                          <>
+                            <Check className="h-3.5 w-3.5" />
+                            <span>Queued</span>
+                          </>
+                        ) : (
+                          <>
+                            <Wand2 className="h-3.5 w-3.5" />
+                            <span>Regenerate image</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                     {editingProduct.image ? (
-                      <img src={editingProduct.image} alt={editingProduct.name} className="h-full w-full object-cover" />
+                      <img
+                        src={editingProduct.image}
+                        alt={editingProduct.name}
+                        className={`w-full h-full object-contain transition-all duration-500 ${
+                          isImageZoomed ? 'p-6 md:p-10' : 'p-6'
+                        }`}
+                      />
                     ) : (
-                      <Package className="w-16 h-16 text-slate-400" />
+                      <div className="flex h-full w-full items-center justify-center py-24">
+                        <Package className="w-20 h-20 text-slate-500" />
+                      </div>
                     )}
-                  </div>
-                  <div className="absolute top-4 right-4 flex flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setModalMode('edit')}
-                      className="inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/10 text-slate-50 hover:border-white/30 hover:bg-white/25 transition-all duration-200 p-2"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setModalMode('suppliers')}
-                      className="inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/10 text-slate-50 hover:border-white/30 hover:bg-white/25 transition-all duration-200 p-2"
-                    >
-                      <ShoppingCart className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-4 text-slate-200">
-                  <div className="space-y-1">
-                    <p className="text-xs uppercase tracking-[0.25em] text-slate-400">{editingProduct.brand || 'No brand set'}</p>
-                    <h4 className="text-2xl font-semibold text-white">{editingProduct.name}</h4>
-                    <p className="text-sm text-slate-400">Category: {editingProduct.category || 'Uncategorized'}</p>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-                      <span className="text-xs text-slate-300/80">Piece price</span>
-                      <p className="text-lg font-semibold text-emerald-200">
-                        {currencyFormatter.format(Number(editingProduct.piecePrice) || 0)}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-                      <span className="text-xs text-slate-300/80">Carton price</span>
-                      <p className="text-lg font-semibold text-cyan-200">
-                        {editingProduct.wholesalePrice
-                          ? currencyFormatter.format(Number(editingProduct.wholesalePrice) || 0)
-                          : '—'}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-                      <span className="text-xs text-slate-300/80">Units per base</span>
-                      <p className="text-lg font-semibold text-white">{editingProduct.unitsPerBase || 1}</p>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-                      <span className="text-xs text-slate-300/80">Stock on hand</span>
-                      <p className="text-lg font-semibold text-white">
-                        {typeof editingProduct.stock === 'number' ? editingProduct.stock : '—'}
-                      </p>
+                    <div className="absolute bottom-4 right-4 flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setModalMode('edit')}
+                        className="inline-flex items-center justify-center rounded-xl border border-white/15 bg-black/40 text-slate-50 hover:border-white/30 hover:bg-black/65 transition-all duration-200 p-2 backdrop-blur-sm"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setModalMode('suppliers')}
+                        className="inline-flex items-center justify-center rounded-xl border border-white/15 bg-black/40 text-slate-50 hover:border-white/30 hover:bg-black/65 transition-all duration-200 p-2 backdrop-blur-sm"
+                      >
+                        <ShoppingCart className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-4 text-xs text-slate-300/80">
-                    {editingProduct.pieceBarcode && (
-                      <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">Piece barcode: {editingProduct.pieceBarcode}</span>
+
+                  <div className={`space-y-4 text-slate-200 transition-opacity duration-300 ${isImageZoomed ? 'md:opacity-0 md:pointer-events-none md:h-0' : 'opacity-100'}`}>
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-[0.25em] text-slate-400">{editingProduct.brand || 'No brand set'}</p>
+                      <h4 className="text-2xl font-semibold text-white">{editingProduct.name}</h4>
+                      <p className="text-sm text-slate-400">Category: {editingProduct.category || 'Uncategorized'}</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                        <span className="text-xs text-slate-300/80">Piece price</span>
+                        <p className="text-lg font-semibold text-emerald-200">
+                          {currencyFormatter.format(Number(editingProduct.piecePrice) || 0)}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                        <span className="text-xs text-slate-300/80">Carton price</span>
+                        <p className="text-lg font-semibold text-cyan-200">
+                          {editingProduct.wholesalePrice
+                            ? currencyFormatter.format(Number(editingProduct.wholesalePrice) || 0)
+                            : '—'}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                        <span className="text-xs text-slate-300/80">Units per base</span>
+                        <p className="text-lg font-semibold text-white">{editingProduct.unitsPerBase || 1}</p>
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                        <span className="text-xs text-slate-300/80">Stock on hand</span>
+                        <p className="text-lg font-semibold text-white">
+                          {typeof editingProduct.stock === 'number' ? editingProduct.stock : '—'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                      {renderMetaTile('Piece barcode', editingProduct.pieceBarcode)}
+                      {renderMetaTile('Carton barcode', editingProduct.cartonBarcode)}
+                      {renderMetaTile('Supplier', normalizedSupplierLabel)}
+                    </div>
+                    {(!editingProduct.pieceBarcode || !editingProduct.cartonBarcode) && (
+                      <div className="flex items-start gap-2 rounded-xl border border-cyan-400/25 bg-cyan-500/12 px-3 py-3 text-xs text-cyan-100/90">
+                        <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                        <span>
+                          Piece barcodes power single-unit scans. Carton barcodes keep case packs in sync. Leave them blank if you do not use them yet— you can add codes later without breaking checkout.
+                        </span>
+                      </div>
                     )}
-                    {editingProduct.cartonBarcode && (
-                      <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">Carton barcode: {editingProduct.cartonBarcode}</span>
+                    {regenerationQueued && !regenerateError && (
+                      <div className="flex items-start gap-2 rounded-xl border border-emerald-400/25 bg-emerald-500/15 px-3 py-3 text-xs text-emerald-100">
+                        <Check className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                        <span>Image regeneration queued. We will refresh this item automatically once the new photo lands.</span>
+                      </div>
                     )}
-                    {editingProduct.supplier && (
-                      <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">Supplier: {editingProduct.supplier}</span>
+                    {regenerateError && (
+                      <div className="flex items-start gap-2 rounded-xl border border-rose-400/30 bg-rose-500/15 px-3 py-3 text-xs text-rose-100">
+                        <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                        <span>{regenerateError}</span>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1315,15 +1862,134 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
           </div>
         </div>
       )}
+
+      {isPricelistViewerOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-md"
+            onClick={closePricelistViewer}
+          />
+          <div className="relative w-full max-w-5xl rounded-2xl border border-white/12 bg-gradient-to-br from-slate-900/85 via-slate-900/75 to-slate-900/65 backdrop-blur-3xl shadow-[0_24px_90px_-32px_rgba(15,23,42,0.75)] text-slate-50 p-6 space-y-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <h3 className="text-xl font-semibold">{pricelistViewer.fileName || pricelistInfo?.fileName || 'Pricelist'}</h3>
+                <p className="text-xs text-slate-300/80">
+                  {(() => {
+                    const kind = determineFileKind(pricelistInfo?.fileName, pricelistInfo?.contentType)
+                    const kindLabel = kind === 'pdf' ? 'PDF document' : kind === 'csv' ? 'CSV file' : 'File'
+                    const sizeLabel = pricelistInfo?.size ? formatFileSize(pricelistInfo.size) : undefined
+                    return sizeLabel ? `${kindLabel} • ${sizeLabel}` : kindLabel
+                  })()}
+                </p>
+                {pricelistInfo?.uploadedAt && (
+                  <p className="text-xs text-slate-400/70">Uploaded {formatUploadedAt(pricelistInfo.uploadedAt)}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {pricelistViewer.url && (
+                  <a
+                    href={pricelistViewer.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-xs font-medium text-slate-100 hover:border-white/25 hover:bg-white/20 transition-all duration-200"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={closePricelistViewer}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-slate-50 hover:border-white/30 hover:bg-white/20 transition-all duration-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {pricelistViewer.status === 'loading' && (
+              <div className="flex justify-center py-16">
+                <LoadingSpinner size="md" />
+              </div>
+            )}
+
+            {pricelistViewer.status === 'error' && (
+              <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-4 text-sm text-amber-200">
+                {pricelistViewer.message || 'We could not load a preview of this file.'}
+                {pricelistViewer.url && (
+                  <span className="ml-1">You can still download the file using the button above.</span>
+                )}
+              </div>
+            )}
+
+            {pricelistViewer.status === 'ready' && pricelistViewer.type === 'pdf' && pricelistViewer.url && (
+              <div className="h-[70vh]">
+                <iframe
+                  src={`${pricelistViewer.url}#toolbar=0&navpanes=0&scrollbar=0`}
+                  title="Pricelist PDF viewer"
+                  className="w-full h-full rounded-xl border border-white/12 bg-white"
+                />
+              </div>
+            )}
+
+            {pricelistViewer.status === 'ready' && pricelistViewer.type === 'csv' && (
+              <div className="space-y-4">
+                <p className="text-xs text-slate-300/80">Showing the first {csvPreviewRows.length > 0 ? Math.max(csvPreviewRows.length - 1, 0) : 0} rows</p>
+                <div className="max-h-[65vh] overflow-auto rounded-xl border border-white/10 bg-slate-900/60">
+                  {csvPreviewRows.length > 0 ? (
+                    (() => {
+                      const [headerRow, ...bodyRows] = csvPreviewRows
+                      return (
+                        <table className="min-w-full divide-y divide-white/10 text-left text-xs">
+                          <thead className="bg-white/5 text-slate-200">
+                            <tr>
+                              {headerRow.map((headerCell, index) => (
+                                <th key={`header-${index}`} className="px-4 py-3 font-semibold">
+                                  {headerCell || '—'}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5 text-slate-200/90">
+                            {bodyRows.map((row, rowIndex) => (
+                              <tr key={`row-${rowIndex}`} className="hover:bg-white/5">
+                                {row.map((cell, cellIndex) => (
+                                  <td key={`cell-${rowIndex}-${cellIndex}`} className="px-4 py-2 align-top whitespace-pre-wrap">
+                                    {cell || '—'}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )
+                    })()
+                  ) : (
+                    <div className="p-6 text-sm text-slate-300">
+                      This CSV looks empty. Try downloading the file to confirm its contents.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {pricelistViewer.status === 'ready' && pricelistViewer.type === 'other' && (
+              <div className="rounded-xl border border-white/12 bg-white/5 px-4 py-6 text-sm text-slate-200">
+                Inline preview is not available for this file type. Use the download button above to open it in a new tab.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </motion.div>
   )
 }
 
 type ProductFormProps = {
   orgId: string
-  initial: any | null
+  initial: InventoryProduct | null
   onCancel: () => void
-  onSaved: (product: any) => void
+  onSaved: (product: InventoryProduct) => void
   onDeleted: (productId?: string) => void
 }
 
@@ -1335,8 +2001,8 @@ function ProductForm({ orgId, initial, onCancel, onSaved, onDeleted }: ProductFo
   const [cartonBarcode, setCartonBarcode] = useState<string>(initial?.cartonBarcode || '')
   const [piecePrice, setPiecePrice] = useState<number>(typeof initial?.piecePrice === 'number' ? initial.piecePrice : 0)
   const [cartonPrice, setCartonPrice] = useState<number>(typeof initial?.wholesalePrice === 'number' ? initial.wholesalePrice : (typeof initial?.cartonPrice === 'number' ? initial.cartonPrice : 0))
-  const [baseUom, setBaseUom] = useState<string>(initial?.baseUom || 'CTN')
-  const [retailUom, setRetailUom] = useState<string>(initial?.retailUom || 'PCS')
+  const [baseUom, setBaseUom] = useState<string>((initial?.baseUOM as string) || 'CTN')
+  const [retailUom, setRetailUom] = useState<string>((initial?.retailUOM as string) || 'PCS')
   const [unitsPerBase, setUnitsPerBase] = useState<number>(initial?.unitsPerBase || initial?.wholesaleQuantity || 1)
   const [setInitialStock, setSetInitialStock] = useState<boolean>(false)
   const [qtyBase, setQtyBase] = useState<number>(0)
@@ -1352,7 +2018,7 @@ function ProductForm({ orgId, initial, onCancel, onSaved, onDeleted }: ProductFo
     setError('')
     try {
       const now = new Date().toISOString()
-      const data: any = {
+      const payload: FirestoreRecord = {
         orgId,
         name: name.trim(),
         brand: brand.trim() || undefined,
@@ -1366,11 +2032,11 @@ function ProductForm({ orgId, initial, onCancel, onSaved, onDeleted }: ProductFo
         wholesalePrice: Number(cartonPrice) || undefined,
         updatedAt: now
       }
-      let id = initial?.id as string | undefined
+      let id = typeof initial?.id === 'string' ? initial.id : undefined
       if (id) {
-        await setDoc(doc(db, POS_PRODUCTS_COL, id), data, { merge: true })
+        await setDoc(doc(db, POS_PRODUCTS_COL, id), payload, { merge: true })
       } else {
-        const newRef = await addDoc(collection(db, POS_PRODUCTS_COL), { ...data, createdAt: now })
+        const newRef = await addDoc(collection(db, POS_PRODUCTS_COL), { ...payload, createdAt: now })
         id = newRef.id
       }
 
@@ -1402,16 +2068,22 @@ function ProductForm({ orgId, initial, onCancel, onSaved, onDeleted }: ProductFo
         }
       }
 
-      const updatedProduct = {
-        ...(initial || {}),
-        ...data,
+      if (!id) {
+        throw new Error('Failed to determine product identifier')
+      }
+
+      const updatedProduct: InventoryProduct = {
+        ...(initial ?? {}),
+        ...(payload as InventoryProduct),
         id,
-        image: initial?.image ?? data.image
+        image: initial?.image,
+        imageUrl: initial?.imageUrl,
+        image_url: initial?.image_url
       }
 
       onSaved(updatedProduct)
-    } catch (e: any) {
-      setError(e?.message || 'Save failed')
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Save failed')
     } finally {
       setSaving(false)
     }
@@ -1426,8 +2098,8 @@ function ProductForm({ orgId, initial, onCancel, onSaved, onDeleted }: ProductFo
       const invId = `${orgId}_${initial.id}`
       await deleteDoc(doc(db, INVENTORY_COL, invId)).catch(() => {})
       onDeleted(initial.id)
-    } catch (e: any) {
-      setError(e?.message || 'Delete failed')
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Delete failed')
     } finally {
       setSaving(false)
     }

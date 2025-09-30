@@ -37,7 +37,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           `}
         </Script>
       </head>
-      <body className="bg-slate-900 text-slate-100 font-mono">
+  <body className="font-mono selection:bg-sky-500/30 selection:text-white">
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

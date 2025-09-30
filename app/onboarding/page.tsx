@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 // import { SimpleLocationPicker } from '@/components/ui/simple-location-picker';
 import { GoogleMapsWrapper } from '@/components/ui/google-maps-wrapper';
 import { LocationPickerWithMap } from '@/components/ui/location-picker-with-map';
-import { Store, Truck, MapPin, Building, CheckCircle, ArrowRight, ArrowLeft, Phone, Sparkles, Users, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import { Store, Truck, MapPin, Building, CheckCircle, ArrowRight, ArrowLeft, Phone, Sparkles, Mail, AlertCircle } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -30,6 +30,23 @@ interface OnboardingData {
   isJoiningExisting?: boolean;
   inviterName?: string;
   inviterOrganization?: string;
+}
+
+interface UserProfileDocument {
+  uid: string;
+  email: string | null;
+  displayName: string;
+  role: UserRole;
+  organizationName: string;
+  organizationDisplayName?: string;
+  contactNumber: string;
+  location: string;
+  coordinates?: { lat: number; lng: number };
+  onboardingCompleted: boolean;
+  isOrganizationCreator: boolean;
+  joinedAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export default function OnboardingPage() {
@@ -101,7 +118,8 @@ export default function OnboardingPage() {
         try {
           const userDocRef = doc(db, 'users', user.uid);
           const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists() && (userDoc.data() as any).onboardingCompleted) {
+          const userData = userDoc.data();
+          if (userDoc.exists() && userData?.onboardingCompleted) {
             router.push('/modules');
             return;
           }
@@ -214,7 +232,7 @@ export default function OnboardingPage() {
           console.error('Error sending notifications:', notificationError);
         }
       } else {
-        const userDocRef = doc(db, 'users', user.uid);
+  const userDocRef = doc(db, 'users', user.uid);
         // Generate a unique, slugified organization id
         const { orgId, displayName } = await ensureUniqueOrgId(data.organizationName)
         await setDoc(userDocRef, {
@@ -277,30 +295,40 @@ export default function OnboardingPage() {
   const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/30 to-slate-900">
+    <div className="relative min-h-screen w-full overflow-hidden px-6 py-16 sm:px-10 lg:px-16">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[140px]" />
+        <div className="absolute -top-32 left-1/2 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-sky-500/18 blur-[160px]" />
+        <div className="absolute bottom-[-18%] right-[-12%] h-[24rem] w-[24rem] rounded-full bg-indigo-500/18 blur-[160px]" />
+        <div className="absolute top-1/4 -left-24 h-72 w-72 rounded-full bg-cyan-400/16 blur-[140px]" />
+        <div className="absolute bottom-1/3 left-1/3 h-40 w-40 rounded-full bg-blue-400/12 blur-[110px]" />
+      </div>
+
       {/* Loading state */}
       {loading && (
-        <UniversalLoading type="initializing" message="Setting up your workspace..." />
+        <div className="flex min-h-[60vh] w-full items-center justify-center">
+          <UniversalLoading type="initializing" message="Setting up your workspace..." />
+        </div>
       )}
 
       {/* Main onboarding flow */}
       {!loading && user && (
-        <div className="min-h-screen w-full flex items-center justify-center p-6">
-          <div className="max-w-lg w-full">
+        <div className="flex min-h-[70vh] w-full items-center justify-center">
+          <div className="relative z-10 w-full max-w-4xl">
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: "easeOut" }}
             >
               {/* Progress Bar */}
-              <div className="mb-8">
-                <div className="flex justify-between text-xs text-slate-400 mb-2">
+              <div className="mb-10">
+                <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.28em] text-slate-200/70">
                   <span>{data.isJoiningExisting ? 'Accepting Invitation' : `Step ${Math.min(currentStep, totalSteps - 1) + 1} of ${totalSteps}`}</span>
                   <span>{Math.round(progress)}% complete</span>
                 </div>
-                <div className="w-full bg-slate-800/40 rounded-full h-2">
+                <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                   <motion.div
-                    className="h-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
+                    className="h-full rounded-full bg-gradient-to-r from-sky-400 via-cyan-300 to-indigo-400 shadow-[0_0_18px_rgba(56,189,248,0.45)]"
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
                     transition={{ duration: 0.5, ease: "easeOut" }}
@@ -313,20 +341,21 @@ export default function OnboardingPage() {
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center space-x-3"
+                  className="mb-6 flex items-center gap-3 rounded-xl border border-red-400/25 bg-red-500/10 px-5 py-4 backdrop-blur-lg"
                 >
-                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                  <AlertCircle className="h-5 w-5 flex-shrink-0 text-red-300" />
                   <div>
-                    <p className="text-red-300 text-sm font-medium">Error</p>
-                    <p className="text-red-400 text-xs">{error}</p>
+                    <p className="text-sm font-semibold text-red-200">Error</p>
+                    <p className="text-xs text-red-300/80">{error}</p>
                   </div>
                 </motion.div>
               )}
 
               {/* Onboarding Card */}
-              <Card className="backdrop-blur-xl bg-slate-900/80 border border-slate-600/50 rounded-2xl p-8 shadow-[0_20px_48px_-12px_rgba(0,0,0,0.8)] relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-slate-700/10 via-transparent to-slate-800/20 pointer-events-none"></div>
-              
+              <Card className="group relative overflow-hidden rounded-[28px] border border-white/12 bg-white/[0.06] px-8 py-10 shadow-[0_35px_120px_-45px_rgba(12,24,46,0.85)] backdrop-blur-3xl">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(125,211,252,0.22),transparent_65%)] opacity-80 transition-opacity duration-500 group-hover:opacity-100" />
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(196,181,253,0.2),transparent_70%)] opacity-60" />
+
                 <div className="relative z-10">
                   <AnimatePresence mode="wait" custom={direction}>
                     {/* Invitation screen */}
@@ -339,37 +368,51 @@ export default function OnboardingPage() {
                         animate="center"
                         exit="exit"
                         transition={{ duration: 0.3 }}
-                        className="space-y-6"
+                        className="space-y-7"
                       >
                         <div className="text-center">
-                          <div className="w-16 h-16 rounded-full bg-blue-500/20 border-2 border-blue-400/30 flex items-center justify-center mx-auto mb-4">
-                            <Mail className="w-8 h-8 text-blue-400" />
+                          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-sky-300/40 bg-sky-500/15 shadow-[0_18px_36px_-18px_rgba(56,189,248,0.55)]">
+                            <Mail className="h-8 w-8 text-sky-200" />
                           </div>
-                          <h2 className="text-xl font-semibold text-white mb-2">You've been invited!</h2>
-                          <p className="text-slate-400 text-sm">
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">You&rsquo;ve been invited!</h2>
+                          <p className="text-sm text-slate-300/80">
                             {data.inviterName} has invited you to join {data.inviterOrganization}
                           </p>
                         </div>
-                        <div className="bg-slate-800/30 rounded-xl p-4">
-                          <div className="flex items-center justify-between mb-3"><span className="text-sm text-slate-400">Organization</span><span className="text-sm text-white font-medium">{data.inviterOrganization}</span></div>
-                          <div className="flex items-center justify-between mb-3"><span className="text-sm text-slate-400">Role</span><span className="text-sm text-white font-medium capitalize">{data.role}</span></div>
-                          <div className="flex items-center justify-between"><span className="text-sm text-slate-400">Invited by</span><span className="text-sm text-white font-medium">{data.inviterName}</span></div>
+                        <div className="rounded-2xl border border-white/12 bg-white/8 p-5 backdrop-blur-xl">
+                          <div className="flex items-center justify-between pb-3">
+                            <span className="text-xs uppercase tracking-[0.28em] text-slate-300/70">Organization</span>
+                            <span className="text-sm font-semibold text-white">{data.inviterOrganization}</span>
+                          </div>
+                          <div className="flex items-center justify-between border-t border-white/5 py-3">
+                            <span className="text-xs uppercase tracking-[0.28em] text-slate-300/70">Role</span>
+                            <span className="text-sm font-semibold capitalize text-sky-200">{data.role}</span>
+                          </div>
+                          <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                            <span className="text-xs uppercase tracking-[0.28em] text-slate-300/70">Invited by</span>
+                            <span className="text-sm font-semibold text-white">{data.inviterName}</span>
+                          </div>
                         </div>
                         <div>
-                          <div className="flex items-center space-x-3 mb-3"><div className="w-8 h-8 rounded-lg bg-slate-700/30 flex items-center justify-center"><Phone className="w-4 h-4 text-slate-400" /></div><label className="text-sm text-slate-300 font-medium">Your Contact Number</label></div>
+                          <div className="mb-3 flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                              <Phone className="h-4 w-4 text-slate-200" />
+                            </div>
+                            <label className="text-sm font-medium text-slate-200">Your contact number</label>
+                          </div>
                           <input
                             type="tel"
                             value={data.contactNumber}
                             onChange={(e) => setData({ ...data, contactNumber: e.target.value })}
                             placeholder="e.g. +254 700 000 000"
-                            className={`w-full p-4 text-sm rounded-xl bg-slate-800/20 border transition-all duration-200 text-white placeholder-slate-500 ${
+                            className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
                               data.contactNumber && !validateContactNumber(data.contactNumber)
-                                ? 'border-red-500/50 focus:border-red-500/70 focus:ring-1 focus:ring-red-500/25'
-                                : 'border-slate-600/40 hover:border-slate-500/60 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25'
+                                ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
                             }`}
                           />
                           {data.contactNumber && !validateContactNumber(data.contactNumber) && (
-                            <p className="text-red-400 text-xs mt-1">Please enter a valid phone number (at least 9 digits)</p>
+                            <p className="mt-2 text-xs text-red-300/80">Please enter a valid phone number (at least 9 digits).</p>
                           )}
                         </div>
                       </motion.div>
@@ -385,56 +428,60 @@ export default function OnboardingPage() {
                         animate="center"
                         exit="exit"
                         transition={{ duration: 0.3 }}
-                        className="space-y-6"
+                        className="space-y-7"
                       >
                         <div className="text-center">
-                          <h2 className="text-xl font-semibold text-white mb-2">What type of organization are you creating?</h2>
-                          <p className="text-slate-400 text-sm">This helps us customize your experience</p>
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">What type of organization are you creating?</h2>
+                          <p className="text-sm text-slate-300/80">We&rsquo;ll tailor your workspace defaults to this role.</p>
                         </div>
                         <div className="space-y-4">
                           <button
                             onClick={() => setData({ ...data, role: 'retailer' })}
-                            className={`w-full p-4 rounded-xl border transition-all duration-200 text-left ${
+                            className={`group w-full rounded-2xl border px-5 py-4 text-left transition-all duration-300 ${
                               data.role === 'retailer'
-                                ? 'bg-blue-500/20 border-blue-400/50 text-white'
-                                : 'bg-slate-800/20 border-slate-600/40 text-slate-300 hover:bg-slate-700/20'
+                                ? 'border-sky-300/60 bg-sky-500/15 text-white shadow-[0_25px_55px_-35px_rgba(56,189,248,0.85)]'
+                                : 'border-white/12 bg-white/6 text-slate-200 hover:border-sky-200/40 hover:bg-sky-400/10'
                             }`}
                           >
-                            <div className="flex items-center space-x-4">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                                data.role === 'retailer' ? 'bg-blue-500/30' : 'bg-slate-700/30'
+                            <div className="flex items-center gap-4">
+                              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${
+                                data.role === 'retailer'
+                                  ? 'border-sky-200/50 bg-sky-500/20 text-sky-100'
+                                  : 'border-white/10 bg-white/8 text-slate-200'
                               }`}>
-                                <Store className="w-6 h-6" />
+                                <Store className="h-6 w-6" />
                               </div>
-                              <div>
-                                <div className="font-medium">Retail Organization</div>
-                                <div className="text-sm text-slate-400">Sell products to customers</div>
+                              <div className="flex-1">
+                                <div className="text-base font-semibold text-slate-100">Retail / POS</div>
+                                <div className="text-sm text-slate-300/80">Serve customers and process in-store sales.</div>
                               </div>
                               {data.role === 'retailer' && (
-                                <CheckCircle className="w-5 h-5 text-blue-400 ml-auto" />
+                                <CheckCircle className="ml-auto h-5 w-5 text-sky-200" />
                               )}
                             </div>
                           </button>
                           <button
                             onClick={() => setData({ ...data, role: 'distributor' })}
-                            className={`w-full p-4 rounded-xl border transition-all duration-200 text-left ${
+                            className={`group w-full rounded-2xl border px-5 py-4 text-left transition-all duration-300 ${
                               data.role === 'distributor'
-                                ? 'bg-purple-500/20 border-purple-400/50 text-white'
-                                : 'bg-slate-800/20 border-slate-600/40 text-slate-300 hover:bg-slate-700/20'
+                                ? 'border-indigo-300/60 bg-indigo-500/15 text-white shadow-[0_25px_55px_-35px_rgba(99,102,241,0.85)]'
+                                : 'border-white/12 bg-white/6 text-slate-200 hover:border-indigo-200/45 hover:bg-indigo-400/10'
                             }`}
                           >
-                            <div className="flex items-center space-x-4">
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                                data.role === 'distributor' ? 'bg-purple-500/30' : 'bg-slate-700/30'
+                            <div className="flex items-center gap-4">
+                              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${
+                                data.role === 'distributor'
+                                  ? 'border-indigo-200/50 bg-indigo-500/20 text-indigo-100'
+                                  : 'border-white/10 bg-white/8 text-slate-200'
                               }`}>
-                                <Truck className="w-6 h-6" />
+                                <Truck className="h-6 w-6" />
                               </div>
-                              <div>
-                                <div className="font-medium">Distribution Organization</div>
-                                <div className="text-sm text-slate-400">Supply products to retailers</div>
+                              <div className="flex-1">
+                                <div className="text-base font-semibold text-slate-100">Distributor / Supplier</div>
+                                <div className="text-sm text-slate-300/80">Manage catalogue, fulfil orders, and deliver.</div>
                               </div>
                               {data.role === 'distributor' && (
-                                <CheckCircle className="w-5 h-5 text-purple-400 ml-auto" />
+                                <CheckCircle className="ml-auto h-5 w-5 text-indigo-200" />
                               )}
                             </div>
                           </button>
@@ -452,28 +499,33 @@ export default function OnboardingPage() {
                         animate="center"
                         exit="exit"
                         transition={{ duration: 0.3 }}
-                        className="space-y-6"
+                        className="space-y-7"
                       >
                         <div className="text-center">
-                          <h2 className="text-xl font-semibold text-white mb-2">What’s your organization name?</h2>
-                          <p className="text-slate-400 text-sm">We’ll show this in your workspace</p>
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">What&rsquo;s your organization name?</h2>
+                          <p className="text-sm text-slate-300/80">We&rsquo;ll surface this name across dashboards and invites.</p>
                         </div>
                         <div>
-                          <div className="flex items-center space-x-3 mb-3"><div className="w-8 h-8 rounded-lg bg-slate-700/30 flex items-center justify-center"><Building className="w-4 h-4 text-slate-400" /></div><label className="text-sm text-slate-300 font-medium">Organization Name</label></div>
+                          <div className="mb-3 flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                              <Building className="h-4 w-4 text-slate-200" />
+                            </div>
+                            <label className="text-sm font-medium text-slate-200">Organization name</label>
+                          </div>
                           <input
                             type="text"
                             value={data.organizationName}
                             onChange={(e) => setData({ ...data, organizationName: e.target.value })}
                             placeholder={data.role === 'retailer' ? 'e.g. Mambo Retail Group' : 'e.g. Fresh Foods Distribution'}
-                            className={`w-full p-4 text-sm rounded-xl bg-slate-800/20 border transition-all duration-200 text-white placeholder-slate-500 ${
+                            className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
                               data.organizationName && !validateOrganizationName(data.organizationName)
-                                ? 'border-red-500/50 focus:border-red-500/70 focus:ring-1 focus:ring-red-500/25'
-                                : 'border-slate-600/40 hover:border-slate-500/60 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25'
+                                ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
                             }`}
                             autoFocus
                           />
                           {data.organizationName && !validateOrganizationName(data.organizationName) && (
-                            <p className="text-red-400 text-xs mt-1">Organization name must be at least 2 characters long</p>
+                            <p className="mt-2 text-xs text-red-300/80">Organization name must be at least 2 characters long.</p>
                           )}
                         </div>
                       </motion.div>
@@ -489,21 +541,33 @@ export default function OnboardingPage() {
                         animate="center"
                         exit="exit"
                         transition={{ duration: 0.3 }}
-                        className="space-y-6"
+                        className="space-y-7"
                       >
                         <div className="text-center">
-                          <h2 className="text-xl font-semibold text-white mb-2">What’s your contact number?</h2>
-                          <p className="text-slate-400 text-sm">We may use this for account verification</p>
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">What&rsquo;s your contact number?</h2>
+                          <p className="text-sm text-slate-300/80">We may use this for account verification or quick onboarding help.</p>
                         </div>
                         <div>
-                          <div className="flex items-center space-x-3 mb-3"><div className="w-8 h-8 rounded-lg bg-slate-700/30 flex items-center justify-center"><Phone className="w-4 h-4 text-slate-400" /></div><label className="text-sm text-slate-300 font-medium">Contact Number</label></div>
+                          <div className="mb-3 flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                              <Phone className="h-4 w-4 text-slate-200" />
+                            </div>
+                            <label className="text-sm font-medium text-slate-200">Contact number</label>
+                          </div>
                           <input
                             type="tel"
                             value={data.contactNumber}
                             onChange={(e) => setData({ ...data, contactNumber: e.target.value })}
                             placeholder="e.g. +254 700 000 000"
-                            className="w-full p-4 text-sm rounded-xl bg-slate-800/20 border border-slate-600/40 hover:border-slate-500/60 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25 text-white placeholder-slate-500 transition-all duration-200"
+                            className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                              data.contactNumber && !validateContactNumber(data.contactNumber)
+                                ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                            }`}
                           />
+                          {data.contactNumber && !validateContactNumber(data.contactNumber) && (
+                            <p className="mt-2 text-xs text-red-300/80">Please enter a valid phone number (at least 9 digits).</p>
+                          )}
                         </div>
                       </motion.div>
                     )}
@@ -518,14 +582,19 @@ export default function OnboardingPage() {
                         animate="center"
                         exit="exit"
                         transition={{ duration: 0.3 }}
-                        className="space-y-6"
+                        className="space-y-7"
                       >
                         <div className="text-center">
-                          <h2 className="text-xl font-semibold text-white mb-2">Where is your business located?</h2>
-                          <p className="text-slate-400 text-sm">Search or pick on the map</p>
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">Where is your business located?</h2>
+                          <p className="text-sm text-slate-300/80">Search or drop a pin so suppliers and teammates can find you.</p>
                         </div>
                         <div>
-                          <div className="flex items-center space-x-3 mb-3"><div className="w-8 h-8 rounded-lg bg-slate-700/30 flex items-center justify-center"><MapPin className="w-4 h-4 text-slate-400" /></div><label className="text-sm text-slate-300 font-medium">Organization Location</label></div>
+                          <div className="mb-3 flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                              <MapPin className="h-4 w-4 text-slate-200" />
+                            </div>
+                            <label className="text-sm font-medium text-slate-200">Organization location</label>
+                          </div>
                           <GoogleMapsWrapper apiKey={mapsApiKey}>
                             <LocationPickerWithMap
                               value={data.location}
@@ -539,33 +608,46 @@ export default function OnboardingPage() {
                   </AnimatePresence>
 
                   {/* Navigation Buttons */}
-                  <div className="flex justify-between mt-8">
+                  <div className="mt-10 flex items-center justify-between">
                     {!data.isJoiningExisting ? (
-                      <Button onClick={handleBack} variant="outline" disabled={isSubmitting} className="px-6 py-3 bg-slate-800/60 hover:bg-slate-700/70 text-slate-300 border border-slate-500/60 hover:border-slate-400/80 rounded-xl transition-all duration-200">
-                        <ArrowLeft className="w-4 h-4 mr-2" />
+                      <Button
+                        onClick={handleBack}
+                        variant="outline"
+                        disabled={isSubmitting}
+                        className="group flex items-center gap-2 rounded-xl border border-white/12 bg-white/8 px-6 py-3 text-slate-200 transition hover:border-sky-200/40 hover:bg-white/12 disabled:opacity-40"
+                      >
+                        <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
                         Back
                       </Button>
                     ) : (
                       <div></div>
                     )}
 
-                    <Button onClick={handleNext} disabled={!canProceed() || isSubmitting} className={`px-6 py-3 rounded-xl font-medium transition-all duration-200 flex items-center ${canProceed() && !isSubmitting ? 'bg-white hover:bg-gray-100 text-black shadow-lg hover:shadow-xl transform hover:scale-[1.02]' : 'bg-slate-700/30 text-slate-500 cursor-not-allowed'}`}>
+                    <Button
+                      onClick={handleNext}
+                      disabled={!canProceed() || isSubmitting}
+                      className={`flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-all duration-200 ${
+                        canProceed() && !isSubmitting
+                          ? 'bg-gradient-to-r from-sky-500/90 via-cyan-400/90 to-indigo-500/90 text-slate-950 shadow-[0_18px_45px_-25px_rgba(56,189,248,0.85)] hover:shadow-[0_25px_55px_-25px_rgba(56,189,248,0.95)]'
+                          : 'border border-white/10 bg-white/6 text-slate-400 cursor-not-allowed'
+                      }`}
+                    >
                       {isSubmitting ? (
                         <>
-                          <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin mr-2"></div>
-                          {data.isJoiningExisting ? 'Joining...' : 'Setting up...'}
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-transparent"></div>
+                          {data.isJoiningExisting ? 'Joining…' : 'Setting up…'}
                         </>
                       ) : (
                         <>
                           {data.isJoiningExisting || currentStep === totalSteps - 1 ? (
                             <>
-                              <Sparkles className="w-4 h-4 mr-2" />
-                              {data.isJoiningExisting ? 'Join Organization' : 'Create Organization'}
+                              <Sparkles className="h-4 w-4" />
+                              {data.isJoiningExisting ? 'Join organization' : 'Create organization'}
                             </>
                           ) : (
                             <>
                               Next
-                              <ArrowRight className="w-4 h-4 ml-2" />
+                              <ArrowRight className="h-4 w-4" />
                             </>
                           )}
                         </>

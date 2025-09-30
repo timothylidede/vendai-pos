@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   const items = chosen.map((p: any) => {
     const name = p.name || 'Product'
     const brand = p.brand || ''
-  const prompt = `Photorealistic product photo. Single centered product on a brown mahogany wooden shelf (visible grain). Background: matte slate (${themeHex}). Warm studio light from top-left, 50mm lens ~10° angle. No props. Keep proportions and label legible. Consistent framing: shelf across bottom third. High detail, natural highlights. 2048x2560.`
+  const prompt = `Photorealistic product photo. Single centered product captured close-up on a brown mahogany wooden shelf (visible grain) so the product fills most of the frame. Background: matte slate (${themeHex}). Warm studio light from top-left, 50mm lens ~10° angle, crisp focus with gentle depth falloff. No props. Keep proportions and label legible. Consistent framing: shelf across bottom third. High detail, natural highlights. 2048x2560.`
     return {
       productId: p.id,
       productName: name,

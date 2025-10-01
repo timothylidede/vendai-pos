@@ -62,7 +62,7 @@ export default function RetailersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800">
+    <div className="module-background flex min-h-[calc(100vh-2.5rem)] flex-col overflow-hidden">
       {/* Header */}
       <div className="p-6 border-b border-slate-700/50">
         <div className="flex items-center justify-between">

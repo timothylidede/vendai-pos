@@ -1,3 +1,5 @@
+'use client'
+
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '../ui/button'
@@ -5,6 +7,7 @@ import { Input } from '../ui/input'
 import { ScanBarcode, ShoppingCart, Trash2, Plus, ChevronDown, X, Search, Package, ArrowLeft } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { POSProduct, POSOrderLine, POSOrderDoc } from '@/lib/types'
+import { cn } from '@/lib/utils'
 // Gradually migrating to optimized operations
 import { listPOSProducts, addPosOrder, listRecentOrders, getInventory } from '@/lib/pos-operations-optimized'
 import { useAuth } from '@/contexts/auth-context'
@@ -66,6 +69,8 @@ export function POSPage() {
   const [loading, setLoading] = useState(false)
   const [products, setProducts] = useState<POSProduct[]>([])
   const [addingToCart, setAddingToCart] = useState<string | null>(null) // Track which product is being added
+  const [selectedCartIndex, setSelectedCartIndex] = useState(0)
+  const [lastInteractedProductId, setLastInteractedProductId] = useState<string | null>(null)
 
   const [recentOrders, setRecentOrders] = useState<POSOrderDoc[]>([])
   
@@ -247,6 +252,7 @@ export function POSPage() {
       console.log('Added new item to cart:', newCart)
       return newCart
     })
+    setLastInteractedProductId(p.id)
     
     // Show glassmorphic success toast
     showGlassToast('Added to cart', p.name)
@@ -257,6 +263,7 @@ export function POSPage() {
 
   const incrementLine = (productId: string) => {
     setCart(prev => prev.map(l => (l.productId === productId ? { ...l, quantity: l.quantity + 1 } : l)))
+    setLastInteractedProductId(productId)
   }
 
   const decrementLine = (productId: string) => {
@@ -264,9 +271,26 @@ export function POSPage() {
       .map(l => (l.productId === productId ? { ...l, quantity: l.quantity - 1 } : l))
       .filter(l => l.quantity > 0)
     )
+    setLastInteractedProductId(productId)
   }
 
   const cartTotal = useMemo(() => cart.reduce((sum, l) => sum + l.price * l.quantity, 0), [cart])
+
+  useEffect(() => {
+    if (cart.length === 0) {
+      setSelectedCartIndex(0)
+      return
+    }
+    setSelectedCartIndex(prev => Math.min(prev, cart.length - 1))
+  }, [cart.length])
+
+  useEffect(() => {
+    if (!lastInteractedProductId) return
+    const idx = cart.findIndex(line => line.productId === lastInteractedProductId)
+    if (idx >= 0 && idx !== selectedCartIndex) {
+      setSelectedCartIndex(idx)
+    }
+  }, [cart, lastInteractedProductId, selectedCartIndex])
 
   // Load products from Firestore with better error handling and caching
   useEffect(() => {
@@ -332,7 +356,7 @@ export function POSPage() {
 
   return (
     <motion.div 
-      className="flex flex-col h-[calc(100vh-2.5rem)] bg-slate-900 overflow-hidden"
+      className="module-background flex flex-col h-[calc(100vh-2.5rem)] overflow-hidden"
       initial={{ x: 0, y: -300, rotate: 0, opacity: 0 }}
       animate={isExiting 
         ? { x: 0, y: -300, rotate: 0, opacity: 0 }
@@ -458,7 +482,7 @@ export function POSPage() {
                     setSearchTerm('')
                   }
                 }}
-                placeholder="Search name/brand or scan code…" 
+                placeholder="Search…" 
                 className="bg-gradient-to-r from-white/[0.08] to-white/[0.04] backdrop-blur-md border border-white/[0.08] hover:border-white/[0.15] text-white placeholder-slate-400 pr-8 w-64 transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] focus:shadow-[0_8px_24px_-8px_rgba(59,130,246,0.2)] focus:border-blue-400/30"
               />
               <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
@@ -576,8 +600,8 @@ export function POSPage() {
           {/* Left Side - Cart (Cyclic Wheel) */}
           <div className="w-1/3 bg-slate-900/30 backdrop-blur-sm">
             <div className="h-full flex flex-col">
-              {/* Cart Wheel */}
-              <div className="flex-1 relative overflow-hidden cyclic-wheel">
+              {/* Cart Items */}
+              <div className="flex-1 overflow-hidden">
                 {cart.length === 0 ? (
                   <div className="flex items-center justify-center h-full text-slate-400">
                     <div className="text-center">
@@ -586,62 +610,103 @@ export function POSPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="h-full relative">
-                    {/* Selection indicator */}
-                    <div className="absolute top-1/2 left-0 right-0 h-16 -mt-8 bg-green-500/20 border-y-2 border-green-500/40 z-10 pointer-events-none" />
-                    
-                    {/* Scrollable wheel */}
-                    <div className="h-full overflow-y-auto thin-scroll wheel-scroll py-32 picker-wheel">
-                      {/* Add spacer items for infinite scroll effect */}
-                      {[...Array(3)].map((_, spacerIndex) => (
-                        <div key={`spacer-top-${spacerIndex}`} className="h-16" />
-                      ))}
-                      
-                      {/* Duplicate items for circular effect */}
-                      {[...cart, ...cart, ...cart].map((item, i) => {
-                        const originalIndex = i % cart.length
-                        return (
-                          <motion.div 
-                            key={`${originalIndex}-${Math.floor(i / cart.length)}`}
-                            className="h-16 flex items-center px-4 cursor-pointer transition-all duration-300 hover:bg-slate-800/50 wheel-item picker-item"
-                            whileHover={{ scale: 1.02, x: 4 }}
-                          >
-                            <div className="flex justify-between items-center w-full">
-                              <div className="flex-1">
-                                <div className="font-medium text-white text-sm truncate">{item.name}</div>
-                                <div className="text-xs text-slate-400">{formatMoney(item.price)}</div>
+                  <div className="h-full overflow-y-auto thin-scroll px-6 pt-8 pb-24 space-y-3">
+                    {cart.map((line, idx) => {
+                      const isActive = idx === selectedCartIndex
+                      return (
+                        <motion.div
+                          key={line.productId}
+                          className={cn(
+                            'flex items-center gap-4 rounded-2xl border border-white/5 bg-slate-800/40 px-4 py-3 transition-all duration-300 backdrop-blur-md',
+                            isActive
+                              ? 'selected border-emerald-400/40 bg-emerald-500/15 shadow-[0_18px_40px_-24px_rgba(16,185,129,0.65)]'
+                              : 'hover:border-emerald-400/30 hover:bg-slate-800/60'
+                          )}
+                          whileHover={{ scale: 1.01, x: 4 }}
+                          onClick={() => {
+                            setSelectedCartIndex(idx)
+                            setLastInteractedProductId(line.productId)
+                          }}
+                        >
+                          <div className="relative">
+                            {line.image ? (
+                              <img
+                                src={line.image}
+                                alt={line.name}
+                                className={cn(
+                                  'h-12 w-12 rounded-xl object-cover border border-white/10 shadow-inner transition-all duration-300',
+                                  isActive ? 'ring-2 ring-emerald-300/70' : ''
+                                )}
+                              />
+                            ) : (
+                              <div
+                                className={cn(
+                                  'h-12 w-12 rounded-xl border border-white/10 bg-slate-900/60 flex items-center justify-center text-slate-400 transition-all duration-300',
+                                  isActive ? 'text-emerald-200' : ''
+                                )}
+                              >
+                                <Package className="h-5 w-5" />
                               </div>
-                              <div className="flex items-center gap-1">
-                                <Button 
-                                  variant="outline" 
-                                  size="sm" 
-                                  className="h-6 w-6 p-0 text-xs"
-                                  onClick={() => {
-                                    const pid = cart[originalIndex].productId
-                                    decrementLine(pid)
-                                  }}
-                                >-</Button>
-                                <span className="text-white text-sm w-6 text-center">{item.quantity}</span>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm" 
-                                  className="h-6 w-6 p-0 text-xs"
-                                  onClick={() => {
-                                    const pid = cart[originalIndex].productId
-                                    incrementLine(pid)
-                                  }}
-                                >+</Button>
-                              </div>
+                            )}
+                            {isActive && (
+                              <div className="absolute -inset-1 rounded-xl border border-emerald-300/50 opacity-60 blur-sm pointer-events-none" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div
+                              className={cn(
+                                'font-medium text-sm truncate transition-colors duration-300',
+                                isActive ? 'text-emerald-100' : 'text-white'
+                              )}
+                            >
+                              {line.name}
                             </div>
-                          </motion.div>
-                        );
-                      })}
-                      
-                      {/* Add spacer items for infinite scroll effect */}
-                      {[...Array(3)].map((_, spacerIndex) => (
-                        <div key={`spacer-bottom-${spacerIndex}`} className="h-16" />
-                      ))}
-                    </div>
+                            <div
+                              className={cn(
+                                'text-xs transition-colors duration-300',
+                                isActive ? 'text-emerald-200/80' : 'text-slate-400'
+                              )}
+                            >
+                              {formatMoney(line.price)}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                'h-7 w-7 p-0 text-xs transition-colors duration-300',
+                                isActive ? 'border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/10' : ''
+                              )}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                decrementLine(line.productId)
+                              }}
+                            >-</Button>
+                            <span
+                              className={cn(
+                                'text-sm w-7 text-center font-semibold transition-colors duration-300',
+                                isActive ? 'text-emerald-100' : 'text-white'
+                              )}
+                            >
+                              {line.quantity}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                'h-7 w-7 p-0 text-xs transition-colors duration-300',
+                                isActive ? 'border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/10' : ''
+                              )}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                incrementLine(line.productId)
+                              }}
+                            >+</Button>
+                          </div>
+                        </motion.div>
+                      )
+                    })}
                   </div>
                 )}
               </div>

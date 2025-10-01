@@ -356,7 +356,7 @@ export function ModulesDashboard() {
 
   return (
     <motion.div 
-      className="flex flex-col h-[calc(100vh-2.5rem)] p-6 relative overflow-hidden"
+      className="module-background flex flex-col h-[calc(100vh-2.5rem)] p-6 overflow-hidden"
       initial={{
         opacity: 0,
         y: isEntering ? -300 : 0

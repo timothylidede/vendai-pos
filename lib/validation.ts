@@ -92,6 +92,54 @@ export const orderSchema = z.object({
   ...baseEntitySchema
 })
 
+// B2B purchase order schema
+export const moneyBreakdownSchema = z.object({
+  subtotal: z.number().nonnegative('Subtotal cannot be negative'),
+  tax: z.number().nonnegative('Tax cannot be negative'),
+  total: z.number().positive('Total must be positive'),
+  currency: z.string().min(3).max(3, 'Currency must be ISO 4217 code'),
+})
+
+export const purchaseOrderItemSchema = z.object({
+  productId: z.string().min(1, 'Product ID is required'),
+  productName: z.string().min(1, 'Product name is required'),
+  sku: z.string().max(64).optional(),
+  quantity: z.number().int().positive('Quantity must be a positive integer'),
+  unitPrice: z.number().positive('Unit price must be positive'),
+  unit: z.string().max(16).optional(),
+  vatRate: z.number().min(0).max(1).optional(),
+  notes: z.string().max(200).optional(),
+})
+
+export const deliveryCheckpointSchema = z.object({
+  label: z.string().min(1, 'Checkpoint label is required').max(60),
+  completed: z.boolean().default(false),
+  timestamp: z.union([z.string(), z.date()]).optional(),
+  notes: z.string().max(200).optional(),
+})
+
+export const purchaseOrderCreateSchema = z.object({
+  retailerOrgId: z.string().min(1, 'Retailer org ID is required'),
+  supplierOrgId: z.string().min(1).optional(),
+  retailerId: z.string().min(1, 'Retailer ID is required'),
+  retailerName: z.string().min(1, 'Retailer name is required'),
+  retailerUserId: z.string().min(1).optional(),
+  supplierId: z.string().min(1, 'Supplier ID is required'),
+  supplierName: z.string().min(1, 'Supplier name is required'),
+  supplierUserId: z.string().min(1).optional(),
+  createdByUserId: z.string().min(1, 'Created by user ID is required'),
+  createdByName: z.string().min(1).optional(),
+  status: z.enum(['draft', 'submitted', 'approved', 'rejected', 'fulfilled', 'cancelled']).default('submitted'),
+  paymentTerms: z.enum(['cod', 'net7', 'net14', 'net30', 'net60']),
+  expectedDeliveryDate: z.union([z.string(), z.date()]).optional(),
+  deliveryAddress: z.string().min(1, 'Delivery address is required').max(200),
+  notes: z.string().max(500).optional(),
+  items: z.array(purchaseOrderItemSchema).min(1, 'At least one item is required'),
+  amount: moneyBreakdownSchema,
+  deliveryCheckpoints: z.array(deliveryCheckpointSchema).optional(),
+  statusNote: z.string().max(200).optional(),
+})
+
 // Settlement validation schemas
 export const settlementSchema = z.object({
   distributorId: z.string().min(1, 'Distributor ID is required'),
@@ -269,5 +317,9 @@ export const schemas = {
   inventory: inventorySchema,
   pagination: paginationSchema,
   dateRange: dateRangeSchema,
-  search: searchSchema
+  search: searchSchema,
+  purchaseOrderCreate: purchaseOrderCreateSchema,
+  purchaseOrderItem: purchaseOrderItemSchema,
+  deliveryCheckpoint: deliveryCheckpointSchema,
+  moneyBreakdown: moneyBreakdownSchema,
 }

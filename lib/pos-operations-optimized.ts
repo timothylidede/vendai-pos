@@ -244,6 +244,7 @@ export async function getInventory(orgId: string, productId: string): Promise<In
 // Enhanced order creation with optimized inventory management
 export async function addPosOrder(orgId: string, userId: string, lines: POSOrderLine[]): Promise<string> {
   const total = lines.reduce((s, l) => s + l.lineTotal, 0)
+  const nowIso = new Date().toISOString()
   
   try {
     return await runTransaction(db, async (tx) => {
@@ -264,11 +265,12 @@ export async function addPosOrder(orgId: string, userId: string, lines: POSOrder
         userId,
         lines,
         total,
-        createdAt: new Date().toISOString(),
+        createdAt: nowIso,
         status: 'pending',
       }
 
-      tx.set(orderRef, orderDoc)
+      const optimizedStockUpdates: Array<{ ref: ReturnType<typeof doc>; stock: any }> = []
+      const legacyInventoryUpdates: Array<{ ref: ReturnType<typeof doc>; updates: Partial<InventoryRecord> }> = []
 
       // Update inventory for each product line
       for (const line of lines) {
@@ -307,13 +309,40 @@ export async function addPosOrder(orgId: string, userId: string, lines: POSOrder
                 qtyBase: Math.max(0, newQtyBase),
                 qtyLoose: Math.max(0, newQtyLoose),
                 available: Math.max(0, (Math.max(0, newQtyBase) * (currentStock.unitsPerBase || 1)) + Math.max(0, newQtyLoose)),
-                lastUpdated: new Date().toISOString()
+                lastUpdated: nowIso
               }
-              
-              tx.update(productRef, { 
-                stock: updatedStock,
-                updatedAt: new Date().toISOString()
+              optimizedStockUpdates.push({
+                ref: productRef,
+                stock: updatedStock
               })
+            } else {
+              // Fallback to legacy inventory for missing optimized docs
+              const invRef = doc(db, INVENTORY_COL, `${orgId}_${line.productId}`)
+              const invSnap = await tx.get(invRef)
+              if (invSnap.exists()) {
+                const inv = invSnap.data() as InventoryRecord
+                const { base: baseToDeduct, loose: looseToDeduct } = computeIssueFromPieces(line.quantityPieces, inv.unitsPerBase || 1)
+
+                let newQtyBase = inv.qtyBase - baseToDeduct
+                let newQtyLoose = inv.qtyLoose - looseToDeduct
+
+                if (newQtyLoose < 0) {
+                  newQtyBase += Math.floor(newQtyLoose / (inv.unitsPerBase || 1))
+                  newQtyLoose = newQtyLoose % (inv.unitsPerBase || 1)
+                  if (newQtyLoose < 0) {
+                    newQtyLoose += (inv.unitsPerBase || 1)
+                    newQtyBase -= 1
+                  }
+                }
+
+                legacyInventoryUpdates.push({
+                  ref: invRef,
+                  updates: {
+                    qtyBase: Math.max(0, newQtyBase),
+                    qtyLoose: Math.max(0, newQtyLoose)
+                  }
+                })
+              }
             }
           } else {
             // Fallback to legacy inventory structure
@@ -336,10 +365,12 @@ export async function addPosOrder(orgId: string, userId: string, lines: POSOrder
                   newQtyBase -= 1
                 }
               }
-              
-              tx.update(invRef, {
-                qtyBase: Math.max(0, newQtyBase),
-                qtyLoose: Math.max(0, newQtyLoose)
+              legacyInventoryUpdates.push({
+                ref: invRef,
+                updates: {
+                  qtyBase: Math.max(0, newQtyBase),
+                  qtyLoose: Math.max(0, newQtyLoose)
+                }
               })
             }
           }
@@ -348,6 +379,20 @@ export async function addPosOrder(orgId: string, userId: string, lines: POSOrder
           console.warn(`Failed to update inventory for product ${line.productId}:`, invError)
           // Continue with order creation even if inventory update fails
         }
+      }
+
+      // Perform writes after all reads to satisfy Firestore transaction requirements
+      tx.set(orderRef, orderDoc)
+
+      for (const update of optimizedStockUpdates) {
+        tx.update(update.ref, {
+          stock: update.stock,
+          updatedAt: nowIso
+        })
+      }
+
+      for (const update of legacyInventoryUpdates) {
+        tx.update(update.ref, update.updates)
       }
 
       // Clear relevant cache entries

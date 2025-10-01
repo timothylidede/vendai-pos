@@ -41,6 +41,14 @@ service cloud.firestore {
       return isAuthenticated() && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
+
+    function isOrgMemberSafe(orgId) {
+      return orgId != null && isOrgMember(orgId);
+    }
+    
+    function userMatches(userId) {
+      return userId != null && request.auth.uid == userId;
+    }
     
     // ========================================================================
     // USER MANAGEMENT
@@ -149,6 +157,60 @@ service cloud.firestore {
     }
     
     // ========================================================================
+    // PURCHASE ORDERS (B2B)
+    // ========================================================================
+
+    match /purchase_orders/{poId} {
+      allow read: if isAuthenticated() && (
+        userMatches(resource.data.retailerUserId) ||
+        userMatches(resource.data.supplierUserId) ||
+        isOrgMemberSafe(resource.data.retailerOrgId) ||
+        isOrgMemberSafe(resource.data.supplierOrgId) ||
+        isAdmin()
+      );
+
+      allow create: if isAuthenticated() && (
+        userMatches(request.resource.data.retailerUserId) ||
+        isOrgMemberSafe(request.resource.data.retailerOrgId) ||
+        isAdmin()
+      );
+
+      allow update: if isAuthenticated() && (
+        userMatches(resource.data.retailerUserId) ||
+        userMatches(resource.data.supplierUserId) ||
+        isOrgMemberSafe(resource.data.retailerOrgId) ||
+        isOrgMemberSafe(resource.data.supplierOrgId) ||
+        isAdmin()
+      );
+    }
+
+    // ========================================================================
+    // SALES ORDERS (supplier-facing)
+    // ========================================================================
+
+    match /sales_orders/{salesOrderId} {
+      allow read: if isAuthenticated() && (
+        userMatches(resource.data.retailerUserId) ||
+        userMatches(resource.data.supplierUserId) ||
+        isOrgMemberSafe(resource.data.retailerOrgId) ||
+        isOrgMemberSafe(resource.data.supplierOrgId) ||
+        isAdmin()
+      );
+
+      allow create: if isAuthenticated() && (
+        userMatches(request.resource.data.supplierUserId) ||
+        isOrgMemberSafe(request.resource.data.supplierOrgId) ||
+        isAdmin()
+      );
+
+      allow update: if isAuthenticated() && (
+        userMatches(resource.data.supplierUserId) ||
+        isOrgMemberSafe(resource.data.supplierOrgId) ||
+        isAdmin()
+      );
+    }
+    
+    // ========================================================================
     // INVOICES
     // ========================================================================
     
@@ -156,11 +218,63 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (
         (isDistributor() && request.auth.uid == resource.data.distributorUserId) ||
         (isRetailer() && request.auth.uid == resource.data.retailerUserId) ||
+        userMatches(resource.data.retailerUserId) ||
+        userMatches(resource.data.supplierUserId) ||
+        isOrgMemberSafe(resource.data.retailerOrgId) ||
+        isOrgMemberSafe(resource.data.supplierOrgId) ||
         isAdmin()
       );
       
-      allow create: if isDistributor() && request.auth.uid == request.resource.data.distributorUserId;
-      allow update: if isDistributor() && request.auth.uid == resource.data.distributorUserId;
+      allow create: if (
+        (isDistributor() && request.auth.uid == request.resource.data.distributorUserId) ||
+        userMatches(request.resource.data.supplierUserId) ||
+        isOrgMemberSafe(request.resource.data.supplierOrgId) ||
+        isAdmin()
+      );
+      
+      allow update: if (
+        (isDistributor() && request.auth.uid == resource.data.distributorUserId) ||
+        userMatches(resource.data.supplierUserId) ||
+        isOrgMemberSafe(resource.data.supplierOrgId) ||
+        isAdmin()
+      );
+    }
+
+    // ========================================================================
+    // PAYMENTS & LEDGER
+    // ========================================================================
+
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && (
+        userMatches(resource.data.retailerUserId) ||
+        userMatches(resource.data.supplierUserId) ||
+        isOrgMemberSafe(resource.data.retailerOrgId) ||
+        isOrgMemberSafe(resource.data.supplierOrgId) ||
+        isAdmin()
+      );
+
+      allow create: if isAuthenticated() && (
+        userMatches(request.resource.data.retailerUserId) ||
+        userMatches(request.resource.data.supplierUserId) ||
+        isAdmin()
+      );
+
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        userMatches(resource.data.supplierUserId)
+      );
+    }
+
+    match /ledger_entries/{entryId} {
+      allow read: if isAuthenticated() && (
+        userMatches(resource.data.retailerUserId) ||
+        userMatches(resource.data.supplierUserId) ||
+        isOrgMemberSafe(resource.data.retailerOrgId) ||
+        isOrgMemberSafe(resource.data.supplierOrgId) ||
+        isAdmin()
+      );
+
+      allow create, update: if isAdmin();
     }
     
     // ========================================================================

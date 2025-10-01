@@ -1217,7 +1217,7 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
 
   return (
     <motion.div 
-      className="flex flex-col h-[calc(100vh-2.5rem)] bg-slate-900 overflow-hidden"
+      className="module-background flex flex-col h-[calc(100vh-2.5rem)] overflow-hidden"
       initial={{ x: 0, y: -300, rotate: 0, opacity: 0 }}
       animate={isExiting 
         ? { x: 0, y: -300, rotate: 0, opacity: 0 }

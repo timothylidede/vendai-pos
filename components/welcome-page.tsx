@@ -10,6 +10,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '@/lib/firebase';
 import { useEffect, useState } from 'react';
 import { UniversalLoading } from './universal-loading';
+import { useAuth } from '@/contexts/auth-context';
 
 type FirebaseUser = {
   uid: string;
@@ -38,6 +39,8 @@ export function WelcomePage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isElectron, setIsElectron] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const { user, userData, loading: authLoading } = useAuth();
 
   useEffect(() => {
     setIsMounted(true);
@@ -53,8 +56,19 @@ export function WelcomePage() {
     setIsElectron(detectedElectron);
   }, []);
 
+  useEffect(() => {
+    if (!isMounted || authLoading) return;
+    if (!user) return;
+
+    const hasCompletedOnboarding = Boolean(userData?.onboardingCompleted);
+    const targetRoute = hasCompletedOnboarding ? '/modules' : '/onboarding/choose';
+
+    setIsRedirecting(true);
+    router.replace(targetRoute);
+  }, [authLoading, isMounted, router, user, userData?.onboardingCompleted]);
+
   const handleGoogleSignIn = async () => {
-    if (!isMounted) return;
+    if (!isMounted || isRedirecting || authLoading) return;
     
     setIsLoading(true);
     setErrorMessage(null);
@@ -160,7 +174,7 @@ export function WelcomePage() {
 
       localStorage.setItem('vendai-user-role', role);
       localStorage.setItem('vendai-first-login', onboardingCompleted ? 'false' : 'true');
-
+      setIsRedirecting(true);
       router.push(onboardingCompleted ? '/modules' : '/onboarding/choose');
     } else {
       await setDoc(userDocRef, {
@@ -174,6 +188,7 @@ export function WelcomePage() {
       });
 
       localStorage.setItem('vendai-first-login', 'true');
+      setIsRedirecting(true);
       router.push('/onboarding/choose');
     }
   };
@@ -204,12 +219,13 @@ export function WelcomePage() {
     });
 
     localStorage.setItem('vendai-first-login', 'true');
+    setIsRedirecting(true);
     router.push('/onboarding/choose');
   };
 
   // Don't render until mounted to prevent hydration issues
-  if (!isMounted) {
-    return <UniversalLoading type="initializing" />;
+  if (!isMounted || authLoading || isRedirecting) {
+    return <UniversalLoading type="auth" />;
   }
 
   // Show loading screen during sign-in process

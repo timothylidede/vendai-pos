@@ -140,6 +140,54 @@ export const purchaseOrderCreateSchema = z.object({
   statusNote: z.string().max(200).optional(),
 })
 
+export const purchaseOrderUpdateSchema = z
+  .object({
+    status: z.enum(['draft', 'submitted', 'approved', 'rejected', 'fulfilled', 'cancelled']).optional(),
+    statusNote: z.string().max(200).optional(),
+    updatedByUserId: z.string().min(1).optional(),
+    updatedByName: z.string().min(1).optional(),
+    paymentTerms: z.enum(['cod', 'net7', 'net14', 'net30', 'net60']).optional(),
+    expectedDeliveryDate: z.union([z.string(), z.date(), z.null()]).optional(),
+    deliveryAddress: z.string().min(1, 'Delivery address cannot be empty').max(200).optional(),
+    notes: z.string().max(500).optional(),
+    items: z.array(purchaseOrderItemSchema).min(1, 'At least one item is required when updating items').optional(),
+    amount: moneyBreakdownSchema.optional(),
+    deliveryCheckpoints: z.array(deliveryCheckpointSchema).optional().nullable(),
+    relatedInvoiceId: z.string().min(1, 'Related invoice ID cannot be empty').nullable().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const providedFields = [
+      data.status,
+      data.statusNote,
+      data.updatedByUserId,
+      data.updatedByName,
+      data.paymentTerms,
+      data.expectedDeliveryDate,
+      data.deliveryAddress,
+      data.notes,
+      data.items,
+      data.amount,
+      data.deliveryCheckpoints,
+      data.relatedInvoiceId,
+    ]
+
+    const hasUpdate = providedFields.some((value) => value !== undefined)
+    if (!hasUpdate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'At least one field must be provided to update the purchase order',
+      })
+    }
+
+    if ((data.items !== undefined) !== (data.amount !== undefined)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Updating items requires providing the amount breakdown and vice versa',
+        path: data.items === undefined ? ['items'] : ['amount'],
+      })
+    }
+  })
+
 // Settlement validation schemas
 export const settlementSchema = z.object({
   distributorId: z.string().min(1, 'Distributor ID is required'),
@@ -322,4 +370,5 @@ export const schemas = {
   purchaseOrderItem: purchaseOrderItemSchema,
   deliveryCheckpoint: deliveryCheckpointSchema,
   moneyBreakdown: moneyBreakdownSchema,
+  purchaseOrderUpdate: purchaseOrderUpdateSchema,
 }

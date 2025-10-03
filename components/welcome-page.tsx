@@ -234,7 +234,7 @@ export function WelcomePage() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/40 to-slate-950 flex items-center justify-center p-6">
+    <div className="module-background flex min-h-screen w-full items-center justify-center p-6">
       <div className="max-w-sm w-full">
         <motion.div
           initial={{ opacity: 0, y: 16 }}

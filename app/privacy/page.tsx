@@ -6,7 +6,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
+    <main className="module-background min-h-screen text-slate-100">
       <section className="max-w-3xl mx-auto px-6 py-16 space-y-8">
         <header className="space-y-2">
           <h1 className="text-3xl font-semibold">Privacy Policy</h1>
@@ -127,7 +127,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-white mb-3">7. Children's Privacy</h2>
+            <h2 className="text-lg font-semibold text-white mb-3">7. Children&apos;s Privacy</h2>
             <p>
               VendAI is not intended for use by individuals under 16 years of age. We do not knowingly collect
               personal information from children under 16. If you believe we have collected such information,

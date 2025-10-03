@@ -34,7 +34,7 @@ _A living implementation plan for the PO → Invoice → Payment loop that power
 ### B. API & Backend Logic
 - [ ] Build REST endpoints under `app/api/orders/b2b/` (or refactor existing) for:
   - [x] `POST /purchase-orders` (create from inventory trigger).
-  - [ ] `PATCH /purchase-orders/{id}` (supplier actions, status updates).
+  - [x] `PATCH /purchase-orders/{id}` (supplier actions, status updates).
   - [ ] `POST /invoices` (auto-generate on delivery confirmation).
   - [ ] `POST /payments/webhook` (handles processor/M-Pesa callbacks — reference `docs/payment-webhook-flows.md`).
 - [x] Implement server-side validation with Zod schemas inside `lib/validation.ts`.

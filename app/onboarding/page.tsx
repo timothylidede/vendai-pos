@@ -295,7 +295,7 @@ export default function OnboardingPage() {
   const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden px-6 py-16 sm:px-10 lg:px-16">
+    <div className="module-background relative min-h-screen w-full overflow-hidden px-6 py-16 sm:px-10 lg:px-16">
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[140px]" />
         <div className="absolute -top-32 left-1/2 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-sky-500/18 blur-[160px]" />

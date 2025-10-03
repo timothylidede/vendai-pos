@@ -72,7 +72,7 @@ export default function HomePage() {
 
   // Fallback - shouldn't reach here due to redirects above
   return (
-    <div className="flex h-screen bg-slate-900 overflow-hidden">
+    <div className="module-background flex h-[calc(100vh-2.5rem)] overflow-hidden">
       {/* Sidebar */}
       <Sidebar />
       

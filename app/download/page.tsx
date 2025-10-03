@@ -52,7 +52,7 @@ export default async function DownloadPage() {
   const zip = assets.find(a => a.name.toLowerCase().endsWith('.zip'))
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#111111] text-[#111111] dark:text-white">
+    <div className="module-background min-h-screen text-slate-100">
       <div className="max-w-3xl mx-auto px-6 py-12">
         <h1 className="text-3xl font-bold">Download VendAI POS</h1>
         {release ? (
@@ -75,9 +75,9 @@ export default async function DownloadPage() {
               <div className="text-xs opacity-80 mt-2">If your browser or network blocks .exe files, use the ZIP option below.</div>
             </a>
           ) : (
-            <div className="rounded-xl p-5 border border-gray-200/30 bg-gray-50 dark:bg-white/5">
-              <div className="font-semibold">Windows installer not found</div>
-              <div className="text-sm opacity-80">Check the latest release on GitHub or try the ZIP option below.</div>
+            <div className="rounded-xl p-5 border border-white/15 bg-white/5 backdrop-blur-xl">
+              <div className="font-semibold text-slate-100">Windows installer not found</div>
+              <div className="text-sm text-slate-300/80">Check the latest release on GitHub or try the ZIP option below.</div>
             </div>
           )}
 
@@ -94,24 +94,24 @@ export default async function DownloadPage() {
           ) : null}
         </div>
 
-        <div className="mt-10 rounded-xl border border-gray-200/30 p-6 bg-gray-50 dark:bg-white/5">
+        <div className="mt-10 rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
           <h2 className="text-xl font-semibold">Installation steps (Windows)</h2>
           <ol className="mt-3 list-decimal pl-5 space-y-2 text-sm">
             <li>Download the installer (.exe) or the ZIP alternative.</li>
-            <li>Double‑click the installer. If you see "Windows protected your PC", click More info → Run anyway.</li>
+            <li>Double‑click the installer. If you see &quot;Windows protected your PC&quot;, click More info → Run anyway.</li>
             <li>Choose an install location (no admin needed). Default is your user folder.</li>
             <li>Finish the wizard. Shortcuts are created in Start menu and optionally Desktop.</li>
             <li>Launch VendAI POS from the Start menu.</li>
           </ol>
 
-          <div className="mt-4 text-sm opacity-80">
-            Tip: If your browser shows "Failed – Unknown server error" when downloading the .exe, try the ZIP link above, a different browser (Edge/Chrome/Firefox), or another network. Some networks block direct .exe files.
+          <div className="mt-4 text-sm text-slate-300/80">
+            Tip: If your browser shows &quot;Failed – Unknown server error&quot; when downloading the .exe, try the ZIP link above, a different browser (Edge/Chrome/Firefox), or another network. Some networks block direct .exe files.
           </div>
         </div>
 
-        <div className="mt-6 text-sm opacity-80">
+        <div className="mt-6 text-sm text-slate-300/80">
           Can’t see the assets? Visit the release page directly:{' '}
-          <a className="underline" href="https://github.com/timothylidede/vendai-pos/releases/latest" target="_blank">GitHub Releases</a>
+          <a className="text-sky-300 underline" href="https://github.com/timothylidede/vendai-pos/releases/latest" target="_blank">GitHub Releases</a>
         </div>
       </div>
     </div>

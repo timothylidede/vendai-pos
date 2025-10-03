@@ -6,7 +6,7 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
+    <main className="module-background min-h-screen text-slate-100">
       <section className="max-w-3xl mx-auto px-6 py-16 space-y-8">
         <header className="space-y-2">
           <h1 className="text-3xl font-semibold">Terms &amp; Conditions</h1>
@@ -84,7 +84,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-lg font-semibold text-white mb-3">6. Limitation of Liability</h2>
             <p>
-              To the maximum extent permitted by law, VendAI's total liability for any claims arising from your use
+              To the maximum extent permitted by law, VendAI&apos;s total liability for any claims arising from your use
               of the Services shall not exceed the amount paid by you for the Services in the 12 months preceding
               the claim. We are not liable for indirect, incidental, or consequential damages.
             </p>

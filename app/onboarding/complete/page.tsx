@@ -62,7 +62,7 @@ export default function OnboardingCompletePage() {
   // Show loading while checking status
   if (loading) {
     return (
-      <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-6 py-16 sm:px-10 lg:px-16">
+      <div className="module-background relative flex min-h-screen w-full items-center justify-center overflow-hidden px-6 py-16 sm:px-10 lg:px-16">
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[140px]" />
           <div className="absolute -top-24 left-1/2 h-[22rem] w-[22rem] -translate-x-1/2 rounded-full bg-sky-500/18 blur-[140px]" />
@@ -89,7 +89,7 @@ export default function OnboardingCompletePage() {
   };
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden px-6 py-16 sm:px-10 lg:px-16">
+    <div className="module-background relative min-h-screen w-full overflow-hidden px-6 py-16 sm:px-10 lg:px-16">
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[140px]" />
         <div className="absolute -top-24 left-1/2 h-[30rem] w-[30rem] -translate-x-1/2 rounded-full bg-sky-500/18 blur-[160px]" />

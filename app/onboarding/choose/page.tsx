@@ -81,7 +81,7 @@ export default function ChooseOnboardingPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-6 py-16 lg:px-12">
+    <div className="module-background relative flex min-h-screen w-full items-center justify-center overflow-hidden px-6 py-16 lg:px-12">
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute inset-0 bg-slate-950/55 backdrop-blur-[120px]" />
         <div className="absolute -top-36 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-sky-500/18 blur-[120px]" />

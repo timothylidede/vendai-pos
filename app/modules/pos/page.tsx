@@ -6,7 +6,7 @@ import { LoadingSpinner } from '@/components/loading-spinner'
 const POSPage = dynamic(() => import('@/components/modules/pos-page').then(m => m.POSPage), {
   ssr: false,
   loading: () => (
-    <div className="min-h-[calc(100vh-160px)] w-full flex items-center justify-center">
+    <div className="module-background flex min-h-[calc(100vh-2.5rem)] w-full items-center justify-center">
       <LoadingSpinner size="lg" />
     </div>
   ),

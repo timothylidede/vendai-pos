@@ -30,14 +30,14 @@ export default function TestAuth() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="module-background flex min-h-screen items-center justify-center">
         <div className="text-white">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8">
+    <div className="module-background min-h-screen p-8">
       <div className="max-w-2xl mx-auto">
         <Card className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-8">
           <h1 className="text-2xl font-bold text-white mb-6">Firebase Authentication Test</h1>

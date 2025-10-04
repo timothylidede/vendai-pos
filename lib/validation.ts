@@ -188,6 +188,33 @@ export const purchaseOrderUpdateSchema = z
     }
   })
 
+// B2B Invoice schemas
+export const invoiceItemSchema = purchaseOrderItemSchema.extend({
+  lineTotal: z.number().nonnegative('Line total cannot be negative'),
+})
+
+export const invoiceCreateSchema = z.object({
+  retailerOrgId: z.string().min(1, 'Retailer organization ID is required'),
+  supplierOrgId: z.string().min(1).optional(),
+  purchaseOrderId: z.string().min(1, 'Purchase order ID is required'),
+  salesOrderId: z.string().min(1).optional(),
+  retailerId: z.string().min(1, 'Retailer ID is required'),
+  retailerName: z.string().min(1, 'Retailer name is required'),
+  retailerUserId: z.string().min(1).optional(),
+  supplierId: z.string().min(1, 'Supplier ID is required'),
+  supplierName: z.string().min(1, 'Supplier name is required'),
+  supplierUserId: z.string().min(1).optional(),
+  number: z.string().min(1, 'Invoice number is required'),
+  issueDate: z.union([z.string(), z.date()]),
+  dueDate: z.union([z.string(), z.date()]),
+  status: z.enum(['draft', 'issued', 'partially_paid', 'paid', 'overdue', 'cancelled']).default('issued'),
+  items: z.array(invoiceItemSchema).min(1, 'At least one item is required'),
+  amount: moneyBreakdownSchema,
+  paymentTerms: z.enum(['cod', 'net7', 'net14', 'net30', 'net60']),
+  createdByUserId: z.string().min(1).optional(),
+  createdByName: z.string().min(1).optional(),
+})
+
 // Settlement validation schemas
 export const settlementSchema = z.object({
   distributorId: z.string().min(1, 'Distributor ID is required'),
@@ -371,4 +398,6 @@ export const schemas = {
   deliveryCheckpoint: deliveryCheckpointSchema,
   moneyBreakdown: moneyBreakdownSchema,
   purchaseOrderUpdate: purchaseOrderUpdateSchema,
+  invoiceCreate: invoiceCreateSchema,
+  invoiceItem: invoiceItemSchema,
 }

@@ -86,10 +86,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     if (expectedDeliveryDate === null) {
-      updates.expectedDeliveryDate = null
+      updates.expectedDeliveryDate = undefined
     } else if (expectedDeliveryDate !== undefined) {
       const parsedExpectedDeliveryDate = toTimestamp(expectedDeliveryDate)
-      if (!parsedExpectedDeliveryDate) {
+      if (parsedExpectedDeliveryDate === undefined) {
         return NextResponse.json(
           { success: false, error: 'Invalid expected delivery date' },
           { status: 400 },

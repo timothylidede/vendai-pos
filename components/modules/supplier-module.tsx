@@ -2,18 +2,16 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { DollarSign, FileText, Package, Wallet, AlertCircle, Plus, Search, Filter, ChevronDown, Clock, MoreVertical, ArrowLeft, X } from "lucide-react"
+import { DollarSign, FileText, Package, Wallet, AlertCircle, Plus, Search, Filter, ChevronDown, Clock, MoreVertical, ArrowLeft, X, ClipboardList, Truck, RefreshCw } from "lucide-react"
 import { motion } from "framer-motion"
-import { Card } from "../ui/card"
-import { LazyImage } from "@/lib/performance-utils"
 import { Button } from "../ui/button"
 import { Input } from "../ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs"
 import { LoadingSpinner } from "../loading-spinner"
 
 import { db } from "@/lib/firebase"
-import { collection, query, orderBy, limit, startAfter, getDocs, addDoc, doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore"
+import { collection, query, orderBy, where, limit, startAfter, getDocs, addDoc, serverTimestamp, Timestamp } from "firebase/firestore"
+import { useToast } from "@/hooks/use-toast"
 
 // Types for Firebase data
 interface DistributorData {
@@ -125,6 +123,24 @@ interface OrderData {
 // Pagination and state
 const PRODUCTS_PER_PAGE = 20
 
+const toDateSafe = (value: unknown): Date | null => {
+  if (!value) return null
+  if (value instanceof Date) return value
+  if (value instanceof Timestamp) return value.toDate()
+  if (typeof value === 'object' && value !== null) {
+    const candidate = value as { toDate?: () => Date }
+    if (typeof candidate.toDate === 'function') {
+      try {
+        return candidate.toDate()
+      } catch (error) {
+        console.warn('Failed to convert Firestore timestamp', error)
+      }
+    }
+  }
+  const asDate = new Date(value as string | number)
+  return Number.isNaN(asDate.getTime()) ? null : asDate
+}
+
 // ...existing code...
 
 const getStatusColor = (status: string) => {
@@ -161,6 +177,17 @@ export function SupplierModule() {
   const [loadingRetailers, setLoadingRetailers] = useState(false)
   const [selectedRetailer, setSelectedRetailer] = useState<RetailerData | null>(null)
   const [showRetailerDetails, setShowRetailerDetails] = useState(false)
+  const [supplierError, setSupplierError] = useState<string | null>(null)
+  const [invoiceError, setInvoiceError] = useState<string | null>(null)
+  const [retailerError, setRetailerError] = useState<string | null>(null)
+  const [todoError, setTodoError] = useState<string | null>(null)
+  const [todoLoading, setTodoLoading] = useState(false)
+  const [todoMetrics, setTodoMetrics] = useState({
+    pendingPurchaseOrders: 0,
+    overdueDeliveries: 0,
+    unpaidInvoices: 0,
+    overdueInvoices: 0,
+  })
   
   // GMV and Settlement state
   const [gmvData, setGmvData] = useState({
@@ -216,11 +243,13 @@ export function SupplierModule() {
   })
   
   const router = useRouter()
+  const { toast } = useToast()
 
   // Load suppliers from Firebase
   const loadSuppliers = async () => {
     try {
       setLoading(true)
+      setSupplierError(null)
       const distributorsRef = collection(db, 'distributors')
       const snapshot = await getDocs(distributorsRef)
       
@@ -233,6 +262,13 @@ export function SupplierModule() {
       setSuppliers(suppliersData)
     } catch (error) {
       console.error('Error loading suppliers:', error)
+      setSupplierError('Unable to load suppliers from Firestore')
+      setSuppliers([])
+      toast({
+        title: 'Failed to load suppliers',
+        description: 'We could not fetch supplier data. Please retry in a moment.',
+        variant: 'destructive',
+      })
     } finally {
       setLoading(false)
     }
@@ -297,6 +333,7 @@ export function SupplierModule() {
   const loadInvoices = async () => {
     try {
       setLoadingInvoices(true)
+      setInvoiceError(null)
       
       // Query invoices from Firebase
       const invoicesQuery = query(
@@ -331,26 +368,13 @@ export function SupplierModule() {
       setInvoices(invoiceList)
     } catch (error) {
       console.error('Error loading invoices:', error)
-      // Fallback to sample data if Firebase fails
-      const sampleInvoices: InvoiceData[] = [
-        {
-          id: "INV001",
-          supplierId: "mahitaji_enterprises",
-          supplierName: "Mahitaji Enterprises Ltd",
-          invoiceDate: "2025-09-19",
-          dueDate: "2025-10-19",
-          status: "posted",
-          items: [],
-          subTotal: 45000,
-          tax: 7200,
-          total: 52200,
-          paymentTerms: "Net 30",
-          paymentStatus: "unpaid",
-          payments: [],
-          notes: "Monthly product supply"
-        }
-      ]
-      setInvoices(sampleInvoices)
+      setInvoiceError('Unable to load invoices from Firestore')
+      setInvoices([])
+      toast({
+        title: 'Failed to load invoices',
+        description: 'We could not fetch invoices. Please check your connection and retry.',
+        variant: 'destructive',
+      })
     } finally {
       setLoadingInvoices(false)
     }
@@ -360,7 +384,11 @@ export function SupplierModule() {
   const createInvoice = async () => {
     try {
       if (!invoiceForm.supplierId || !invoiceForm.clientName || invoiceForm.items.length === 0) {
-        alert('Please fill in all required fields and add at least one item')
+        toast({
+          title: 'Missing invoice details',
+          description: 'Fill in the client, select a supplier, and add at least one item.',
+          variant: 'destructive',
+        })
         return
       }
 
@@ -439,12 +467,19 @@ export function SupplierModule() {
 
       // Close dialog and refresh invoices
       setShowInvoiceDialog(false)
-      loadInvoices()
-      
-      alert('Invoice created successfully!')
+      await Promise.all([loadInvoices(), loadTodoMetrics()])
+
+      toast({
+        title: 'Invoice created',
+        description: `Invoice ${invoiceNumber} saved to Firestore.`,
+      })
     } catch (error) {
       console.error('Error creating invoice:', error)
-      alert('Failed to create invoice. Please try again.')
+      toast({
+        title: 'Failed to create invoice',
+        description: 'Please try again or check your connection.',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -475,6 +510,7 @@ export function SupplierModule() {
   const loadRetailers = async () => {
     try {
       setLoadingRetailers(true)
+      setRetailerError(null)
       
       // Query retailers from Firebase
       const retailersQuery = query(
@@ -516,77 +552,55 @@ export function SupplierModule() {
       setRetailers(retailerList)
     } catch (error) {
       console.error('Error loading retailers:', error)
-      // Fallback to sample data if Firebase fails
-      const sampleRetailers: RetailerData[] = [
-        {
-          id: "RET001",
-          name: "Mama Pendo Shop",
-          organizationName: "Mama Pendo Shop",
-          contactNumber: "+254 712 345 678",
-          location: "Nairobi",
-          distributorId: "mahitaji_enterprises",
-          distributorName: "Mahitaji Enterprises Ltd",
-          status: "active",
-          joinDate: "2025-08-15",
-          lastOrderDate: "2025-09-18",
-          totalOrders: 24,
-          totalGMV: 340000,
-          creditLimit: 150000,
-          currentCredit: 45000,
-          paymentTerms: "net30",
-          businessType: "retail",
-          averageOrderValue: 14167,
-          orderFrequency: "weekly",
-          topProducts: ["Rice", "Sugar", "Cooking Oil"],
-          lastActivity: "2 hours ago"
-        },
-        {
-          id: "RET002",
-          name: "Kinyozi Modern Store",
-          organizationName: "Kinyozi Modern Store",
-          contactNumber: "+254 798 765 432",
-          location: "Mombasa",
-          distributorId: "sam_west_supermarket",
-          distributorName: "Sam West Supermarket",
-          status: "active",
-          joinDate: "2025-07-22",
-          lastOrderDate: "2025-09-17",
-          totalOrders: 18,
-          totalGMV: 280000,
-          creditLimit: 120000,
-          currentCredit: 32000,
-          paymentTerms: "net15",
-          businessType: "retail",
-          averageOrderValue: 15556,
-          orderFrequency: "bi-weekly",
-          topProducts: ["Beverages", "Snacks", "Personal Care"],
-          lastActivity: "1 day ago"
-        },
-        {
-          id: "RET003",
-          name: "Nyeri Fresh Mart",
-          organizationName: "Nyeri Fresh Mart",
-          contactNumber: "+254 734 567 890",
-          location: "Nyeri",
-          distributorId: "mahitaji_enterprises",
-          distributorName: "Mahitaji Enterprises Ltd",
-          status: "pending",
-          joinDate: "2025-09-10",
-          totalOrders: 3,
-          totalGMV: 45000,
-          creditLimit: 80000,
-          currentCredit: 15000,
-          paymentTerms: "net30",
-          businessType: "retail",
-          averageOrderValue: 15000,
-          orderFrequency: "monthly",
-          topProducts: ["Dairy Products", "Cereals"],
-          lastActivity: "5 days ago"
-        }
-      ]
-      setRetailers(sampleRetailers)
+      setRetailerError('Unable to load retailers from Firestore')
+      setRetailers([])
+      toast({
+        title: 'Failed to load retailers',
+        description: 'We could not fetch retailer records. Please retry shortly.',
+        variant: 'destructive',
+      })
     } finally {
       setLoadingRetailers(false)
+    }
+  }
+
+  const loadTodoMetrics = async () => {
+    try {
+      setTodoLoading(true)
+      setTodoError(null)
+
+      const [pendingSnapshot, deliverySnapshot, unpaidSnapshot, overdueSnapshot] = await Promise.all([
+        getDocs(query(collection(db, 'purchase_orders'), where('status', '==', 'submitted'), limit(100))),
+        getDocs(query(collection(db, 'purchase_orders'), where('status', 'in', ['approved', 'submitted']), limit(100))),
+        getDocs(query(collection(db, 'invoices'), where('paymentStatus', 'in', ['pending', 'partial']), limit(100))),
+        getDocs(query(collection(db, 'invoices'), where('status', '==', 'overdue'), limit(100))),
+      ])
+
+      const now = new Date()
+      const overdueDeliveries = deliverySnapshot.docs.filter((doc) => {
+        const data = doc.data()
+        const expected = toDateSafe(data.expectedDeliveryDate)
+        if (!expected) return false
+        const status = typeof data.status === 'string' ? data.status : ''
+        return expected < now && status !== 'fulfilled' && status !== 'cancelled'
+      })
+
+      setTodoMetrics({
+        pendingPurchaseOrders: pendingSnapshot.size,
+        overdueDeliveries: overdueDeliveries.length,
+        unpaidInvoices: unpaidSnapshot.size,
+        overdueInvoices: overdueSnapshot.size,
+      })
+    } catch (error) {
+      console.error('Error loading distributor to-dos:', error)
+      setTodoError('Unable to load distributor to-dos right now')
+      toast({
+        title: 'Failed to load to-do metrics',
+        description: 'Please refresh in a moment.',
+        variant: 'destructive',
+      })
+    } finally {
+      setTodoLoading(false)
     }
   }
 
@@ -764,15 +778,11 @@ export function SupplierModule() {
     return () => clearTimeout(timer)
   }, [])
 
-  // Load data on mount
   useEffect(() => {
-    loadSuppliers()
-    loadInvoices()
-  }, [])
-
-  // Load invoices when switching to invoices tab
-  useEffect(() => {
-    if (activeView === 'invoices') {
+    if (activeView === 'suppliers') {
+      loadSuppliers()
+      loadTodoMetrics()
+    } else if (activeView === 'invoices') {
       loadInvoices()
     } else if (activeView === 'retailers') {
       loadRetailers()
@@ -875,6 +885,8 @@ export function SupplierModule() {
             <div className="relative">
               <Input 
                 placeholder={`Search ${activeView}...`}
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
                 className="bg-gradient-to-r from-white/[0.08] to-white/[0.04] backdrop-blur-md border border-white/[0.08] hover:border-white/[0.15] text-white placeholder-slate-400 pr-8 w-64 transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] focus:shadow-[0_8px_24px_-8px_rgba(147,51,234,0.2)] focus:border-purple-400/30"
               />
               <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
@@ -914,119 +926,198 @@ export function SupplierModule() {
                   <LoadingSpinner size="md" />
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
-                  {suppliers.map((supplier, index) => (
-                    <div 
-                      key={supplier.id}
-                      onClick={() => handleSupplierClick(supplier)}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`View details for ${supplier.name}`}
-                      className="group relative cursor-pointer transform transition-all duration-500 hover:scale-[1.02] hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 rounded-3xl"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          handleSupplierClick(supplier)
-                        }
-                      }}
-                    >
-                  {/* Glassmorphic Card */}
-                  <div className="relative h-80 rounded-3xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-white/[0.02] backdrop-blur-xl border border-white/[0.15] shadow-2xl group-hover:shadow-purple-500/20 transition-all duration-500 p-6 overflow-hidden">
-                    
-                    {/* Floating background orbs for depth */}
-                    <div className="absolute -top-10 -right-10 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-400/15 transition-colors duration-700"></div>
-                    <div className="absolute -bottom-10 -left-10 w-24 h-24 bg-indigo-500/8 rounded-full blur-xl group-hover:bg-indigo-400/12 transition-colors duration-700"></div>
-                    
-                    {/* Header Section */}
-                    <div className="relative z-10 flex items-start justify-between mb-6">
-                      <div className="flex items-center space-x-4">
-                        {/* Bigger Logo - No Border */}
-                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500/10 to-indigo-500/10 backdrop-blur-sm flex items-center justify-center group-hover:scale-105 transition-all duration-300 shadow-lg">
-                          <img 
-                            src={supplier.name === "Mahitaji Enterprises Ltd" ? "/images/mahitaji-logo.png" : "/images/sam-west-logo.png"}
-                            alt={`${supplier.name} Logo`} 
-                            className="w-14 h-14 object-contain filter drop-shadow-lg"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                              target.parentElement!.innerHTML = `<div class="text-2xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">${supplier.name.charAt(0)}</div>`;
-                            }}
-                          />
+                <div className="space-y-6 p-6">
+                  <div className="rounded-3xl border border-white/[0.08] bg-slate-900/40 backdrop-blur-xl p-6 shadow-[0_24px_70px_-32px_rgba(15,23,42,0.75)]">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div>
+                        <h2 className="text-lg font-semibold text-white">Distributor to-dos</h2>
+                        <p className="text-sm text-slate-400">Pending approvals, deliveries, and payments</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={loadTodoMetrics}
+                        disabled={todoLoading}
+                        className="border-white/20 text-slate-200 hover:text-white"
+                      >
+                        <RefreshCw className={`mr-2 h-4 w-4 ${todoLoading ? 'animate-spin' : ''}`} />
+                        Refresh
+                      </Button>
+                    </div>
+                    {todoError ? (
+                      <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                        {todoError}
+                      </div>
+                    ) : todoLoading ? (
+                      <div className="flex items-center justify-center py-10">
+                        <LoadingSpinner size="sm" />
+                      </div>
+                    ) : (
+                      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+                        <div className="flex items-center justify-between rounded-2xl border border-purple-500/25 bg-purple-500/15 p-5">
+                          <div>
+                            <p className="text-sm text-purple-100/70">Pending PO approvals</p>
+                            <p className="text-2xl font-semibold text-white">{todoMetrics.pendingPurchaseOrders}</p>
+                          </div>
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-500/30">
+                            <ClipboardList className="h-5 w-5 text-purple-100" />
+                          </div>
                         </div>
-                        
-                        {/* Company Info */}
-                        <div className="flex-1">
-                          <h3 className="text-xl font-bold text-white mb-1 group-hover:text-purple-200 transition-colors duration-300 leading-tight">
-                            {supplier.name}
-                          </h3>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-                            <span className="text-emerald-400 text-sm font-medium">Verified Partner</span>
+                        <div className="flex items-center justify-between rounded-2xl border border-orange-500/25 bg-orange-500/15 p-5">
+                          <div>
+                            <p className="text-sm text-orange-100/80">Overdue deliveries</p>
+                            <p className="text-2xl font-semibold text-white">{todoMetrics.overdueDeliveries}</p>
+                          </div>
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-500/30">
+                            <Truck className="h-5 w-5 text-orange-100" />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between rounded-2xl border border-rose-500/25 bg-rose-500/15 p-5">
+                          <div>
+                            <p className="text-sm text-rose-100/80">Unpaid invoices</p>
+                            <p className="text-2xl font-semibold text-white">{todoMetrics.unpaidInvoices}</p>
+                          </div>
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-500/30">
+                            <AlertCircle className="h-5 w-5 text-rose-100" />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between rounded-2xl border border-indigo-500/25 bg-indigo-500/15 p-5">
+                          <div>
+                            <p className="text-sm text-indigo-100/80">Overdue invoices</p>
+                            <p className="text-2xl font-semibold text-white">{todoMetrics.overdueInvoices}</p>
+                          </div>
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-500/30">
+                            <FileText className="h-5 w-5 text-indigo-100" />
                           </div>
                         </div>
                       </div>
-                      
-                      {/* Gold Verification Icon */}
-                      <div className="group/verify relative flex-shrink-0">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400/20 to-amber-500/20 backdrop-blur-sm flex items-center justify-center group-hover/verify:rotate-12 group-hover:animate-spin transition-all duration-500 shadow-lg">
-                          <svg className="w-6 h-6 text-yellow-400 filter drop-shadow-sm" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18l-1.45-1.32C5.4 13.36 2 9.28 2 5.5 2 3.42 3.42 2 5.5 2c1.74 0 3.41.81 4.5 2.09C11.09 2.81 12.76 2 14.5 2 16.58 2 18 3.42 18 5.5c0 3.78-3.4 7.86-6.55 11.18L10 18z" />
-                          </svg>
-                        </div>
-                        
-                        {/* Verified Tooltip */}
-                        <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-yellow-500/95 to-amber-500/95 backdrop-blur-sm text-white px-3 py-2 rounded-xl text-xs font-medium opacity-0 group-hover/verify:opacity-100 transition-all duration-300 pointer-events-none whitespace-nowrap z-20 shadow-lg">
-                          Verified Supplier
-                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-yellow-500/95"></div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Key Metrics Grid */}
-                    <div className="relative z-10 grid grid-cols-2 gap-4 mb-6">
-                      <div className="bg-white/5 backdrop-blur-sm rounded-xl p-3 border border-white/10">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-slate-300 text-xs font-medium">Products</span>
-                          <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
-                        </div>
-                        <div className="text-white text-xl font-bold">{supplier.totalProducts || 0}</div>
-                        <div className="text-purple-400 text-xs">items available</div>
-                      </div>
-                      
-                      <div className="bg-white/5 backdrop-blur-sm rounded-xl p-3 border border-white/10">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-slate-300 text-xs font-medium">Retailers</span>
-                          <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                        </div>
-                        <div className="text-white text-xl font-bold">{supplier.totalRetailers || 0}</div>
-                        <div className="text-green-400 text-xs">connected</div>
-                      </div>
-                    </div>
-                    
-                    {/* Bottom Section */}
-                    <div className="relative z-10 flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center">
-                          <Package className="w-4 h-4 text-purple-400" />
-                        </div>
-                        <div>
-                          <div className="text-slate-300 text-xs">Total GMV</div>
-                          <div className="text-white font-semibold">KES {(supplier.totalGMV || 0).toLocaleString()}</div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2 text-slate-400 group-hover:text-purple-300 transition-colors duration-300">
-                        <span className="text-sm font-medium">View Products</span>
-                        <ArrowLeft className="w-4 h-4 rotate-180" />
-                      </div>
-                    </div>
-                    
-                    {/* Subtle hover glow effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-transparent to-indigo-500/5 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    )}
                   </div>
+
+                  {supplierError && (
+                    <div
+                      className={`rounded-2xl border px-4 py-3 text-sm ${
+                        supplierError.toLowerCase().includes('unable')
+                          ? 'border-red-500/40 bg-red-500/10 text-red-200'
+                          : 'border-slate-500/40 bg-slate-800/40 text-slate-200'
+                      }`}
+                    >
+                      {supplierError}
+                    </div>
+                  )}
+
+                  {suppliers.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/[0.08] bg-white/[0.04] py-16 text-center text-slate-300">
+                      <ClipboardList className="mb-4 h-10 w-10 text-purple-300" />
+                      <p className="text-lg font-semibold text-white">No suppliers yet</p>
+                      <p className="mt-1 max-w-md text-sm text-slate-400">
+                        Connect your first distributor or import supplier data to populate this workspace.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                      {suppliers.map((supplier) => (
+                        <div 
+                          key={supplier.id}
+                          onClick={() => handleSupplierClick(supplier)}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`View details for ${supplier.name}`}
+                          className="group relative cursor-pointer transform transition-all duration-500 hover:scale-[1.02] hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 rounded-3xl"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              handleSupplierClick(supplier)
+                            }
+                          }}
+                        >
+                          <div className="relative h-80 rounded-3xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-white/[0.02] backdrop-blur-xl border border-white/[0.15] shadow-2xl group-hover:shadow-purple-500/20 transition-all duration-500 p-6 overflow-hidden">
+                            <div className="absolute -top-10 -right-10 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-400/15 transition-colors duration-700"></div>
+                            <div className="absolute -bottom-10 -left-10 w-24 h-24 bg-indigo-500/8 rounded-full blur-xl group-hover:bg-indigo-400/12 transition-colors duration-700"></div>
+
+                            <div className="relative z-10 flex items-start justify-between mb-6">
+                              <div className="flex items-center space-x-4">
+                                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-500/10 to-indigo-500/10 backdrop-blur-sm flex items-center justify-center group-hover:scale-105 transition-all duration-300 shadow-lg">
+                                  <img 
+                                    src={supplier.name === "Mahitaji Enterprises Ltd" ? "/images/mahitaji-logo.png" : "/images/sam-west-logo.png"}
+                                    alt={`${supplier.name} Logo`} 
+                                    className="w-14 h-14 object-contain filter drop-shadow-lg"
+                                    onError={(e) => {
+                                      const target = e.target as HTMLImageElement
+                                      target.style.display = 'none'
+                                      target.parentElement!.innerHTML = `<div class=\"text-2xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent\">${supplier.name.charAt(0)}</div>`
+                                    }}
+                                  />
+                                </div>
+
+                                <div className="flex-1">
+                                  <h3 className="text-xl font-bold text-white mb-1 group-hover:text-purple-200 transition-colors duration-300 leading-tight">
+                                    {supplier.name}
+                                  </h3>
+                                  <div className="flex items-center space-x-2">
+                                    <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                                    <span className="text-emerald-400 text-sm font-medium">Verified Partner</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="group/verify relative flex-shrink-0">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400/20 to-amber-500/20 backdrop-blur-sm flex items-center justify-center group-hover/verify:rotate-12 group-hover:animate-spin transition-all duration-500 shadow-lg">
+                                  <svg className="w-6 h-6 text-yellow-400 filter drop-shadow-sm" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18l-1.45-1.32C5.4 13.36 2 9.28 2 5.5 2 3.42 3.42 2 5.5 2c1.74 0 3.41.81 4.5 2.09C11.09 2.81 12.76 2 14.5 2 16.58 2 18 3.42 18 5.5c0 3.78-3.4 7.86-6.55 11.18L10 18z" />
+                                  </svg>
+                                </div>
+                                <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-yellow-500/95 to-amber-500/95 backdrop-blur-sm text-white px-3 py-2 rounded-xl text-xs font-medium opacity-0 group-hover/verify:opacity-100 transition-all duration-300 pointer-events-none whitespace-nowrap z-20 shadow-lg">
+                                  Verified Supplier
+                                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-yellow-500/95"></div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="relative z-10 grid grid-cols-2 gap-4 mb-6">
+                              <div className="bg-white/5 backdrop-blur-sm rounded-xl p-3 border border-white/10">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-slate-300 text-xs font-medium">Products</span>
+                                  <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
+                                </div>
+                                <div className="text-white text-xl font-bold">{supplier.totalProducts || 0}</div>
+                                <div className="text-purple-400 text-xs">items available</div>
+                              </div>
+
+                              <div className="bg-white/5 backdrop-blur-sm rounded-xl p-3 border border-white/10">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-slate-300 text-xs font-medium">Retailers</span>
+                                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                                </div>
+                                <div className="text-white text-xl font-bold">{supplier.totalRetailers || 0}</div>
+                                <div className="text-green-400 text-xs">connected</div>
+                              </div>
+                            </div>
+
+                            <div className="relative z-10 flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-8 h-8 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center">
+                                  <Package className="w-4 h-4 text-purple-400" />
+                                </div>
+                                <div>
+                                  <div className="text-slate-300 text-xs">Total GMV</div>
+                                  <div className="text-white font-semibold">KES {(supplier.totalGMV || 0).toLocaleString()}</div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center space-x-2 text-slate-400 group-hover:text-purple-300 transition-colors duration-300">
+                                <span className="text-sm font-medium">View Products</span>
+                                <ArrowLeft className="w-4 h-4 rotate-180" />
+                              </div>
+                            </div>
+
+                            <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-transparent to-indigo-500/5 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
               )}
             </div>
           ) : (
@@ -1160,68 +1251,94 @@ export function SupplierModule() {
             </div>
           )
         ) : activeView === 'invoices' ? (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-700/50">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Invoice #</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Supplier</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Date</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Due Date</th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-slate-400">Amount</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Status</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Payment</th>
-                  <th className="w-[40px]"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((invoice) => (
-                  <tr 
-                    key={invoice.id} 
-                    className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors cursor-pointer"
-                    onClick={() => setSelectedInvoice(invoice)}
-                  >
-                    <td className="py-3 px-4">
-                      <div className="text-sm font-medium text-slate-200">{invoice.id}</div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="text-sm text-slate-200">{invoice.supplierName}</div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="text-sm text-slate-300">{invoice.invoiceDate}</div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="text-sm text-slate-300">{invoice.dueDate}</div>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="text-sm font-mono text-purple-400">
-                        {invoice.total.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                      </div>
-                      {invoice.paymentStatus === 'partial' && (
-                        <div className="text-xs text-slate-400">
-                          Paid: {invoice.payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded text-xs border ${getStatusColor(invoice.status)}`}>
-                        <span className="capitalize">{invoice.status}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded text-xs border ${getStatusColor(invoice.paymentStatus)}`}>
-                        <span className="capitalize">{invoice.paymentStatus}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <Button variant="ghost" size="icon">
-                        <ChevronDown className="w-4 h-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="h-full overflow-y-auto">
+            {loadingInvoices ? (
+              <div className="flex h-full items-center justify-center">
+                <LoadingSpinner size="md" />
+              </div>
+            ) : (
+              <div className="p-6">
+                {invoiceError && (
+                  <div className="mb-4 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    {invoiceError}
+                  </div>
+                )}
+
+                {invoices.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/[0.08] bg-white/[0.04] py-16 text-center text-slate-300">
+                    <FileText className="mb-4 h-10 w-10 text-purple-300" />
+                    <p className="text-lg font-semibold text-white">No invoices yet</p>
+                    <p className="mt-1 max-w-md text-sm text-slate-400">
+                      Generate invoices from purchase orders or upload existing bills to see them listed here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-2xl border border-white/[0.05] bg-white/[0.03]">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-slate-700/50">
+                          <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Invoice #</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Supplier</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Date</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Due Date</th>
+                          <th className="text-right py-3 px-4 text-sm font-medium text-slate-400">Amount</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Status</th>
+                          <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Payment</th>
+                          <th className="w-[40px]"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {invoices.map((invoice) => (
+                          <tr 
+                            key={invoice.id} 
+                            className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors cursor-pointer"
+                            onClick={() => setSelectedInvoice(invoice)}
+                          >
+                            <td className="py-3 px-4">
+                              <div className="text-sm font-medium text-slate-200">{invoice.id}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="text-sm text-slate-200">{invoice.supplierName}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="text-sm text-slate-300">{invoice.invoiceDate}</div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="text-sm text-slate-300">{invoice.dueDate}</div>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <div className="text-sm font-mono text-purple-400">
+                                {invoice.total.toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                              </div>
+                              {invoice.paymentStatus === 'partial' && (
+                                <div className="text-xs text-slate-400">
+                                  Paid: {invoice.payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded text-xs border ${getStatusColor(invoice.status)}`}>
+                                <span className="capitalize">{invoice.status}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded text-xs border ${getStatusColor(invoice.paymentStatus)}`}>
+                                <span className="capitalize">{invoice.paymentStatus}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <Button variant="ghost" size="icon">
+                                <ChevronDown className="w-4 h-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : activeView === 'retailers' ? (
           <div className="h-full overflow-y-auto">
@@ -1231,6 +1348,12 @@ export function SupplierModule() {
               </div>
             ) : (
               <div className="p-6">
+                {retailerError && (
+                  <div className="mb-6 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    {retailerError}
+                  </div>
+                )}
+
                 {/* GMV & Settlement Tracking */}
                 <div className="mb-8">
                   <div className="flex items-center justify-between mb-4">
@@ -1368,6 +1491,16 @@ export function SupplierModule() {
                   <p className="text-slate-400">Manage your retailer connections and track their activity</p>
                 </div>
 
+                {retailers.length === 0 ? (
+                  <div className="rounded-3xl border border-dashed border-white/[0.08] bg-white/[0.04] py-16 text-center text-slate-300">
+                    <Package className="mx-auto mb-4 h-10 w-10 text-purple-300" />
+                    <p className="text-lg font-semibold text-white">No retailers connected</p>
+                    <p className="mt-1 max-w-xl mx-auto text-sm text-slate-400">
+                      Invite retailers or approve pending applications to see engagement insights here.
+                    </p>
+                  </div>
+                ) : (
+                  <>
                 {/* Retailers Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                   <div className="bg-gradient-to-br from-green-500/20 via-green-500/10 to-transparent p-4 rounded-xl border border-green-500/20">
@@ -1523,6 +1656,8 @@ export function SupplierModule() {
                     </div>
                   ))}
                 </div>
+                  </>
+                )}
               </div>
             )}
           </div>

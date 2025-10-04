@@ -121,6 +121,86 @@ export const defaultCreditEngineOptions: CreditEngineOptions = {
   utilizationComfortThreshold: 0.65
 }
 
+export type CreditPaymentOutcome = 'paid' | 'partial' | 'failed' | 'refunded'
+
+export interface CreditMetricsSnapshot {
+  trailingVolume90d: number
+  orders90d: number
+  successfulPayments: number
+  failedPayments: number
+  totalAttempts: number
+  disputeCount: number
+  currentOutstanding: number
+  existingCreditLimit: number
+  consecutiveOnTimePayments: number
+  manualAdjustment: number
+  repaymentLagDays: number
+  sectorRisk: 'low' | 'medium' | 'high'
+}
+
+export function applyPaymentOutcomeToMetrics(
+  metrics: CreditMetricsSnapshot,
+  amount: number,
+  outcome: CreditPaymentOutcome,
+): CreditMetricsSnapshot {
+  const normalizedAmount = Number.isFinite(amount) && amount > 0 ? amount : 0
+  const next: CreditMetricsSnapshot = {
+    ...metrics,
+    totalAttempts: metrics.totalAttempts + 1,
+  }
+
+  switch (outcome) {
+    case 'paid': {
+      next.trailingVolume90d += normalizedAmount
+      next.orders90d += 1
+      next.successfulPayments += 1
+      next.consecutiveOnTimePayments = metrics.consecutiveOnTimePayments + 1
+      next.manualAdjustment += 1
+      next.currentOutstanding = Math.max(metrics.currentOutstanding - normalizedAmount, 0)
+      break
+    }
+    case 'partial': {
+      next.trailingVolume90d += normalizedAmount
+      next.consecutiveOnTimePayments = metrics.consecutiveOnTimePayments + 1
+      next.manualAdjustment += 0.5
+      next.currentOutstanding = Math.max(metrics.currentOutstanding - normalizedAmount, 0)
+      break
+    }
+    case 'failed': {
+      next.failedPayments += 1
+      next.consecutiveOnTimePayments = 0
+      next.manualAdjustment -= 5
+      next.currentOutstanding = metrics.currentOutstanding
+      break
+    }
+    case 'refunded': {
+      next.disputeCount += 1
+      next.consecutiveOnTimePayments = 0
+      next.manualAdjustment -= 3
+      next.trailingVolume90d = Math.max(metrics.trailingVolume90d - normalizedAmount, 0)
+      next.orders90d = Math.max(metrics.orders90d - 1, 0)
+      next.currentOutstanding = metrics.currentOutstanding + normalizedAmount
+      break
+    }
+    default: {
+      next.consecutiveOnTimePayments = 0
+      break
+    }
+  }
+
+  next.trailingVolume90d = Math.max(next.trailingVolume90d, 0)
+  next.orders90d = Math.max(Math.floor(next.orders90d), 0)
+  next.successfulPayments = Math.max(next.successfulPayments, 0)
+  next.failedPayments = Math.max(next.failedPayments, 0)
+  next.totalAttempts = Math.max(next.totalAttempts, 0)
+  next.disputeCount = Math.max(next.disputeCount, 0)
+  next.currentOutstanding = Math.max(next.currentOutstanding, 0)
+  next.consecutiveOnTimePayments = Math.max(next.consecutiveOnTimePayments, 0)
+  next.manualAdjustment = clampNumber(next.manualAdjustment, -30, 30)
+
+  return next
+}
+
 const clampNumber = (value: number, min: number, max: number): number => {
   if (!Number.isFinite(value)) return min
   return Math.min(Math.max(value, min), max)

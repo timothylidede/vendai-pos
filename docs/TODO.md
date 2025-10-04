@@ -22,19 +22,19 @@ _Last updated: 3 Oct 2025_
 
 - [ ] **Payments intake**
 
-  - [ ] Create `/app/api/payments/webhook/route.ts` per `docs/payment-webhook-flows.md` (verify signatures, idempotency, map payloads).- [x] REST endpoints to create and list purchase orders and invoices (`GET/POST /api/purchase-orders`, `PATCH /api/purchase-orders/[id]`, `GET/POST /api/invoices`).- [x] `PATCH /api/purchase-orders/{id}` - Update PO status, supplier actions
+  - [x] Create `/app/api/payments/webhook/route.ts` per `docs/payment-webhook-flows.md` (verify signatures, idempotency, map payloads).- [x] REST endpoints to create and list purchase orders and invoices (`GET/POST /api/purchase-orders`, `PATCH /api/purchase-orders/[id]`, `GET/POST /api/invoices`).- [x] `PATCH /api/purchase-orders/{id}` - Update PO status, supplier actions
 
-  - [ ] Persist events with `createPaymentRecord`, update related invoice + PO, append ledger entry via `createLedgerEntry`.
+  - [x] Persist events with `createPaymentRecord`, update related invoice + PO, append ledger entry via `createLedgerEntry`.
 
-  - [ ] Invoke `lib/credit-engine.ts` success/failure hooks to refresh credit stats.- [x] Validation schemas covering purchase order create/update and invoice create flows (`lib/validation.ts`).- [x] `POST /api/invoices` - Generate invoices from fulfilled orders
+  - [x] Invoke `lib/credit-engine.ts` success/failure hooks to refresh credit stats.- [x] Validation schemas covering purchase order create/update and invoice create flows (`lib/validation.ts`).- [x] `POST /api/invoices` - Generate invoices from fulfilled orders
 
 - [ ] **Supplier workspace parity** (`components/modules/supplier-module.tsx`)
 
-  - [ ] Strip hardcoded invoice/retailer fallbacks; show empty/error states driven by Firestore.- [x] `GET /api/invoices` - Query invoices with filters
+  - [x] Strip hardcoded invoice/retailer fallbacks; show empty/error states driven by Firestore.- [x] `GET /api/invoices` - Query invoices with filters
 
-  - [ ] Ensure `loadSuppliers` reads canonical distributor source and surfaces failures in the UI (no `alert` usage).
+  - [x] Ensure `loadSuppliers` reads canonical distributor source and surfaces failures in the UI (no `alert` usage).
 
-  - [ ] Add distributor "to-do" panel (pending PO approvals, overdue deliveries, unpaid invoices) backed by real queries.## 🚨 Blockers (must ship before production cutover)- [ ] `PATCH /api/invoices/{id}` - Update invoice status, payments
+  - [x] Add distributor "to-do" panel (pending PO approvals, overdue deliveries, unpaid invoices) backed by real queries.## 🚨 Blockers (must ship before production cutover)- [ ] `PATCH /api/invoices/{id}` - Update invoice status, payments
 
 - [ ] **Logistics module** (`app/modules/logistics/page.tsx`)
 
@@ -42,11 +42,11 @@ _Last updated: 3 Oct 2025_
 
   - [ ] Enable status updates, driver assignment, proof-of-delivery capture.
 
-  - [ ] Integrate maps provider for route/ETA visualisation.  - [ ] Implement `/app/api/payments/webhook/route.ts` per `docs/payment-webhook-flows.md` (STK / processor callbacks, signature verification, idempotency guard).- [ ] `POST /api/payments/release` - Release escrow after delivery confirmation
+  - [ ] Integrate maps provider for route/ETA visualisation.  - [x] Implement `/app/api/payments/webhook/route.ts` per `docs/payment-webhook-flows.md` (STK / processor callbacks, signature verification, idempotency guard).- [ ] `POST /api/payments/release` - Release escrow after delivery confirmation
 
 - [ ] **Retailers module** (`app/modules/retailers/page.tsx`)
 
-  - [ ] Swap mocked retailers for Firestore (`users` where role = retailer) + aggregated order/GMV metrics.  - [ ] Persist callbacks via `createPaymentRecord`, update linked invoice & PO status, append ledger entry (`createLedgerEntry`).- [ ] `GET /api/purchase-orders` - Query POs with filters and pagination
+  - [ ] Swap mocked retailers for Firestore (`users` where role = retailer) + aggregated order/GMV metrics.  - [x] Persist callbacks via `createPaymentRecord`, update linked invoice & PO status, append ledger entry (`createLedgerEntry`).- [ ] `GET /api/purchase-orders` - Query POs with filters and pagination
 
   - [ ] Add filtering/sorting, credit exposure view, PO/invoice drill-downs.
 
@@ -62,11 +62,11 @@ _Last updated: 3 Oct 2025_
 
   - [ ] Remove the Retailers tab when rendering the shared SupplierModule for retailer personas (split component if needed).
 
-  - [ ] Ensure supplier listings draw from live distributor data and expose PO creation + invoice tracking for retailers.  - [ ] Ensure `loadSuppliers` targets the canonical distributors collection and surfaces failures through the UI (no `alert` usage).- [ ] `POST /api/credit/assess` - Calculate credit score and limits
+  - [ ] Ensure supplier listings draw from live distributor data and expose PO creation + invoice tracking for retailers.  - [x] Ensure `loadSuppliers` targets the canonical distributors collection and surfaces failures through the UI (no `alert` usage).- [ ] `POST /api/credit/assess` - Calculate credit score and limits
 
 - [ ] **End-to-end validation**
 
-  - [ ] Run and document full flow: low stock → PO submission → supplier approval → invoice → payment webhook → credit update → ledger entry. Capture logs & screenshots for go-live sign-off.  - [ ] Add a distributor to-do strip (pending PO approvals, overdue deliveries, unpaid invoices) driven by live Firestore queries.- [ ] `GET /api/credit/history` - Fetch credit history and payment behavior
+  - [ ] Run and document full flow: low stock → PO submission → supplier approval → invoice → payment webhook → credit update → ledger entry. Capture logs & screenshots for go-live sign-off.  - [x] Add a distributor to-do strip (pending PO approvals, overdue deliveries, unpaid invoices) driven by live Firestore queries.- [ ] `GET /api/credit/history` - Fetch credit history and payment behavior
 
 
 

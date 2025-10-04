@@ -2,11 +2,11 @@
 
 
 
-_Last updated: 3 Oct 2025_
+_Last updated: 4 Oct 2025_
 
 
 
-## ✅ Already Done_Last updated: 3 Oct 2025_## A. Core API Endpoints
+## ✅ Already Done_Last updated: 4 Oct 2025_## A. Core API Endpoints
 
 - [x] Firestore models and helpers for POs, invoices, payments, ledger entries (`types/b2b-orders.ts`, `lib/b2b-order-utils.ts`, `lib/b2b-invoice-utils.ts`, `lib/b2b-order-store.ts`).
 
@@ -20,7 +20,7 @@ _Last updated: 3 Oct 2025_
 
 ## 🚨 Blockers (ship before cutover)- [x] Firestore data models and helpers for purchase orders, invoices, payments, and ledger entries (`types/b2b-orders.ts`, `lib/b2b-order-utils.ts`, `lib/b2b-invoice-utils.ts`, `lib/b2b-order-store.ts`).- [x] `POST /api/purchase-orders` - Create purchase orders
 
-- [ ] **Payments intake**
+- [x] **Payments intake**
 
   - [x] Create `/app/api/payments/webhook/route.ts` per `docs/payment-webhook-flows.md` (verify signatures, idempotency, map payloads).- [x] REST endpoints to create and list purchase orders and invoices (`GET/POST /api/purchase-orders`, `PATCH /api/purchase-orders/[id]`, `GET/POST /api/invoices`).- [x] `PATCH /api/purchase-orders/{id}` - Update PO status, supplier actions
 
@@ -28,7 +28,7 @@ _Last updated: 3 Oct 2025_
 
   - [x] Invoke `lib/credit-engine.ts` success/failure hooks to refresh credit stats.- [x] Validation schemas covering purchase order create/update and invoice create flows (`lib/validation.ts`).- [x] `POST /api/invoices` - Generate invoices from fulfilled orders
 
-- [ ] **Supplier workspace parity** (`components/modules/supplier-module.tsx`)
+- [x] **Supplier workspace parity** (`components/modules/supplier-module.tsx`)
 
   - [x] Strip hardcoded invoice/retailer fallbacks; show empty/error states driven by Firestore.- [x] `GET /api/invoices` - Query invoices with filters
 
@@ -36,13 +36,27 @@ _Last updated: 3 Oct 2025_
 
   - [x] Add distributor "to-do" panel (pending PO approvals, overdue deliveries, unpaid invoices) backed by real queries.## 🚨 Blockers (must ship before production cutover)- [ ] `PATCH /api/invoices/{id}` - Update invoice status, payments
 
-- [ ] **Logistics module** (`app/modules/logistics/page.tsx`)
+- [x] **Logistics module** (`app/modules/logistics/page.tsx`)
 
-  - [ ] Replace static deliveries/routes/drivers arrays with live Firestore data (`sales_orders`, `drivers`, `routes`).- [ ] **Payment intake pipeline**- [ ] `POST /api/payments/webhook` - Handle M-Pesa/processor callbacks
+  - [x] Replace static deliveries/routes/drivers arrays with live Firestore data (`sales_orders`, `drivers`, `routes`).
+  - [x] Embed Google Maps visualisation with real-time driver ETA/status metrics sourced from Firestore.
+  - [x] Persist driver assignment and proof-of-delivery metadata during payment release flow.
+  - [x] Add refresh/search controls with toast-based error handling for operational parity.
 
-  - [ ] Enable status updates, driver assignment, proof-of-delivery capture.
+- [x] **AI assistant agent orchestration** (`.cursor/rules`, `docs/AI_AGENT.md`)
 
-  - [ ] Integrate maps provider for route/ETA visualisation.  - [x] Implement `/app/api/payments/webhook/route.ts` per `docs/payment-webhook-flows.md` (STK / processor callbacks, signature verification, idempotency guard).- [ ] `POST /api/payments/release` - Release escrow after delivery confirmation
+  - [x] Restructure `.cursorrules` into a `<project_rules>` block so Cursor preloads project directives instead of mis-grouping them.
+  - [x] Author role-specific prompt playbooks (operations, finance, engineering) mapping user roles to available system commands and data sources.
+  - [x] Catalogue VendAI agent toolbelt (search, fetch data, run commands) and surface it in cursor rules for on-demand execution.
+  - [x] Standardise rule naming/description metadata so `fetch_rules` selects the right instructions before edits, per Roman & Shrivu agent guidance.
+
+- [x] **Payment intake pipeline**
+
+  - [x] `POST /api/payments/webhook` - Handle M-Pesa/processor callbacks.
+  - [x] Implement `/app/api/payments/webhook/route.ts` per `docs/payment-webhook-flows.md` (STK / processor callbacks, signature verification, idempotency guard).
+  - [x] Enable status updates, driver assignment, proof-of-delivery capture.
+  - [x] Integrate maps provider for route/ETA visualisation.
+  - [x] `POST /api/payments/release` - Release escrow after delivery confirmation.
 
 - [ ] **Retailers module** (`app/modules/retailers/page.tsx`)
 
@@ -70,15 +84,23 @@ _Last updated: 3 Oct 2025_
 
 
 
-## 🔜 High Priority (after blockers)- [ ] **Distributor logistics module** (`app/modules/logistics/page.tsx`)- [ ] `PATCH /api/credit/limits` - Manual limit adjustments
+## 🔜 High Priority (after blockers)
+- [x] **Distributor logistics module** (`app/modules/logistics/page.tsx`)
+- [ ] `PATCH /api/credit/limits` - Manual limit adjustments
 
 - [ ] Add `PATCH /api/invoices/{id}` for status transitions, payment IDs, status history.
 
-- [ ] Expose `/api/payments/release` to handle escrow payouts post-delivery.  - [ ] Replace static deliveries/routes/drivers arrays with Firestore-backed data (`sales_orders`, `drivers`, `routes`).- [ ] Background job for credit score recalculation after payments
+- [x] Expose `/api/payments/release` to handle escrow payouts post-delivery.
+
+  - [x] Replace static deliveries/routes/drivers arrays with Firestore-backed data (`sales_orders`, `drivers`, `routes`).
+  - [x] Provide actions to update delivery status, assign drivers, and store proof-of-delivery metadata.
+  - [x] Integrate chosen maps provider for live route/ETA visualisation.
+
+- [ ] Background job for credit score recalculation after payments
 
 - [ ] Build reconciliation worker (Cloud Function or scheduler) to match PO ↔ Invoice ↔ Payment and backfill ledger entries.
 
-- [ ] Schedule overdue invoice reminders (email/SMS/in-app).  - [ ] Provide actions to update delivery status, assign drivers, and store proof of delivery metadata.
+- [ ] Schedule overdue invoice reminders (email/SMS/in-app).
 
 - [ ] Extend credit engine integration to downgrade scores on disputes and update watchlist.
 

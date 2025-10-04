@@ -1,0 +1,6 @@
+<project_rules>
+- ALWAYS fetch relevant instructions from `.cursor/rules` before editing or creating files. Use role and feature keywords to decide which rule to fetch.
+- Identify the requesting persona (operations, finance, engineering) and fetch the matching rule set before taking action.
+- Reference the "vendai-agent-toolbelt" rule to confirm available commands, data sources, and safety constraints before executing tasks.
+- Resolve ambiguity by inspecting the codebase or documentation with search/read commands instead of asking the user when the information is available locally.
+</project_rules>

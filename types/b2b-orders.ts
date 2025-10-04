@@ -103,10 +103,19 @@ export interface SalesOrder {
   status: SalesOrderStatus
   fulfillmentEta?: Timestamp
   assignedDriverId?: string
+  assignedDriverName?: string
   assignedWarehouseId?: string
   items: PurchaseOrderItem[]
   amount: MoneyBreakdown
   statusHistory: StatusHistoryEntry<SalesOrderStatus>[]
+  proofOfDelivery?: {
+    capturedAt?: Timestamp
+    capturedBy: string
+    capturedByName?: string
+    notes?: string | null
+    assetUrl?: string | null
+    signatureUrl?: string | null
+  }
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }
@@ -170,6 +179,17 @@ export interface PaymentRecord {
   receivedAt?: Timestamp
   releasedAt?: Timestamp
   statusHistory: StatusHistoryEntry<PaymentStatus>[]
+  releaseMetadata?: {
+    releasedById: string
+    releasedByName?: string
+    driverId?: string
+    driverName?: string
+    proofOfDeliveryUrl?: string | null
+    proofOfDeliverySignatureUrl?: string | null
+    proofOfDeliveryNotes?: string | null
+    proofOfDeliveryCapturedAt?: Timestamp | null
+    releaseNote?: string | null
+  }
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }

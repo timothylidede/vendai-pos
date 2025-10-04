@@ -129,15 +129,56 @@ interface GmvOrder {
   status: string
 }
 
+type SettlementStatus = 'pending' | 'paid' | 'overdue'
+
 interface SettlementRecord {
   id: string
   month: string
   gmv: number
   settlement: number
-  status: string
+  status: SettlementStatus
   dueDate?: string
   paidDate?: string
   paidAmount?: number
+}
+
+interface GmvSnapshot {
+  gmv: number
+  settlement: number
+  orders: number
+  date: string
+}
+
+interface GmvState {
+  currentMonth: GmvSnapshot
+  previousMonth: GmvSnapshot
+  totalUnpaid: number
+  nextPaymentDue: string
+  settlementHistory: SettlementRecord[]
+}
+
+const createInitialGmvState = (): GmvState => {
+  const now = new Date()
+  const currentMonth = now.toISOString().slice(0, 7)
+  const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 7)
+
+  return {
+    currentMonth: {
+      gmv: 0,
+      settlement: 0,
+      orders: 0,
+      date: currentMonth,
+    },
+    previousMonth: {
+      gmv: 0,
+      settlement: 0,
+      orders: 0,
+      date: previousMonth,
+    },
+    totalUnpaid: 0,
+    nextPaymentDue: '',
+    settlementHistory: [],
+  }
 }
 
 // Pagination and state
@@ -331,7 +372,7 @@ export function SupplierModule() {
   const [products, setProducts] = useState<ProductData[]>([])
   const [invoices, setInvoices] = useState<InvoiceData[]>([])
   const [retailers, setRetailers] = useState<RetailerData[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false)
   const [loadingProducts, setLoadingProducts] = useState(false)
   const [loadingInvoices, setLoadingInvoices] = useState(false)
   const [loadingRetailers, setLoadingRetailers] = useState(false)
@@ -357,32 +398,9 @@ export function SupplierModule() {
   const [createPoError, setCreatePoError] = useState<string | null>(null)
   
   // GMV and Settlement state
-  const [gmvData, setGmvData] = useState({
-    currentMonth: {
-      gmv: 0,
-      settlement: 0,
-      orders: 0,
-      date: new Date().toISOString().slice(0, 7) // YYYY-MM
-    },
-    previousMonth: {
-      gmv: 0,
-      settlement: 0,
-      orders: 0,
-      date: ''
-    },
-    totalUnpaid: 0,
-    nextPaymentDue: '',
-    settlementHistory: [] as Array<{
-      id: string
-      month: string
-      gmv: number
-      settlement: number
-      status: 'pending' | 'paid' | 'overdue'
-      dueDate: string
-      paidDate?: string
-      paidAmount?: number
-    }>
-  })
+  const [gmvData, setGmvData] = useState<GmvState>(createInitialGmvState)
+  const [gmvLoading, setGmvLoading] = useState(false)
+  const [gmvError, setGmvError] = useState<string | null>(null)
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -425,6 +443,7 @@ export function SupplierModule() {
     }
 
     try {
+      setLoadingSuppliers(true)
       setSupplierError(null)
 
       const distributorsRef = collection(db, 'distributors')
@@ -481,6 +500,7 @@ export function SupplierModule() {
         variant: 'destructive',
       })
     } finally {
+      setLoadingSuppliers(false)
     }
   }, [orgId, orgDisplayName, toast])
 
@@ -1142,23 +1162,20 @@ export function SupplierModule() {
 
   // Load GMV and Settlement data
   const loadGMVData = useCallback(async () => {
+    setGmvLoading(true)
+    setGmvError(null)
+
     try {
-      // Get current and previous month dates
       const currentDate = new Date()
-      const currentMonth = currentDate.toISOString().slice(0, 7) // YYYY-MM
+      const currentMonth = currentDate.toISOString().slice(0, 7)
       const previousDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
       const previousMonth = previousDate.toISOString().slice(0, 7)
 
-      // Query orders from Firebase for GMV calculation
-      const ordersQuery = query(
-        collection(db, 'orders'),
-        orderBy('createdAt', 'desc'),
-        limit(100)
+      const ordersSnapshot = await getDocs(
+        query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(100))
       )
 
-      const ordersSnapshot = await getDocs(ordersQuery)
       const orders: GmvOrder[] = []
-
       ordersSnapshot.forEach((docSnap) => {
         const data = docSnap.data() as Record<string, unknown>
         const createdAt = toDateSafe(data.createdAt) ?? new Date()
@@ -1170,145 +1187,84 @@ export function SupplierModule() {
         })
       })
 
-      // Calculate current month GMV
-      const currentMonthOrders = orders.filter(order => {
+      const currentMonthOrders = orders.filter((order) => {
         const orderMonth = new Date(order.createdAt).toISOString().slice(0, 7)
         return orderMonth === currentMonth && order.status !== 'cancelled'
       })
-
       const currentMonthGMV = currentMonthOrders.reduce((sum, order) => sum + (order.total || 0), 0)
-      const currentMonthSettlement = currentMonthGMV * 0.05 // 5% settlement
+      const currentMonthSettlement = currentMonthGMV * 0.05
 
-      // Calculate previous month GMV
-      const previousMonthOrders = orders.filter(order => {
+      const previousMonthOrders = orders.filter((order) => {
         const orderMonth = new Date(order.createdAt).toISOString().slice(0, 7)
         return orderMonth === previousMonth && order.status !== 'cancelled'
       })
-
       const previousMonthGMV = previousMonthOrders.reduce((sum, order) => sum + (order.total || 0), 0)
       const previousMonthSettlement = previousMonthGMV * 0.05
 
-      // Query settlement history from Firebase
-      const settlementsQuery = query(
-        collection(db, 'settlements'),
-        orderBy('month', 'desc'),
-        limit(12)
-      )
+      const settlementsQuery = query(collection(db, 'settlements'), orderBy('month', 'desc'), limit(12))
+  const settlementHistory: SettlementRecord[] = []
 
-      let settlementHistory: SettlementRecord[] = []
       try {
         const settlementsSnapshot = await getDocs(settlementsQuery)
         settlementsSnapshot.forEach((docSnap) => {
           const data = docSnap.data() as Record<string, unknown>
+          const rawStatus = typeof data.status === 'string' ? data.status.toLowerCase() : 'pending'
+          const status: SettlementStatus = rawStatus === 'paid' || rawStatus === 'overdue' ? rawStatus : 'pending'
+
           settlementHistory.push({
             id: docSnap.id,
             month: typeof data.month === 'string' ? data.month : '',
             gmv: toNumber(data.gmv) ?? 0,
             settlement: toNumber(data.settlement) ?? 0,
-            status: typeof data.status === 'string' ? data.status : 'pending',
+            status,
             dueDate: typeof data.dueDate === 'string' ? data.dueDate : undefined,
             paidDate: typeof data.paidDate === 'string' ? data.paidDate : undefined,
-            paidAmount: (toNumber(data.paidAmount) ?? undefined),
+            paidAmount: toNumber(data.paidAmount) ?? undefined,
           })
         })
       } catch (error) {
-        console.warn('Falling back to sample settlement history', error)
-        // Create sample settlement history if Firebase collection doesn't exist
-        settlementHistory = [
-          {
-            id: 'SET001',
-            month: previousMonth,
-            gmv: previousMonthGMV || 1800000,
-            settlement: previousMonthSettlement || 90000,
-            status: 'pending',
-            dueDate: new Date(currentDate.getFullYear(), currentDate.getMonth(), 15).toISOString().split('T')[0]
-          },
-          {
-            id: 'SET002',
-            month: new Date(currentDate.getFullYear(), currentDate.getMonth() - 2, 1).toISOString().slice(0, 7),
-            gmv: 1650000,
-            settlement: 82500,
-            status: 'paid',
-            dueDate: new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 15).toISOString().split('T')[0],
-            paidDate: new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 12).toISOString().split('T')[0],
-            paidAmount: 82500
-          }
-        ]
+        console.error('Failed to load settlement history from Firestore:', error)
+        setGmvError('Unable to load settlement history. Metrics may be incomplete.')
       }
 
-      // Calculate total unpaid settlements
-      const totalUnpaid = settlementHistory
-  .filter(settlement => settlement.status === 'pending' || settlement.status === 'overdue')
-  .reduce((sum, settlement) => sum + settlement.settlement, 0)
+      const sanitizedHistory = settlementHistory.map((record) => ({
+        ...record,
+        status: record.status,
+        dueDate: record.dueDate ?? '',
+      }))
 
-      // Calculate next payment due date
-      const nextPaymentDue = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 15).toISOString().split('T')[0]
+      const totalUnpaid = sanitizedHistory
+        .filter((settlement) => settlement.status === 'pending' || settlement.status === 'overdue')
+        .reduce((sum, settlement) => sum + settlement.settlement, 0)
+
+      const nextPaymentDue = sanitizedHistory
+        .filter((settlement) => settlement.status !== 'paid' && settlement.dueDate)
+        .map((settlement) => settlement.dueDate as string)
+        .sort()[0] ?? ''
 
       setGmvData({
         currentMonth: {
           gmv: currentMonthGMV || 0,
           settlement: currentMonthSettlement || 0,
           orders: currentMonthOrders.length,
-          date: currentMonth
+          date: currentMonth,
         },
         previousMonth: {
           gmv: previousMonthGMV || 0,
           settlement: previousMonthSettlement || 0,
           orders: previousMonthOrders.length,
-          date: previousMonth
+          date: previousMonth,
         },
         totalUnpaid,
         nextPaymentDue,
-        settlementHistory: settlementHistory.map(record => ({
-          ...record,
-          status: ['pending', 'paid', 'overdue'].includes(record.status) ? record.status as 'pending' | 'paid' | 'overdue' : 'pending',
-          dueDate: record.dueDate ?? ''
-        }))
+        settlementHistory: sanitizedHistory,
       })
-
     } catch (error) {
       console.error('Error loading GMV data:', error)
-      // Set fallback sample data
-      const currentDate = new Date()
-      const currentMonth = currentDate.toISOString().slice(0, 7)
-      const previousMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1).toISOString().slice(0, 7)
-
-      setGmvData({
-        currentMonth: {
-          gmv: 2150000,
-          settlement: 107500,
-          orders: 145,
-          date: currentMonth
-        },
-        previousMonth: {
-          gmv: 1800000,
-          settlement: 90000,
-          orders: 120,
-          date: previousMonth
-        },
-        totalUnpaid: 90000,
-        nextPaymentDue: new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 15).toISOString().split('T')[0],
-        settlementHistory: [
-          {
-            id: 'SET001',
-            month: previousMonth,
-            gmv: 1800000,
-            settlement: 90000,
-            status: 'pending',
-            dueDate: new Date(currentDate.getFullYear(), currentDate.getMonth(), 15).toISOString().split('T')[0]
-          },
-          {
-            id: 'SET002',
-            month: new Date(currentDate.getFullYear(), currentDate.getMonth() - 2, 1).toISOString().slice(0, 7),
-            gmv: 1650000,
-            settlement: 82500,
-            status: 'paid',
-            dueDate: new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 15).toISOString().split('T')[0],
-            paidDate: new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 12).toISOString().split('T')[0],
-            paidAmount: 82500
-          }
-        ]
-      })
+      setGmvError('Unable to load GMV metrics right now. Please refresh to retry.')
+      setGmvData(createInitialGmvState())
+    } finally {
+      setGmvLoading(false)
     }
   }, [])
 
@@ -1462,7 +1418,7 @@ export function SupplierModule() {
           !showSupplierDetails ? (
             // Suppliers List View
             <div className="h-full overflow-y-auto">
-              {loading ? (
+              {loadingSuppliers ? (
                 <div className="flex items-center justify-center h-full">
                   <LoadingSpinner size="md" />
                 </div>
@@ -1948,6 +1904,19 @@ export function SupplierModule() {
                       Settlement Rate: <span className="text-purple-400 font-medium">5% of GMV</span>
                     </div>
                   </div>
+
+                  {gmvError && (
+                    <div className="mb-4 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                      {gmvError}
+                    </div>
+                  )}
+
+                  {gmvLoading && (
+                    <div className="mb-4 flex items-center space-x-3 rounded-2xl border border-white/[0.06] bg-white/[0.04] px-4 py-3 text-sm text-slate-200">
+                      <LoadingSpinner size="sm" />
+                      <span>Refreshing GMV metrics…</span>
+                    </div>
+                  )}
                   
                   {/* Current Month Overview */}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -1976,7 +1945,7 @@ export function SupplierModule() {
                             KSh {gmvData.currentMonth.settlement.toLocaleString('en-KE')}
                           </p>
                           <p className="text-xs text-slate-400 mt-1">
-                            Due: {gmvData.nextPaymentDue}
+                            Due: {gmvData.nextPaymentDue || 'Not scheduled'}
                           </p>
                         </div>
                         <div className="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
@@ -2023,50 +1992,66 @@ export function SupplierModule() {
                   {/* Settlement History */}
                   <div className="bg-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6 mb-6">
                     <h3 className="text-lg font-semibold text-white mb-4">Settlement History</h3>
-                    <div className="space-y-3">
-                      {gmvData.settlementHistory.slice(0, 6).map((settlement) => (
-                        <div key={settlement.id} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
-                          <div className="flex items-center space-x-4">
-                            <div>
-                              <p className="font-medium text-white">{settlement.month}</p>
-                              <p className="text-sm text-slate-400">
-                                GMV: KSh {settlement.gmv.toLocaleString('en-KE')}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-4">
-                            <div className="text-right">
-                              <p className="font-medium text-white">
-                                KSh {settlement.settlement.toLocaleString('en-KE')}
-                              </p>
-                              <p className="text-xs text-slate-400">
-                                Due: {settlement.dueDate}
-                              </p>
-                            </div>
-                            <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${
-                              settlement.status === 'paid' 
-                                ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
-                                : settlement.status === 'pending'
-                                ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                                : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                            }`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${
-                                settlement.status === 'paid' ? 'bg-green-400' : 
-                                settlement.status === 'pending' ? 'bg-orange-400' : 'bg-red-400'
-                              }`} />
-                              <span className="capitalize">{settlement.status}</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    
-                    {gmvData.settlementHistory.length > 6 && (
-                      <div className="text-center mt-4">
-                        <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
-                          View All History
-                        </Button>
+                    {gmvLoading ? (
+                      <div className="flex items-center space-x-3 rounded-xl border border-white/[0.05] bg-white/[0.03] px-4 py-3 text-sm text-slate-200">
+                        <LoadingSpinner size="sm" />
+                        <span>Loading settlement history…</span>
                       </div>
+                    ) : gmvData.settlementHistory.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] px-4 py-6 text-center text-slate-300">
+                        <p className="font-medium text-white">No settlement records yet</p>
+                        <p className="mt-1 text-sm text-slate-400">
+                          When invoices move through payment and settlement, their history will appear here automatically.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-3">
+                          {gmvData.settlementHistory.slice(0, 6).map((settlement) => (
+                            <div key={settlement.id} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                              <div className="flex items-center space-x-4">
+                                <div>
+                                  <p className="font-medium text-white">{settlement.month}</p>
+                                  <p className="text-sm text-slate-400">
+                                    GMV: KSh {settlement.gmv.toLocaleString('en-KE')}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-4">
+                                <div className="text-right">
+                                  <p className="font-medium text-white">
+                                    KSh {settlement.settlement.toLocaleString('en-KE')}
+                                  </p>
+                                  <p className="text-xs text-slate-400">
+                                    Due: {settlement.dueDate || 'Not provided'}
+                                  </p>
+                                </div>
+                                <div className={`inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${
+                                  settlement.status === 'paid' 
+                                    ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                                    : settlement.status === 'pending'
+                                    ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${
+                                    settlement.status === 'paid' ? 'bg-green-400' : 
+                                    settlement.status === 'pending' ? 'bg-orange-400' : 'bg-red-400'
+                                  }`} />
+                                  <span className="capitalize">{settlement.status}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {gmvData.settlementHistory.length > 6 && (
+                          <div className="text-center mt-4">
+                            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
+                              View All History
+                            </Button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

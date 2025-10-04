@@ -6,10 +6,13 @@ import {
   limit as limitQuery,
   query,
   where,
+  startAfter,
+  type QueryConstraint,
 } from 'firebase/firestore'
 
 import {
   createPurchaseOrder,
+  purchaseOrderDoc,
   purchaseOrdersCollection,
   type PurchaseOrderCreateInput,
 } from '@/lib/b2b-order-store'
@@ -32,8 +35,9 @@ export async function GET(request: NextRequest) {
     const supplierOrgId = searchParams.get('supplierOrgId')
     const status = searchParams.get('status')
     const limitParam = searchParams.get('limit')
+    const cursor = searchParams.get('cursor')
 
-    const constraints = []
+  const constraints: QueryConstraint[] = []
 
     if (retailerId) constraints.push(where('retailerId', '==', retailerId))
     if (supplierId) constraints.push(where('supplierId', '==', supplierId))
@@ -44,20 +48,32 @@ export async function GET(request: NextRequest) {
     const limitValue = limitParam ? Math.min(Number.parseInt(limitParam, 10) || DEFAULT_LIMIT, 200) : DEFAULT_LIMIT
 
     const purchaseOrdersRef = purchaseOrdersCollection()
-    const composedQuery = query(
-      purchaseOrdersRef,
+    const composedConstraints: QueryConstraint[] = [
       ...constraints,
       orderBy('createdAt', 'desc'),
-      limitQuery(limitValue),
-    )
+    ]
+
+    if (cursor) {
+      const cursorSnapshot = await getDoc(purchaseOrderDoc(cursor))
+      if (cursorSnapshot.exists()) {
+        composedConstraints.push(startAfter(cursorSnapshot))
+      }
+    }
+
+    composedConstraints.push(limitQuery(limitValue))
+
+    const composedQuery = query(purchaseOrdersRef, ...composedConstraints)
 
     const snapshot = await getDocs(composedQuery)
     const purchaseOrders = snapshot.docs.map(doc => serializePurchaseOrder(doc.id, doc.data()))
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1]
 
     return NextResponse.json({
       success: true,
       count: purchaseOrders.length,
       purchaseOrders,
+      nextCursor: lastDoc ? lastDoc.id : null,
+      hasMore: snapshot.size === limitValue,
     })
   } catch (error) {
     console.error('Failed to fetch purchase orders', error)

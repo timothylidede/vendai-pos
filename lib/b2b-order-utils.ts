@@ -3,6 +3,7 @@ import type { DocumentData } from 'firebase/firestore'
 
 import type {
   DeliveryCheckpoint,
+  LedgerEntry,
   PurchaseOrder,
   PurchaseOrderStatus,
   StatusHistoryEntry,
@@ -86,6 +87,36 @@ export const serializePurchaseOrder = (
     relatedInvoiceId: po.relatedInvoiceId ?? null,
     createdAt: serializeTimestamp(po.createdAt ?? null),
     updatedAt: serializeTimestamp(po.updatedAt ?? null),
+  }
+}
+
+export const serializeLedgerEntry = (
+  id: string,
+  data: DocumentData | Partial<LedgerEntry> | null | undefined,
+): Record<string, unknown> => {
+  const entry = (data ?? {}) as Partial<LedgerEntry>
+  return {
+    id,
+    retailerOrgId: entry.retailerOrgId ?? null,
+    supplierOrgId: entry.supplierOrgId ?? null,
+    purchaseOrderId: entry.purchaseOrderId ?? null,
+    invoiceId: entry.invoiceId ?? null,
+    paymentId: entry.paymentId ?? null,
+    supplierId: entry.supplierId ?? null,
+    supplierName: entry.supplierName ?? null,
+    retailerId: entry.retailerId ?? null,
+    retailerName: entry.retailerName ?? null,
+    grossAmount: entry.grossAmount ?? 0,
+    vendaiCommissionAmount: entry.vendaiCommissionAmount ?? 0,
+    processorFeeAmount: entry.processorFeeAmount ?? 0,
+    netPayoutAmount: entry.netPayoutAmount ?? 0,
+    currency: entry.currency ?? 'KES',
+    reconciliationStatus: entry.reconciliationStatus ?? 'pending',
+    payoutStatus: entry.payoutStatus ?? 'pending',
+    payoutDate: serializeTimestamp(entry.payoutDate ?? null),
+    notes: entry.notes ?? null,
+    createdAt: serializeTimestamp(entry.createdAt ?? null),
+    updatedAt: serializeTimestamp(entry.updatedAt ?? null),
   }
 }
 

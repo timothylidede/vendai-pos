@@ -215,6 +215,47 @@ export const invoiceCreateSchema = z.object({
   createdByName: z.string().min(1).optional(),
 })
 
+export const invoiceUpdateSchema = z
+  .object({
+    status: z.enum(['draft', 'issued', 'partially_paid', 'paid', 'overdue', 'cancelled']).optional(),
+    paymentStatus: z.enum(['pending', 'processing', 'partial', 'paid', 'failed', 'refunded']).optional(),
+    paymentTerms: z.enum(['cod', 'net7', 'net14', 'net30', 'net60']).optional(),
+    paymentIds: z.array(z.string().min(1)).optional(),
+    amount: moneyBreakdownSchema.optional(),
+  issueDate: z.union([z.string(), z.date()]).optional(),
+  dueDate: z.union([z.string(), z.date()]).optional(),
+    statusNote: z.string().max(200).optional(),
+    updatedByUserId: z.string().min(1).optional(),
+    updatedByName: z.string().min(1).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const provided = [
+      data.status,
+      data.paymentStatus,
+      data.paymentTerms,
+      data.paymentIds,
+      data.amount,
+      data.issueDate,
+      data.dueDate,
+      data.statusNote,
+    ]
+
+    if (!provided.some((value) => value !== undefined)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'At least one field must be provided to update the invoice',
+      })
+    }
+
+    if ((data.status !== undefined || data.paymentStatus !== undefined) && !data.updatedByUserId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Updating status requires the updatedByUserId field',
+        path: ['updatedByUserId'],
+      })
+    }
+  })
+
 // Settlement validation schemas
 export const settlementSchema = z.object({
   distributorId: z.string().min(1, 'Distributor ID is required'),
@@ -256,6 +297,60 @@ export const invoiceSchema = z.object({
   notes: z.string().max(500, 'Notes too long').optional(),
   
   ...baseEntitySchema
+})
+
+export const creditEngineOptionsSchema = z.object({
+  baseLimit: z.number().positive('Base limit must be positive').optional(),
+  maxLimit: z.number().positive('Max limit must be positive').optional(),
+  volumeTarget: z.number().positive('Volume target must be positive').optional(),
+  targetRepaymentLag: z.number().nonnegative('Target repayment lag cannot be negative').optional(),
+  volumeToCreditRatio: z.number().positive('Volume to credit ratio must be positive').optional(),
+  scoreMultiplier: z.number().positive('Score multiplier must be positive').optional(),
+  outstandingWeight: z.number().nonnegative('Outstanding weight cannot be negative').optional(),
+  utilizationComfortThreshold: z
+    .number()
+    .min(0, 'Utilization threshold cannot be negative')
+    .max(1, 'Utilization threshold cannot exceed 1')
+    .optional(),
+})
+
+export const creditAssessmentInputSchema = z.object({
+  retailerId: z.string().min(1, 'Retailer ID is required'),
+  trailingVolume90d: z.number().nonnegative('Trailing volume cannot be negative'),
+  trailingGrowthRate: z.number(),
+  orders90d: z.number().int().nonnegative('Orders must be non-negative'),
+  averageOrderValue: z.number().nonnegative('Average order value cannot be negative'),
+  onTimePaymentRate: z.number().min(0, 'On-time payment rate cannot be negative').max(1, 'On-time payment rate cannot exceed 1'),
+  disputeRate: z.number().min(0, 'Dispute rate cannot be negative'),
+  repaymentLagDays: z.number().nonnegative('Repayment lag cannot be negative'),
+  creditUtilization: z.number().min(0, 'Credit utilization cannot be negative'),
+  currentOutstanding: z.number().nonnegative('Current outstanding cannot be negative'),
+  existingCreditLimit: z.number().nonnegative('Existing credit limit cannot be negative'),
+  consecutiveOnTimePayments: z.number().int().nonnegative('Consecutive payments cannot be negative'),
+  daysSinceSignup: z.number().nonnegative('Days since signup cannot be negative'),
+  sectorRisk: z.enum(['low', 'medium', 'high']),
+  manualAdjustment: z.number().optional(),
+  options: creditEngineOptionsSchema.optional(),
+})
+
+export const creditHistoryQuerySchema = z.object({
+  retailerId: z.string().min(1, 'Retailer ID is required'),
+  limit: z
+    .number()
+    .int('Limit must be an integer')
+    .positive('Limit must be positive')
+    .max(200, 'Limit cannot exceed 200')
+    .default(25)
+    .optional(),
+})
+
+export const creditLimitUpdateSchema = z.object({
+  retailerId: z.string().min(1, 'Retailer ID is required'),
+  newLimit: z.number().nonnegative('New limit cannot be negative'),
+  manualAdjustment: z.number().optional(),
+  reason: z.string().max(300, 'Reason too long').optional(),
+  updatedByUserId: z.string().min(1, 'Updated by user ID is required'),
+  updatedByName: z.string().min(1, 'Updated by name is required').optional(),
 })
 
 // Inventory validation schemas
@@ -400,4 +495,9 @@ export const schemas = {
   purchaseOrderUpdate: purchaseOrderUpdateSchema,
   invoiceCreate: invoiceCreateSchema,
   invoiceItem: invoiceItemSchema,
+  invoiceUpdate: invoiceUpdateSchema,
+  creditAssessmentInput: creditAssessmentInputSchema,
+  creditHistoryQuery: creditHistoryQuerySchema,
+  creditLimitUpdate: creditLimitUpdateSchema,
+  creditEngineOptions: creditEngineOptionsSchema,
 }

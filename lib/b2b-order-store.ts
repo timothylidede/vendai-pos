@@ -110,6 +110,10 @@ export async function createInvoice(payload: InvoiceCreateInput): Promise<Docume
   return addDoc(invoicesCollection(), withTimestamps(payload, { includeCreate: true }))
 }
 
+export async function updateInvoice(invoiceId: string, payload: Partial<InvoiceCreateInput>) {
+  await updateDoc(invoiceDoc(invoiceId), withTimestamps(payload as InvoiceCreateInput))
+}
+
 export async function createPaymentRecord(payload: PaymentCreateInput): Promise<DocumentReference<DocumentData>> {
   return addDoc(paymentsCollection(), withTimestamps(payload, { includeCreate: true }))
 }

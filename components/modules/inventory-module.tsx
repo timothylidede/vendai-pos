@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+/* eslint-disable @next/next/no-img-element */
+
+import { useState, useEffect, useCallback, useMemo, useRef, type MutableRefObject } from "react"
 import { useRouter } from "next/navigation"
-import { Package, AlertCircle, Upload, FileText, PlusCircle, Download, Check, ArrowLeft, Wand2, Pencil, ShoppingCart, MapPin, X } from "lucide-react"
+import { Package, AlertCircle, Upload, FileText, PlusCircle, Download, Check, ArrowLeft, Wand2, Pencil, ShoppingCart, MapPin, X, Search } from "lucide-react"
 import { motion } from "framer-motion"
 import { AIProcessingModal } from "../ai-processing-modal"
 import { LoadingSpinner } from "../loading-spinner"
@@ -14,17 +16,27 @@ import {
   query,
   where,
   limit,
+  orderBy,
+  startAfter,
   doc,
   setDoc,
   addDoc,
   deleteDoc,
   getDoc,
+  serverTimestamp,
+  type DocumentData,
   type QueryConstraint,
+  type QueryDocumentSnapshot,
   type QuerySnapshot
 } from "firebase/firestore"
 import { POS_PRODUCTS_COL, INVENTORY_COL } from "@/lib/pos-operations"
 import { useAuth } from "@/contexts/auth-context"
 import type { ProcessedProduct } from "@/data/products-data"
+import {
+  assessCredit,
+  defaultCreditEngineOptions,
+  type CreditAssessmentInput
+} from "@/lib/credit-engine"
 
 interface ProcessingStep {
   id: string;
@@ -87,6 +99,7 @@ type PricelistViewerState = {
 
 const INVENTORY_CACHE_PREFIX = 'inventory-cache-v1'
 const INVENTORY_CACHE_TTL_MS = 60_000
+const PRODUCTS_PAGE_SIZE = 40
 
 const getCacheKey = (orgId: string) => `${INVENTORY_CACHE_PREFIX}:${orgId}`
 
@@ -326,11 +339,233 @@ const toPricelistInfo = (data: unknown): PricelistInfo | null => {
   }
 }
 
+const clamp = (value: number, min: number, max: number): number => {
+  if (!Number.isFinite(value)) return min
+  return Math.min(Math.max(value, min), max)
+}
+
+const resolveProcessedProductImage = (product: ProcessedProduct): string | undefined => {
+  if (!product) return undefined
+  const record = product as unknown as Record<string, unknown>
+  const candidates = ['image_url', 'imageUrl', 'image']
+  for (const key of candidates) {
+    const value = record[key]
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value
+    }
+  }
+  return undefined
+}
+
+const buildSearchKeywords = (data: Partial<InventoryProduct>): string[] => {
+  const tokens = new Set<string>()
+
+  const push = (input?: unknown) => {
+    if (typeof input !== 'string') return
+    const lowered = input.trim().toLowerCase()
+    if (!lowered) return
+    tokens.add(lowered)
+    lowered
+      .split(/[\s,;:/\\-]+/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach((part) => tokens.add(part))
+  }
+
+  push(data.name)
+  push(data.brand)
+  push(data.category)
+  push(data.pieceBarcode)
+  push(data.cartonBarcode)
+
+  return Array.from(tokens).slice(0, 40)
+}
+
+type CreditEventOutcome = 'success' | 'failure'
+
+type CreditSnapshotMeta = {
+  action?: string
+  productId?: string
+  productName?: string
+  reason?: string
+  processedCount?: number
+  fileName?: string
+}
+
+const computeInventoryStats = (products: InventoryProduct[]) => {
+  let totalUnits = 0
+  let totalValue = 0
+
+  products.forEach((product) => {
+    const units = typeof product.stock === 'number' ? product.stock : 0
+    const priceRaw = typeof product.piecePrice === 'number'
+      ? product.piecePrice
+      : Number(product.piecePrice ?? 0)
+    const price = Number.isFinite(priceRaw) ? priceRaw : 0
+
+    totalUnits += units
+    totalValue += units * price
+  })
+
+  const avgUnitPrice = totalUnits > 0 ? totalValue / totalUnits : 0
+
+  return {
+    totalUnits,
+    totalValue,
+    avgUnitPrice,
+  }
+}
+
+function useCreditSnapshot(orgId: string, productsRef: MutableRefObject<InventoryProduct[]>) {
+  const recordCreditSnapshot = useCallback(
+    async (outcome: CreditEventOutcome, meta?: CreditSnapshotMeta) => {
+      if (!orgId) return
+
+      try {
+        const products = productsRef.current
+        const { totalUnits, totalValue, avgUnitPrice } = computeInventoryStats(products)
+
+        const profileRef = doc(db, 'credit_profiles', orgId)
+        const snapshot = await getDoc(profileRef)
+        const existing = snapshot.exists() ? (snapshot.data() as Record<string, unknown>) : {}
+        const inventoryMetrics = isRecord(existing.inventoryMetrics)
+          ? (existing.inventoryMetrics as Record<string, unknown>)
+          : {}
+
+        const prevAttempts = typeof inventoryMetrics.attemptCount === 'number' ? inventoryMetrics.attemptCount : 0
+        const prevSuccesses = typeof inventoryMetrics.successCount === 'number' ? inventoryMetrics.successCount : 0
+        const prevFailures = typeof inventoryMetrics.failureCount === 'number' ? inventoryMetrics.failureCount : 0
+        const prevConsecutive = typeof inventoryMetrics.consecutiveSuccesses === 'number' ? inventoryMetrics.consecutiveSuccesses : 0
+        const prevManual = typeof inventoryMetrics.manualAdjustment === 'number' ? inventoryMetrics.manualAdjustment : 0
+        const prevValue = typeof inventoryMetrics.lastValue === 'number' ? inventoryMetrics.lastValue : totalValue
+
+        const nextAttempts = prevAttempts + 1
+        const nextSuccesses = prevSuccesses + (outcome === 'success' ? 1 : 0)
+        const nextFailures = prevFailures + (outcome === 'failure' ? 1 : 0)
+        const nextConsecutive = outcome === 'success' ? prevConsecutive + 1 : 0
+        const nextManual = clamp(prevManual + (outcome === 'success' ? 1 : -2), -20, 20)
+
+        const trailingGrowthRate = prevValue > 0
+          ? clamp((totalValue - prevValue) / prevValue, -0.4, 0.6)
+          : 0.1
+
+        const trailingVolume90d = totalValue * 1.15
+        const orders90d = Math.max(1, Math.round(totalUnits / 18))
+        const averageOrderValue = orders90d > 0 ? trailingVolume90d / orders90d : avgUnitPrice * 24
+        const onTimePaymentRate = clamp(nextSuccesses / nextAttempts, 0.45, 1)
+        const disputeRate = clamp(nextFailures / nextAttempts * 0.12, 0, 0.25)
+
+        const previousInventoryAssessment = isRecord(existing.lastInventoryAssessment)
+          ? (existing.lastInventoryAssessment as Record<string, unknown>)
+          : undefined
+        const previousInput = isRecord(previousInventoryAssessment?.inputSnapshot)
+          ? (previousInventoryAssessment!.inputSnapshot as Record<string, unknown>)
+          : {}
+
+        const existingLimit = typeof previousInventoryAssessment?.recommendedLimit === 'number'
+          ? previousInventoryAssessment.recommendedLimit
+          : typeof existing.pendingLimitRecommendation === 'number'
+            ? (existing.pendingLimitRecommendation as number)
+            : defaultCreditEngineOptions.baseLimit
+
+        const currentOutstanding = typeof previousInput.currentOutstanding === 'number'
+          ? previousInput.currentOutstanding
+          : totalValue * 0.22
+
+        const daysSinceSignup = typeof existing.metrics === 'object' && existing.metrics !== null && typeof (existing.metrics as { daysSinceSignup?: number }).daysSinceSignup === 'number'
+          ? (existing.metrics as { daysSinceSignup?: number }).daysSinceSignup!
+          : 120
+
+        const sectorRisk = typeof previousInput.sectorRisk === 'string'
+          ? (previousInput.sectorRisk as 'low' | 'medium' | 'high')
+          : 'medium'
+
+        const creditInput: CreditAssessmentInput = {
+          retailerId: orgId,
+          trailingVolume90d,
+          trailingGrowthRate,
+          orders90d,
+          averageOrderValue,
+          onTimePaymentRate,
+          disputeRate,
+          repaymentLagDays: typeof previousInput.repaymentLagDays === 'number' ? previousInput.repaymentLagDays : 2,
+          creditUtilization: existingLimit > 0 ? clamp(currentOutstanding / existingLimit, 0, 1.2) : 0,
+          currentOutstanding,
+          existingCreditLimit: existingLimit,
+          consecutiveOnTimePayments: nextConsecutive,
+          daysSinceSignup,
+          sectorRisk,
+          manualAdjustment: nextManual,
+        }
+
+        const assessment = assessCredit(creditInput)
+        const timestamp = serverTimestamp()
+
+        const assessmentData = JSON.parse(JSON.stringify(assessment)) as typeof assessment
+        const snapshotPayload = {
+          outcome,
+          meta: meta ?? null,
+          assessment: assessmentData,
+          input: { ...creditInput },
+          inventory: {
+            totalProducts: products.length,
+            totalUnits,
+            totalValue,
+            avgUnitPrice,
+          },
+          createdAt: timestamp,
+        }
+
+        const nextInventoryMetrics = {
+          attemptCount: nextAttempts,
+          successCount: nextSuccesses,
+          failureCount: nextFailures,
+          consecutiveSuccesses: nextConsecutive,
+          manualAdjustment: nextManual,
+          lastOutcome: outcome,
+          lastMeta: meta ?? null,
+          lastValue: totalValue,
+          lastUnits: totalUnits,
+          avgUnitPrice,
+          recommendedLimit: assessment.recommendedLimit,
+          score: assessment.score,
+          nextReviewDateIso: assessment.nextReviewDateIso,
+          lastSnapshotAt: timestamp,
+        }
+
+        await setDoc(
+          profileRef,
+          {
+            retailerId: orgId,
+            inventoryMetrics: nextInventoryMetrics,
+            lastInventoryAssessment: assessmentData,
+            pendingLimitRecommendation: assessment.recommendedLimit,
+            updatedAt: timestamp,
+          },
+          { merge: true },
+        )
+
+        await addDoc(collection(db, 'credit_profiles', orgId, 'snapshots'), snapshotPayload)
+      } catch (error) {
+        console.error('Failed to log credit snapshot from inventory module', error)
+      }
+    },
+    [orgId, productsRef],
+  )
+
+  return { recordCreditSnapshot }
+}
+
 export function InventoryModule() {
   const [activeTab, setActiveTab] = useState<'products' | 'new'>('products')
   const [orgId, setOrgId] = useState<string>('')
   const [products, setProducts] = useState<InventoryProduct[]>([])
+  const productsRef = useRef<InventoryProduct[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loadingProducts, setLoadingProducts] = useState<boolean>(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadComplete, setDownloadComplete] = useState(false)
   const [isProcessingModalOpen, setIsProcessingModalOpen] = useState(false)
@@ -373,6 +608,9 @@ export function InventoryModule() {
   const [regenerationQueued, setRegenerationQueued] = useState(false)
   const [regenerateError, setRegenerateError] = useState<string | null>(null)
   const isMountedRef = useRef(true)
+  const paginationRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null)
+  const queryKeyRef = useRef<string>('')
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
 
   const normalizedSupplierLabel = useMemo(() => {
     if (!editingProduct) return 'No supplier assigned'
@@ -413,6 +651,18 @@ export function InventoryModule() {
       isMountedRef.current = false
     }
   }, [])
+
+  useEffect(() => {
+    productsRef.current = products
+  }, [products])
+
+  useEffect(() => {
+    const handler = window.setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim().toLowerCase())
+    }, 320)
+
+    return () => window.clearTimeout(handler)
+  }, [searchTerm])
 
   useEffect(() => {
     setRegenerateError(null)
@@ -640,6 +890,7 @@ export function InventoryModule() {
         for (const offer of sorted) {
           if (!seen.has(offer.distributorId)) {
             const { matchScore, ...rest } = offer
+            void matchScore
             deduped.push(rest)
             seen.add(offer.distributorId)
           }
@@ -659,6 +910,7 @@ export function InventoryModule() {
 
   const router = useRouter()
   const { userData } = useAuth()
+  const { recordCreditSnapshot } = useCreditSnapshot(orgId, productsRef)
 
   // Derive orgId from authenticated user, if available
   useEffect(() => {
@@ -681,9 +933,14 @@ export function InventoryModule() {
       const parsed = JSON.parse(cached) as Partial<InventoryCachePayload>
       if (!parsed || !Array.isArray(parsed.products)) return false
 
-      setProducts(parsed.products as InventoryProduct[])
+      const cachedProducts = parsed.products as InventoryProduct[]
+      productsRef.current = cachedProducts
+      setProducts(cachedProducts)
       setPricelistInfo(parsed.pricelistInfo ?? null)
       setShowMissingStockAlert(Boolean(parsed.showMissingStockAlert))
+      setHasMore(false)
+      paginationRef.current = null
+      queryKeyRef.current = `${org}::all`
       setLoadingProducts(false)
 
       const timestamp = typeof parsed.timestamp === 'number' ? parsed.timestamp : 0
@@ -694,144 +951,268 @@ export function InventoryModule() {
     }
   }, [])
 
-  // Helper: load products and inventory without composite index
-  const loadOrgProducts = async (org: string, options: { background?: boolean } = {}) => {
-    const { background = false } = options
-    if (!org) {
-      setProducts([])
-      setShowMissingStockAlert(false)
-      if (!background) setLoadingProducts(false)
-      return
-    }
-    try {
-      if (!background) setLoadingProducts(true)
-      // Products for specific org only (no orderBy to avoid composite index)
-      const productQuery = query(
-        collection(db, POS_PRODUCTS_COL),
-        where('orgId', '==', org),
-        limit(1000)
-      )
-      const inventoryQuery = query(collection(db, INVENTORY_COL), where('orgId', '==', org), limit(1000))
+  const loadOrgProducts = useCallback(
+    async (
+      org: string,
+      options: { append?: boolean; background?: boolean; search?: string } = {},
+    ) => {
+      const { append = false, background = false, search = '' } = options
 
-      const [productsSnap, inventorySnap, pricelistSnap] = await Promise.all([
-        getDocs(productQuery),
-        getDocs(inventoryQuery),
-        getDoc(doc(db, 'org_pricelists', org)).catch(() => null)
-      ])
+      if (!org) {
+        productsRef.current = []
+        setProducts([])
+        setHasMore(false)
+        setShowMissingStockAlert(false)
+        if (!background) setLoadingProducts(false)
+        return
+      }
 
-      const prods: InventoryProduct[] = productsSnap.docs
-        .map((snap) => {
-          const raw = snap.data() as FirestoreRecord
-          const updatedAt = toIsoString(raw?.updatedAt) ?? (typeof raw?.updatedAt === 'string' ? raw.updatedAt : undefined)
-          const image = toStringValue(raw?.image)
-          const imageUrl = toStringValue(raw?.imageUrl)
-          const image_url = toStringValue(raw?.image_url)
+      const normalizedSearch = search.trim().toLowerCase()
+      const queryKey = `${org}::${normalizedSearch || 'all'}`
 
-          return {
-            id: snap.id,
-            ...raw,
-            updatedAt,
-            image: image ?? imageUrl ?? image_url,
-            imageUrl: imageUrl ?? image ?? image_url,
-            image_url: image_url ?? image ?? imageUrl
-          } as InventoryProduct
+      if (!append) {
+        paginationRef.current = null
+        queryKeyRef.current = queryKey
+        if (!background) {
+          setLoadingProducts(true)
+          setProducts([])
+        }
+        if (!normalizedSearch) {
+          setHasMore(false)
+        }
+      } else if (queryKeyRef.current !== queryKey) {
+        return
+      }
+
+      try {
+        const constraints: QueryConstraint[] = [
+          where('orgId', '==', org),
+          orderBy('updatedAt', 'desc'),
+        ]
+
+        if (normalizedSearch) {
+          constraints.push(where('searchKeywords', 'array-contains', normalizedSearch))
+        }
+
+        if (append && paginationRef.current) {
+          constraints.push(startAfter(paginationRef.current))
+        }
+
+        constraints.push(limit(PRODUCTS_PAGE_SIZE + 1))
+
+        const productSnapshot = await getDocs(query(collection(db, POS_PRODUCTS_COL), ...constraints))
+        if (queryKeyRef.current !== queryKey) {
+          return
+        }
+
+        let docs = productSnapshot.docs
+        const initialDocCount = docs.length
+
+        if (!append && docs.length === 0) {
+          if (normalizedSearch) {
+            const fallbackSnapshot = await getDocs(
+              query(
+                collection(db, POS_PRODUCTS_COL),
+                where('orgId', '==', org),
+                orderBy('updatedAt', 'desc'),
+                limit(PRODUCTS_PAGE_SIZE + 1),
+              ),
+            )
+            docs = fallbackSnapshot.docs.filter((docSnap) => {
+              const raw = docSnap.data() as FirestoreRecord
+              const candidates = [
+                raw.name,
+                raw.brand,
+                raw.category,
+                raw.pieceBarcode,
+                raw.cartonBarcode,
+              ]
+              return candidates.some(
+                (value) => typeof value === 'string' && value.toLowerCase().includes(normalizedSearch),
+              )
+            })
+          }
+        }
+
+        const fallbackTriggered = normalizedSearch && !append && initialDocCount === 0 && docs.length > 0
+
+        let hasNext = docs.length > PRODUCTS_PAGE_SIZE
+        if (normalizedSearch && append && docs.length === 0) {
+          hasNext = false
+        }
+        if (fallbackTriggered) {
+          hasNext = false
+        }
+
+        const slice = docs.slice(0, PRODUCTS_PAGE_SIZE)
+        paginationRef.current = hasNext ? docs[docs.length - 1] : null
+        setHasMore(hasNext)
+
+        let parsedPricelist: PricelistInfo | null = null
+        if (!append && !normalizedSearch) {
+          const pricelistSnap = await getDoc(doc(db, 'org_pricelists', org)).catch(() => null)
+          parsedPricelist = pricelistSnap && 'exists' in pricelistSnap && pricelistSnap.exists()
+            ? toPricelistInfo(pricelistSnap.data())
+            : null
+          setPricelistInfo(parsedPricelist)
+        }
+
+        const results = await Promise.all(
+          slice.map(async (docSnap) => {
+            const raw = docSnap.data() as FirestoreRecord
+            const updatedAt = toIsoString(raw?.updatedAt) ?? (typeof raw?.updatedAt === 'string' ? raw.updatedAt : undefined)
+            const image = toStringValue(raw?.image)
+            const imageUrl = toStringValue(raw?.imageUrl)
+            const image_url = toStringValue(raw?.image_url)
+
+            const inventoryId = `${org}_${docSnap.id}`
+            const inventorySnap = await getDoc(doc(db, INVENTORY_COL, inventoryId)).catch(() => null)
+            const inventory = inventorySnap && inventorySnap.exists()
+              ? (inventorySnap.data() as InventoryStockRecord)
+              : undefined
+
+            const unitsPerBaseRaw = inventory?.unitsPerBase
+              ?? toNumber(raw.unitsPerBase)
+              ?? toNumber(raw.wholesaleQuantity)
+              ?? 1
+            const unitsPerBase = unitsPerBaseRaw > 0 ? unitsPerBaseRaw : 1
+            const qtyBase = toNumber(inventory?.qtyBase) ?? 0
+            const qtyLoose = toNumber(inventory?.qtyLoose) ?? 0
+            const stockPieces = qtyBase * unitsPerBase + qtyLoose
+            const minStock = toNumber(raw.minStock) ?? unitsPerBase
+            const status = inventory
+              ? stockPieces === 0
+                ? 'out'
+                : stockPieces < minStock
+                  ? 'low'
+                  : 'good'
+              : 'unknown'
+
+            const productData: InventoryProduct = {
+              id: docSnap.id,
+              ...raw,
+              updatedAt,
+              image: image ?? imageUrl ?? image_url,
+              imageUrl: imageUrl ?? image ?? image_url,
+              image_url: image_url ?? image ?? imageUrl,
+              unitsPerBase,
+              stock: stockPieces,
+              stockPieces,
+              status,
+            }
+
+            const hasSearchKeywords = Array.isArray(raw.searchKeywords) && raw.searchKeywords.length > 0
+            if (!hasSearchKeywords) {
+              const keywords = buildSearchKeywords(productData)
+              if (keywords.length > 0) {
+                void setDoc(doc(db, POS_PRODUCTS_COL, docSnap.id), { searchKeywords: keywords }, { merge: true }).catch(() => undefined)
+              }
+            }
+
+            return productData
+          }),
+        )
+
+        const mergedMap = new Map<string, InventoryProduct>()
+        if (append) {
+          productsRef.current.forEach((product) => {
+            mergedMap.set(product.id, product)
+          })
+        }
+        results.forEach((product) => {
+          mergedMap.set(product.id, product)
         })
-        .sort((a, b) => {
+
+        const merged = Array.from(mergedMap.values()).sort((a, b) => {
           const aDate = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
           const bDate = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
           return bDate - aDate
         })
 
-      const stockMap: Record<string, { qtyBase: number; qtyLoose: number; unitsPerBase: number }> = {}
-      inventorySnap.docs.forEach((snap) => {
-        const data = snap.data() as InventoryStockRecord
-        if (!data?.productId) return
-        stockMap[data.productId] = {
-          qtyBase: toNumber(data.qtyBase) ?? 0,
-          qtyLoose: toNumber(data.qtyLoose) ?? 0,
-          unitsPerBase: (() => {
-            const value = toNumber(data.unitsPerBase)
-            return value && value > 0 ? value : 1
-          })()
+        productsRef.current = merged
+        setProducts(merged)
+
+        const hasInventory = merged.some((product) => (product.stock ?? 0) > 0)
+        if (!normalizedSearch) {
+          setShowMissingStockAlert(merged.length > 0 && !hasInventory)
         }
-      })
 
-      // Compute stock + status
-      const augmented: InventoryProduct[] = prods.map((product) => {
-        const inventory = stockMap[product.id]
-        const resolvedUnitsPerBaseRaw = inventory?.unitsPerBase
-          ?? toNumber(product.unitsPerBase)
-          ?? toNumber(product.wholesaleQuantity)
-          ?? 1
-        const unitsPerBase = resolvedUnitsPerBaseRaw > 0 ? resolvedUnitsPerBaseRaw : 1
-        const stockPieces = inventory
-          ? inventory.qtyBase * unitsPerBase + inventory.qtyLoose
-          : 0
-        const minStock = toNumber(product.minStock) ?? unitsPerBase
-        const status = inventory
-          ? stockPieces === 0
-            ? 'out'
-            : stockPieces < minStock
-              ? 'low'
-              : 'good'
-          : 'unknown'
-
-        return {
-          ...product,
-          stock: stockPieces,
-          status,
-          unitsPerBase,
-          stockPieces
+        if (!normalizedSearch && !append && !background && typeof window !== 'undefined') {
+          try {
+            window.sessionStorage.setItem(
+              getCacheKey(org),
+              JSON.stringify({
+                products: merged,
+                pricelistInfo: parsedPricelist,
+                showMissingStockAlert: merged.length > 0 && !hasInventory,
+                timestamp: Date.now(),
+              }),
+            )
+          } catch (error) {
+            console.warn('Failed to cache inventory data', error)
+          }
         }
-      })
-
-      const parsedPricelist: PricelistInfo | null =
-        pricelistSnap && 'exists' in pricelistSnap && pricelistSnap.exists()
-          ? toPricelistInfo(pricelistSnap.data())
-          : null
-
-      setProducts(augmented)
-      setPricelistInfo(parsedPricelist)
-      const anyInventory = inventorySnap.size > 0
-      const anyProducts = prods.length > 0
-      const hasPricelistFlag = Boolean(parsedPricelist || anyProducts || anyInventory)
-      setShowMissingStockAlert(anyProducts && !anyInventory)
-
-      if (typeof window !== 'undefined') {
-        try {
-          window.sessionStorage.setItem(
-            getCacheKey(org),
-            JSON.stringify({
-              products: augmented,
-              hasPricelist: hasPricelistFlag,
-              pricelistInfo: parsedPricelist,
-              showMissingStockAlert: anyProducts && !anyInventory,
-              timestamp: Date.now()
-            })
-          )
-        } catch (error) {
-          console.warn('Failed to cache inventory data', error)
+      } catch (error) {
+        console.error('Failed to load inventory products', error)
+        if (!append) {
+          setProducts([])
+          productsRef.current = []
+          setHasMore(false)
+          setShowMissingStockAlert(false)
+        }
+      } finally {
+        if (!append && !background) {
+          setLoadingProducts(false)
         }
       }
-    } catch (e) {
-      // noop
+    },
+    [productsRef],
+  )
+
+  const loadMore = useCallback(async () => {
+    if (!orgId || loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      await loadOrgProducts(orgId, { append: true, background: true, search: debouncedSearch })
     } finally {
-      if (!background) setLoadingProducts(false)
+      setLoadingMore(false)
     }
-  }
+  }, [orgId, hasMore, loadingMore, loadOrgProducts, debouncedSearch])
+
+  useEffect(() => {
+    if (!hasMore) return
+    const target = sentinelRef.current
+    if (!target) return
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) {
+        loadMore()
+      }
+    }, { threshold: 0.8 })
+
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [hasMore, loadMore])
 
   // Fetch products and inventory for org
   useEffect(() => {
     if (!orgId) return
+
+    if (debouncedSearch) {
+      loadOrgProducts(orgId, { search: debouncedSearch })
+      return
+    }
+
     const isFresh = hydrateFromCache(orgId)
     if (isFresh) {
       const t = window.setTimeout(() => {
         loadOrgProducts(orgId, { background: true })
-      }, 150)
+      }, 180)
       return () => window.clearTimeout(t)
     }
+
     loadOrgProducts(orgId)
-  }, [orgId, hydrateFromCache])
+  }, [orgId, debouncedSearch, hydrateFromCache, loadOrgProducts])
 
   const handleBulkGenerate = async () => {
     if (!orgId || bulkGenerating) return
@@ -1183,11 +1564,21 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
 
       // Success: reload products from Firestore for Products tab
       await loadOrgProducts(orgId)
+      await recordCreditSnapshot('success', {
+        action: 'bulk_import',
+        processedCount: processedProducts.length || undefined,
+        fileName: file.name,
+      })
       setTimeout(() => setIsProcessingModalOpen(false), 1200)
 
     } catch (error) {
       console.error('Enhanced upload error:', error)
       setProcessingError('Network error occurred. Please check your connection and try again.')
+      await recordCreditSnapshot('failure', {
+        action: 'bulk_import',
+        fileName: file.name,
+        reason: error instanceof Error ? error.message : 'Upload failed',
+      })
       updateStepStatus(currentStep || 'ai_extraction', 'error')
     } finally {
       event.target.value = '' // Reset file input
@@ -1296,6 +1687,25 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
           </div>
           {activeTab === 'products' && (
             <div className="flex items-center gap-2">
+              <div className="relative hidden sm:block">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search products"
+                  className="w-60 rounded-xl border border-white/10 bg-slate-900/60 px-9 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-cyan-400/50 focus:outline-none focus:ring-0"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-800/80 text-slate-300 hover:bg-slate-700"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
               <button
                 onClick={handleBulkGenerate}
                 disabled={bulkGenerating || products.filter(p => !p.image).length === 0}
@@ -1325,6 +1735,27 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                 Stock counts aren&rsquo;t set for this org yet. Not mandatory, but add them for accurate POS and alerts.
               </div>
             )}
+            <div className="mb-4 sm:hidden">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search products"
+                  className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-9 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-cyan-400/50 focus:outline-none focus:ring-0"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-slate-800/80 text-slate-300 hover:bg-slate-700"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
             {loadingProducts ? (
               <div className="min-h-[55vh] flex items-center justify-center">
                 <LoadingSpinner size="md" />
@@ -1351,8 +1782,12 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
                 {products.map(item => (
-                <div
+                <motion.div
+                  layout
                   key={item.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, ease: [0.4, 0.0, 0.2, 1] }}
                   className="group relative transform-gpu overflow-hidden rounded-3xl border border-slate-400/15 bg-gradient-to-br from-slate-900/55 via-slate-900/30 to-sky-950/35 backdrop-blur-2xl transition-all duration-500 shadow-[0_10px_32px_-20px_rgba(56,189,248,0.32)] hover:shadow-[0_22px_56px_-30px_rgba(59,130,246,0.42)] hover:-translate-y-2 hover:scale-[1.02] hover:rotate-[0.35deg] cursor-pointer"
                   onClick={() => {
                     setEditingProduct(item)
@@ -1393,8 +1828,26 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                     <div className="absolute inset-0 border border-white/5 opacity-0 group-hover:opacity-35 transition-opacity duration-500 rounded-3xl" />
                     <div className="absolute -top-16 -left-16 h-40 w-40 rounded-full bg-cyan-500/16 blur-3xl opacity-0 group-hover:opacity-65 transition-opacity duration-700" />
                   </div>
-                </div>
+                </motion.div>
               ))}
+                {hasMore && (
+                  <div ref={sentinelRef} className="col-span-full flex flex-col items-center gap-3 py-6">
+                    {loadingMore ? (
+                      <LoadingSpinner size="sm" />
+                    ) : (
+                      <>
+                        <p className="text-xs text-slate-400">Scroll to load more products…</p>
+                        <button
+                          type="button"
+                          onClick={loadMore}
+                          className="rounded-full border border-slate-600/40 px-4 py-1 text-xs text-slate-300 hover:border-cyan-400/60 hover:text-cyan-200"
+                        >
+                          Load next page
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1586,28 +2039,31 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
               <div className="mt-8">
                 <h3 className="text-xl font-semibold text-white mb-6 bg-gradient-to-r from-white via-blue-100 to-white bg-clip-text text-transparent">Recently Processed Products ({processedProducts.length})</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                  {processedProducts.slice(0, 10).map((product, index) => (
-                    <div
-                      key={index}
-                      className="group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] hover:border-white/[0.15] transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_48px_-12px_rgba(59,130,246,0.15)] cursor-pointer hover:scale-105 hover:-translate-y-2"
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-br from-green-500/[0.03] via-transparent to-emerald-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                      <div className="aspect-square w-full bg-gradient-to-br from-slate-800/60 to-slate-700/40 flex items-center justify-center relative overflow-hidden">
-                        {(product as any).image_url ? (
-                          <img src={(product as any).image_url} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500" />
-                        ) : (
-                          <Package className="w-16 h-16 text-slate-400 group-hover:scale-125 group-hover:text-green-300 group-hover:rotate-12 transition-all duration-500 relative z-10" />
-                        )}
-                      </div>
-                      <div className="p-4 relative">
-                        <h4 className="text-slate-200 font-medium text-sm truncate group-hover:text-white transition-colors duration-300">{product.name}</h4>
-                        <div className="mt-2 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-2 group-hover:translate-y-0">
-                          <span className="text-xs text-slate-400 group-hover:text-slate-300">{product.brand || 'N/A'}</span>
-                          <span className="text-xs px-2 py-1 rounded-full border text-green-400 bg-green-500/20 border-green-500/30">${product.unitPrice}</span>
+                  {processedProducts.slice(0, 10).map((product, index) => {
+                    const previewImage = resolveProcessedProductImage(product)
+                    return (
+                      <div
+                        key={index}
+                        className="group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] hover:border-white/[0.15] transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_48px_-12px_rgba(59,130,246,0.15)] cursor-pointer hover:scale-105 hover:-translate-y-2"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-br from-green-500/[0.03] via-transparent to-emerald-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                        <div className="aspect-square w-full bg-gradient-to-br from-slate-800/60 to-slate-700/40 flex items-center justify-center relative overflow-hidden">
+                          {previewImage ? (
+                            <img src={previewImage} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500" />
+                          ) : (
+                            <Package className="w-16 h-16 text-slate-400 group-hover:scale-125 group-hover:text-green-300 group-hover:rotate-12 transition-all duration-500 relative z-10" />
+                          )}
+                        </div>
+                        <div className="p-4 relative">
+                          <h4 className="text-slate-200 font-medium text-sm truncate group-hover:text-white transition-colors duration-300">{product.name}</h4>
+                          <div className="mt-2 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-2 group-hover:translate-y-0">
+                            <span className="text-xs text-slate-400 group-hover:text-slate-300">{product.brand || 'N/A'}</span>
+                            <span className="text-xs px-2 py-1 rounded-full border text-green-400 bg-green-500/20 border-green-500/30">${product.unitPrice}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -1851,12 +2307,13 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                 onSaved={(updated) => {
                   setEditingProduct(updated)
                   setModalMode('preview')
-                  ;(async () => { await loadOrgProducts(orgId) })()
+                  ;(async () => { await loadOrgProducts(orgId, { search: debouncedSearch }) })()
                 }}
                 onDeleted={() => {
                   handleCloseModal()
-                  ;(async () => { await loadOrgProducts(orgId) })()
+                  ;(async () => { await loadOrgProducts(orgId, { search: debouncedSearch }) })()
                 }}
+                onCreditEvent={recordCreditSnapshot}
               />
             )}
           </div>
@@ -1991,9 +2448,10 @@ type ProductFormProps = {
   onCancel: () => void
   onSaved: (product: InventoryProduct) => void
   onDeleted: (productId?: string) => void
+  onCreditEvent: (outcome: CreditEventOutcome, meta?: CreditSnapshotMeta) => Promise<void>
 }
 
-function ProductForm({ orgId, initial, onCancel, onSaved, onDeleted }: ProductFormProps) {
+function ProductForm({ orgId, initial, onCancel, onSaved, onDeleted, onCreditEvent }: ProductFormProps) {
   const [name, setName] = useState<string>(initial?.name || '')
   const [brand, setBrand] = useState<string>(initial?.brand || '')
   const [category, setCategory] = useState<string>(initial?.category || '')
@@ -2030,7 +2488,15 @@ function ProductForm({ orgId, initial, onCancel, onSaved, onDeleted }: ProductFo
         unitsPerBase: Number(unitsPerBase) || 1,
         piecePrice: Number(piecePrice) || 0,
         wholesalePrice: Number(cartonPrice) || undefined,
-        updatedAt: now
+        updatedAt: now,
+        searchKeywords: buildSearchKeywords({
+          id: initial?.id,
+          name,
+          brand,
+          category,
+          pieceBarcode,
+          cartonBarcode,
+        }),
       }
       let id = typeof initial?.id === 'string' ? initial.id : undefined
       if (id) {
@@ -2082,8 +2548,19 @@ function ProductForm({ orgId, initial, onCancel, onSaved, onDeleted }: ProductFo
       }
 
       onSaved(updatedProduct)
+      await onCreditEvent('success', {
+        action: initial?.id ? 'update' : 'create',
+        productId: id,
+        productName: name.trim(),
+      })
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Save failed')
+      await onCreditEvent('failure', {
+        action: initial?.id ? 'update' : 'create',
+        productId: initial?.id,
+        productName: name.trim(),
+        reason: error instanceof Error ? error.message : 'Save failed',
+      })
     } finally {
       setSaving(false)
     }
@@ -2097,9 +2574,20 @@ function ProductForm({ orgId, initial, onCancel, onSaved, onDeleted }: ProductFo
       // Remove only this org's inventory record
       const invId = `${orgId}_${initial.id}`
       await deleteDoc(doc(db, INVENTORY_COL, invId)).catch(() => {})
+      await onCreditEvent('success', {
+        action: 'delete',
+        productId: initial.id,
+        productName: initial.name,
+      })
       onDeleted(initial.id)
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Delete failed')
+      await onCreditEvent('failure', {
+        action: 'delete',
+        productId: initial.id,
+        productName: initial.name,
+        reason: error instanceof Error ? error.message : 'Delete failed',
+      })
     } finally {
       setSaving(false)
     }

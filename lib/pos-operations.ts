@@ -20,6 +20,12 @@ import type {
   POSOrderLine,
   POSProduct,
 } from '@/lib/types'
+import type {
+  CreatePOSOrderOptions,
+  POSOrderStatus,
+  POSPayment,
+  POSPaymentSummary,
+} from '@/types/pos'
 
 // Collections
 export const POS_PRODUCTS_COL = 'pos_products'
@@ -120,21 +126,80 @@ export async function getInventory(orgId: string, productId: string): Promise<In
   return snap.data() as InventoryRecord
 }
 
-export async function addPosOrder(orgId: string, userId: string, lines: POSOrderLine[]): Promise<string> {
+export async function addPosOrder(
+  orgId: string,
+  userId: string,
+  lines: POSOrderLine[],
+  options: CreatePOSOrderOptions = {},
+): Promise<string> {
   const total = lines.reduce((s, l) => s + l.lineTotal, 0)
   const orderRef = collection(db, POS_ORDERS_COL)
-  
+
+  const payments: POSPayment[] = options.payments ?? []
+  const totalApplied = payments.reduce((sum, payment) => sum + Math.max(0, payment.amount), 0)
+  const totalTendered = payments.reduce((sum, payment) => sum + Math.max(0, payment.tenderedAmount ?? payment.amount), 0)
+  const totalChange = payments.reduce((sum, payment) => sum + Math.max(0, payment.changeGiven ?? 0), 0)
+  const balanceDue = options.balanceDue ?? Math.max(0, total - totalApplied)
+  const status: POSOrderStatus = options.status ?? (balanceDue <= 0 ? 'paid' : 'awaiting_payment')
+  const nowIso = new Date().toISOString()
+  const completedAt = options.completedAt ?? (status === 'paid' ? nowIso : null)
+  const lastPaymentAt = payments
+    .map((payment) => payment.receivedAt)
+    .filter((timestamp): timestamp is string => Boolean(timestamp))
+    .sort()
+    .pop()
+
+  const paymentSummary: POSPaymentSummary | undefined = payments.length
+    ? {
+        totalApplied,
+        totalTendered,
+        totalChange,
+        balanceDue,
+        lastPaymentAt,
+      }
+    : undefined
+
+  const baseOrderDoc: POSOrderDoc = {
+    orgId,
+    userId,
+    cashierId: options.cashierId ?? userId,
+    lines,
+    payments,
+    total,
+    balanceDue,
+    createdAt: nowIso,
+    completedAt,
+    status,
+    updatedAt: nowIso,
+  }
+
+  if (paymentSummary) {
+    baseOrderDoc.paymentSummary = paymentSummary
+  }
+  if (options.receiptNumber) {
+    baseOrderDoc.receiptNumber = options.receiptNumber
+  }
+  if (options.checkoutContext) {
+    baseOrderDoc.checkoutContext = options.checkoutContext
+  }
+  if (options.receipt) {
+    baseOrderDoc.receipt = options.receipt
+  }
+  if (options.notes) {
+    baseOrderDoc.notes = options.notes
+  }
+  const primaryPayment = payments[0]
+  if (primaryPayment?.method) {
+    baseOrderDoc.paymentMethod = primaryPayment.method
+  }
+  if (primaryPayment?.referenceId) {
+    baseOrderDoc.paymentRef = primaryPayment.referenceId
+  }
+
   try {
     const id = await runTransaction(db, async (tx) => {
       // Create order
-      const orderDoc: POSOrderDoc = {
-        orgId,
-        userId,
-        lines,
-        total,
-        createdAt: new Date().toISOString(),
-        status: 'pending',
-      }
+      const orderDoc: POSOrderDoc = { ...baseOrderDoc }
       const created = await addDoc(orderRef, orderDoc)
 
       // Try to decrement inventory per product (but don't fail if inventory doesn't exist)
@@ -193,15 +258,10 @@ export async function addPosOrder(orgId: string, userId: string, lines: POSOrder
   } catch (error) {
     console.error('Transaction failed:', error)
     // If transaction fails, create a simple order without inventory updates
-    const simpleOrderDoc: POSOrderDoc = {
-      orgId,
-      userId,
-      lines,
-      total,
-      createdAt: new Date().toISOString(),
-      status: 'pending',
-    }
-    const fallbackOrder = await addDoc(orderRef, simpleOrderDoc)
+    const fallbackOrder = await addDoc(orderRef, {
+      ...baseOrderDoc,
+      status: status === 'paid' && balanceDue > 0 ? 'awaiting_payment' : status,
+    })
     console.log('Created fallback order without inventory updates:', fallbackOrder.id)
     return fallbackOrder.id
   }

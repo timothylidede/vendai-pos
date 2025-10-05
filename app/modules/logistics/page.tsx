@@ -12,7 +12,6 @@ import {
   ArrowLeft,
   Plus,
   Filter,
-  Search,
   Navigation,
   Route,
   CheckCircle,
@@ -29,6 +28,7 @@ import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/loading-spinner'
 import { useToast } from '@/hooks/use-toast'
 import { db } from '@/lib/firebase'
+import { DashboardSearchControls } from '@/components/modules/dashboard-search-controls'
 
 type LogisticsTab = 'deliveries' | 'routes' | 'drivers'
 
@@ -190,29 +190,45 @@ const normalizeStatus = (value: string | undefined | null): string => {
   return value.toString().trim().toLowerCase().replace(/\s+/g, '-').replace(/_/g, '-')
 }
 
-const LogisticsMap = ({ deliveries }: { deliveries: DeliveryRecord[] }) => {
+const LogisticsMap = ({ deliveries, isLoading }: { deliveries: DeliveryRecord[]; isLoading: boolean }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
+  const [mapLoading, setMapLoading] = useState(false)
 
   useEffect(() => {
     const mapContainer = containerRef.current
     if (!mapContainer) return
+
+    if (isLoading) {
+      setMapLoading(true)
+      setMapError(null)
+      return
+    }
+
+    if (!deliveries.length) {
+      setMapLoading(false)
+      setMapError('No deliveries matching your current filters yet.')
+      return
+    }
 
     const coordinates = deliveries
       .map((delivery) => delivery.coordinates)
       .filter((value): value is { lat: number; lng: number } => Boolean(value))
 
     if (!coordinates.length) {
-      setMapError('No geocoded deliveries yet. Dispatch a drop to see live routes.')
+      setMapLoading(false)
+      setMapError('We could not find GPS coordinates for these drops yet.')
       return
     }
 
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
     if (!apiKey) {
+      setMapLoading(false)
       setMapError('Google Maps API key missing. Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to enable routing.')
       return
     }
 
+    setMapLoading(true)
     setMapError(null)
     const loader = new Loader({ apiKey, version: 'weekly' })
     let cancelled = false
@@ -250,23 +266,31 @@ const LogisticsMap = ({ deliveries }: { deliveries: DeliveryRecord[] }) => {
         if (coordinates.length > 1) {
           map.fitBounds(bounds, 48)
         }
+
+        setMapLoading(false)
       })
       .catch((error) => {
         if (cancelled) return
         console.error('Failed to initialise Google Maps', error)
+        setMapLoading(false)
         setMapError('Unable to load maps right now. Please retry shortly.')
       })
 
     return () => {
       cancelled = true
     }
-  }, [deliveries])
+  }, [deliveries, isLoading])
 
   return (
     <div className="relative h-64 rounded-lg overflow-hidden border border-slate-700/40 bg-slate-900/40">
       <div ref={containerRef} className="absolute inset-0" />
+      {mapLoading && !mapError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60">
+          <LoadingSpinner size="sm" />
+        </div>
+      )}
       {mapError && (
-        <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400 bg-slate-900/80">
+        <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-300 bg-slate-900/80 px-6 text-center">
           {mapError}
         </div>
       )}
@@ -577,47 +601,47 @@ export default function LogisticsPage() {
               ))}
             </div>
 
-            {/* Search and Filters */}
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="relative flex-1 min-w-[220px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Search by retailer, driver, or status..."
-                  className="w-full pl-10 pr-4 py-3 bg-slate-800/60 border border-slate-700/50 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-orange-400/50"
-                />
-              </div>
-              <Button variant="outline" className="border-slate-700 text-slate-300">
-                <Filter className="w-4 h-4 mr-2" />
-                Filter
-              </Button>
-              <Button onClick={loadDeliveries} variant="secondary" className="bg-slate-800/60 border border-slate-700/60 text-slate-200 hover:text-white">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Refresh
-              </Button>
-            </div>
-
-            <Card className="p-0 bg-slate-900/40 border-slate-700/50">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/60">
-                <div>
-                  <h3 className="text-sm font-semibold text-white">Route &amp; ETA visualisation</h3>
-                  <p className="text-xs text-slate-400">Powered by Google Maps</p>
-                </div>
-                <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white" onClick={loadDeliveries}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Sync
+            <DashboardSearchControls
+              accent="orange"
+              searchValue={searchTerm}
+              onSearchChange={setSearchTerm}
+              searchPlaceholder="Search by retailer, driver, or status..."
+              onRefresh={loadDeliveries}
+              actions={(
+                <Button variant="outline" className="h-11 border-slate-700/70 text-slate-300">
+                  <Filter className="mr-2 h-4 w-4" />
+                  Filter
                 </Button>
-              </div>
-              <div className="p-4">
-                <LogisticsMap deliveries={filteredDeliveries} />
-              </div>
-            </Card>
+              )}
+            />
+
+            {!deliveriesError && (
+              <Card className="p-0 bg-slate-900/40 border-slate-700/50">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/60">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">Route &amp; ETA visualisation</h3>
+                    <p className="text-xs text-slate-400">Powered by Google Maps</p>
+                  </div>
+                  <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white" onClick={loadDeliveries}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Sync
+                  </Button>
+                </div>
+                <div className="p-4">
+                  <LogisticsMap deliveries={filteredDeliveries} isLoading={deliveriesLoading} />
+                </div>
+              </Card>
+            )}
 
             {deliveriesError && (
-              <Card className="p-4 border border-red-500/30 bg-red-500/10 text-red-200">
-                {deliveriesError}
+              <Card className="p-4 border border-red-500/30 bg-red-500/10 text-red-200" role="alert">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <span>{deliveriesError}</span>
+                  <Button size="sm" variant="secondary" className="bg-red-500/20 border border-red-400/40 text-red-100 hover:text-white" onClick={loadDeliveries}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Retry
+                  </Button>
+                </div>
               </Card>
             )}
 
@@ -698,8 +722,14 @@ export default function LogisticsPage() {
             </div>
 
             {routesError && (
-              <Card className="p-4 border border-red-500/30 bg-red-500/10 text-red-200">
-                {routesError}
+              <Card className="p-4 border border-red-500/30 bg-red-500/10 text-red-200" role="alert">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <span>{routesError}</span>
+                  <Button size="sm" variant="secondary" className="bg-red-500/20 border border-red-400/40 text-red-100 hover:text-white" onClick={loadRoutes}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Retry
+                  </Button>
+                </div>
               </Card>
             )}
 
@@ -786,8 +816,14 @@ export default function LogisticsPage() {
             </div>
 
             {driversError && (
-              <Card className="p-4 border border-red-500/30 bg-red-500/10 text-red-200">
-                {driversError}
+              <Card className="p-4 border border-red-500/30 bg-red-500/10 text-red-200" role="alert">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <span>{driversError}</span>
+                  <Button size="sm" variant="secondary" className="bg-red-500/20 border border-red-400/40 text-red-100 hover:text-white" onClick={loadDrivers}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Retry
+                  </Button>
+                </div>
               </Card>
             )}
 

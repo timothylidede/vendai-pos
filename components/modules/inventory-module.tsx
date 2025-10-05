@@ -9,6 +9,7 @@ import { motion } from "framer-motion"
 import { AIProcessingModal } from "../ai-processing-modal"
 import { LoadingSpinner } from "../loading-spinner"
 import { db } from "@/lib/firebase"
+import type { FirebaseError } from "firebase/app"
 import {
   collection,
   collectionGroup,
@@ -588,6 +589,8 @@ export function InventoryModule() {
     suppliersAnalyzed: 0,
     locationMatches: 0
   })
+  const [productError, setProductError] = useState<string | null>(null)
+  const [productErrorLink, setProductErrorLink] = useState<string | null>(null)
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | undefined>()
   const newTabHighlighted = !loadingProducts && products.length === 0
 
@@ -971,6 +974,8 @@ export function InventoryModule() {
       const queryKey = `${org}::${normalizedSearch || 'all'}`
 
       if (!append) {
+        setProductError(null)
+        setProductErrorLink(null)
         paginationRef.current = null
         queryKeyRef.current = queryKey
         if (!background) {
@@ -1154,6 +1159,31 @@ export function InventoryModule() {
         }
       } catch (error) {
         console.error('Failed to load inventory products', error)
+        if (!append) {
+          const firebaseError = error as Partial<FirebaseError> | undefined
+          if (firebaseError && typeof firebaseError === 'object') {
+            const isIndexError = firebaseError.code === 'failed-precondition' &&
+              typeof firebaseError.message === 'string' &&
+              firebaseError.message.includes('index')
+            if (isIndexError) {
+              let consoleLink: string | null = null
+              const matches = firebaseError.message?.match(/https:\/\/[^\s)]+/)
+              if (matches && matches[0]) {
+                consoleLink = matches[0]
+              }
+              setProductError(
+                'Inventory queries need a Firestore composite index on orgId and updatedAt (plus searchKeywords for searches). Create the index, deploy firestore.indexes.json, and reload to see products.',
+              )
+              if (consoleLink) {
+                setProductErrorLink(consoleLink)
+              }
+            } else {
+              setProductError('Unable to load inventory products right now. Retry in a moment or check Firestore permissions.')
+            }
+          } else {
+            setProductError('Unable to load inventory products right now.')
+          }
+        }
         if (!append) {
           setProducts([])
           productsRef.current = []
@@ -1730,6 +1760,24 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
       <div className="flex-1 overflow-auto">
         {activeTab === 'products' && (
           <div className="p-4">
+            {productError && (
+              <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                <p>{productError}</p>
+                {productErrorLink && (
+                  <a
+                    href={productErrorLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-flex text-xs text-red-100 underline decoration-dotted underline-offset-4 hover:text-white"
+                  >
+                    Open Firebase console to create the index
+                  </a>
+                )}
+                <p className="mt-2 text-xs text-red-100/80">
+                  After updating indexes locally, deploy them with <code className="rounded bg-red-500/20 px-1 py-0.5 font-mono text-[11px]">firebase deploy --only firestore:indexes</code>.
+                </p>
+              </div>
+            )}
             {showMissingStockAlert && (
               <div className="mb-4 rounded-xl border border-yellow-400/30 bg-yellow-500/10 text-yellow-200 px-4 py-3 backdrop-blur-md">
                 Stock counts aren&rsquo;t set for this org yet. Not mandatory, but add them for accurate POS and alerts.

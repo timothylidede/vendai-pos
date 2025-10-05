@@ -1,347 +1,322 @@
-// Optimized Firestore Security Rules for VendAI
-// Supports hierarchical data structure with performance optimizations
-
-rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // ========================================================================
-    // HELPER FUNCTIONS
-    // ========================================================================
-    
-    function isAuthenticated() {
+
+    function isSignedIn() {
       return request.auth != null;
     }
-    
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-    
-    function isOrgMember(orgId) {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid));
-    }
-    
-    function hasRole(orgId, roles) {
-      return isAuthenticated() && 
-        get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)).data.role in roles;
-    }
-    
-    function isDistributor() {
-      return isAuthenticated() && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'distributor';
-    }
-    
-    function isRetailer() {
-      return isAuthenticated() && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'retailer';
-    }
-    
-    function isAdmin() {
-      return isAuthenticated() && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
-    function isOrgMemberSafe(orgId) {
-      return orgId != null && isOrgMember(orgId);
+    function userRole() {
+      return isSignedIn() ? userDoc().data.role : null;
     }
-    
-    function userMatches(userId) {
-      return userId != null && request.auth.uid == userId;
+
+    function userOrgId() {
+      return isSignedIn() ? userDoc().data.organizationId : null;
     }
-    
-    // ========================================================================
-    // USER MANAGEMENT
-    // ========================================================================
-    
+
+    function firstDefined(primary, secondary) {
+      return primary != null ? primary : secondary;
+    }
+
+    function matchesUser(userId) {
+      return isSignedIn() && userId != null && request.auth.uid == userId;
+    }
+
+    function matchesOrg(orgId) {
+      return isSignedIn() && orgId != null && userOrgId() == orgId;
+    }
+
+    function isAdmin() {
+      return userRole() == 'admin';
+    }
+
+    function isDistributor() {
+      return userRole() == 'distributor';
+    }
+
+    function isRetailer() {
+      return userRole() == 'retailer';
+    }
+
+    function hasOrgAccess(orgId) {
+      return (orgId != null && matchesOrg(orgId)) || isAdmin();
+    }
+
+    function matchesEitherOrg(primaryOrg, secondaryOrg) {
+      return hasOrgAccess(primaryOrg) || hasOrgAccess(secondaryOrg);
+    }
+
+    function requestField(field) {
+      return request.resource.data[field];
+    }
+
+    function resourceField(field) {
+      return resource.data[field];
+    }
+
+    function stringOrNull(value) {
+      return value == null || value is string;
+    }
+
+    function numberOrNull(value) {
+      return value == null || value is number;
+    }
+
+    function isValidPOSPayment(payment) {
+      return payment is map
+             && payment.method is string
+             && payment.amount is number
+             && payment.receivedAt is string
+             && payment.status in ['pending', 'authorized', 'captured', 'completed', 'failed', 'voided', 'refunded', 'cancelled']
+             && numberOrNull(payment.tenderedAmount)
+             && numberOrNull(payment.changeGiven)
+             && stringOrNull(payment.referenceId)
+             && stringOrNull(payment.note)
+             && stringOrNull(payment.processedBy)
+             && (payment.metadata == null || payment.metadata is map);
+    }
+
+    function isValidPOSOrderLine(line) {
+      return line is map
+             && line.productId is string
+             && line.name is string
+             && line.quantityPieces is number
+             && line.unitPrice is number
+             && line.lineTotal is number;
+    }
+
+    function isValidPOSReceipt(receipt) {
+      return receipt is map
+             && receipt.receiptNumber is string
+             && receipt.orderId is string
+             && receipt.orgId is string
+             && receipt.issuedAt is string
+             && receipt.issuedBy is string
+             && receipt.subtotal is number
+             && receipt.grandTotal is number
+             && receipt.payments is list
+             && receipt.payments.all(payment, payment is map && payment.method is string && payment.amount is number)
+             && numberOrNull(receipt.taxTotal)
+             && numberOrNull(receipt.discountTotal)
+             && stringOrNull(receipt.registerId)
+             && (!receipt.customer || receipt.customer is map)
+             && (!receipt.documentUrls || receipt.documentUrls is map)
+             && (!receipt.metadata || receipt.metadata is map);
+    }
+
+    function isValidPOSPaymentSummary(summary) {
+      return summary is map
+             && summary.totalApplied is number
+             && summary.totalTendered is number
+             && summary.totalChange is number
+             && summary.balanceDue is number
+             && stringOrNull(summary.lastPaymentAt);
+    }
+
+    function isValidPOSCheckoutContext(ctx) {
+      return ctx is map
+             && ctx.channel is string
+             && ctx.subtotal is number
+             && ctx.grandTotal is number
+             && ctx.payments is list
+             && ctx.payments.all(payment, isValidPOSPayment(payment))
+             && numberOrNull(ctx.taxTotal)
+             && numberOrNull(ctx.discountTotal)
+             && numberOrNull(ctx.changeDue)
+             && (!ctx.location || ctx.location is map)
+             && (!ctx.customer || ctx.customer is map)
+             && (!ctx.metadata || ctx.metadata is map)
+             && stringOrNull(ctx.registerId)
+             && stringOrNull(ctx.shiftId)
+             && stringOrNull(ctx.deviceId)
+             && stringOrNull(ctx.sessionId)
+             && stringOrNull(ctx.notes);
+    }
+
+    function isValidPOSOrder(data) {
+      return data.orgId is string
+             && data.userId is string
+             && data.lines is list
+             && data.lines.size() > 0
+             && data.lines.all(line, isValidPOSOrderLine(line))
+             && data.total is number
+             && data.balanceDue is number && data.balanceDue >= 0
+             && data.createdAt is string
+             && data.status in ['draft', 'awaiting_payment', 'paid', 'void', 'refunded']
+             && data.payments is list
+             && data.payments.size() <= 50
+             && data.payments.all(payment, isValidPOSPayment(payment))
+             && stringOrNull(data.cashierId)
+             && stringOrNull(data.receiptNumber)
+             && stringOrNull(data.notes)
+             && stringOrNull(data.paymentMethod)
+             && stringOrNull(data.paymentRef)
+             && data.updatedAt is string
+             && stringOrNull(data.completedAt)
+             && (!data.receipt || isValidPOSReceipt(data.receipt))
+             && (!data.paymentSummary || isValidPOSPaymentSummary(data.paymentSummary))
+             && (!data.checkoutContext || isValidPOSCheckoutContext(data.checkoutContext));
+    }
+
+    function distributorResourceOrgId() {
+      return firstDefined(resourceField('orgId'), resourceField('organizationId'));
+    }
+
+    function distributorRequestOrgId() {
+      return firstDefined(requestField('orgId'), requestField('organizationId'));
+    }
+
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
-      allow read: if isAuthenticated(); // Allow reading other user profiles for business operations
+      allow read: if isSignedIn();
+      allow create, update: if matchesUser(userId) || isAdmin();
+      allow delete: if isAdmin();
     }
-    
-    // ========================================================================
-    // ORGANIZATION STRUCTURE (Optimized Hierarchical)
-    // ========================================================================
-    
-    match /organizations/{orgId} {
-      // Organization metadata
-      allow read: if isAuthenticated();
-      allow write: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'owner']);
-      
-      // Organization members
-      match /members/{userId} {
-        allow read: if isOrgMember(orgId);
-        allow write: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'owner']);
-      }
-      
-      // Organization settings
-      match /settings/{settingId} {
-        allow read: if isOrgMember(orgId);
-        allow write: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'owner']);
-      }
-      
-      // Products subcollection (Optimized)
-      match /products/{productId} {
-        allow read: if isAuthenticated(); // Products can be viewed by all authenticated users
-        allow create: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'manager', 'owner']);
-        allow update: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'manager', 'owner']);
-        allow delete: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'owner']);
-      }
-      
-      // Inventory subcollection  
-      match /inventory/{productId} {
-        allow read: if isOrgMember(orgId);
-        allow write: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'manager', 'owner']);
-      }
-      
-      // POS Orders subcollection
-      match /pos_orders/{orderId} {
-        allow read: if isOrgMember(orgId);
-        allow create: if isOrgMember(orgId);
-        allow update: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'manager', 'cashier', 'owner']);
-      }
-      
-      // Barcode/SKU mappings
-      match /mappings/{mappingId} {
-        allow read: if isOrgMember(orgId);
-        allow write: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'manager', 'owner']);
-      }
-    }
-    
-    // ========================================================================
-    // DISTRIBUTORS
-    // ========================================================================
-    
+
     match /distributors/{distributorId} {
-      allow read: if isAuthenticated(); // Public business profiles
-      allow write: if isDistributor() && isOwner(resource.data.userId);
-      
-      // Distributor products (legacy support)
+      allow read: if hasOrgAccess(distributorResourceOrgId()) || matchesUser(resourceField('ownerId'));
+      allow create: if isDistributor() && hasOrgAccess(distributorRequestOrgId());
+      allow update: if (isDistributor() && hasOrgAccess(distributorResourceOrgId())) || isAdmin();
+      allow delete: if isAdmin();
+
       match /products/{productId} {
-        allow read: if isAuthenticated();
-        allow write: if isDistributor() && isOwner(resource.data.distributorUserId);
+        allow read: if hasOrgAccess(distributorResourceOrgId());
+        allow create, update: if (isDistributor() && hasOrgAccess(distributorResourceOrgId())) || isAdmin();
+        allow delete: if isAdmin();
       }
     }
-    
-    // ========================================================================
-    // RETAILERS  
-    // ========================================================================
-    
+
     match /retailers/{retailerId} {
-      allow read: if isAuthenticated(); // Visible to distributors for business operations
-      allow write: if isRetailer() && isOwner(resource.data.userId);
+      allow read: if matchesUser(resourceField('userId')) || matchesOrg(resourceField('distributorId')) || isAdmin();
+      allow create: if isRetailer() && matchesUser(requestField('userId'));
+      allow update: if matchesUser(resourceField('userId')) || matchesOrg(resourceField('distributorId')) || isAdmin();
     }
-    
-    // ========================================================================
-    // ORDERS (B2B and POS)
-    // ========================================================================
-    
+
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow create, update: if (isDistributor() && matchesOrg(requestField('distributorId'))) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /pos_orders/{orderId} {
+      allow read: if matchesOrg(resourceField('orgId')) || matchesUser(resourceField('userId')) || isAdmin();
+      allow create: if isValidPOSOrder(request.resource.data)
+                    && (matchesOrg(requestField('orgId')) || matchesUser(requestField('userId')) || isAdmin());
+      allow update: if isValidPOSOrder(request.resource.data)
+                    && (matchesOrg(resourceField('orgId')) || matchesUser(resourceField('userId')) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
     match /orders/{orderId} {
-      // B2B orders: Both distributor and retailer can read
-      allow read: if isAuthenticated() && (
-        (isDistributor() && request.auth.uid == resource.data.distributorUserId) ||
-        (isRetailer() && request.auth.uid == resource.data.retailerUserId) ||
-        isAdmin()
-      );
-      
-      // Create orders: Retailers create orders to distributors
-      allow create: if isRetailer() && request.auth.uid == request.resource.data.retailerUserId;
-      
-      // Update orders: Distributors can update status, retailers can cancel
-      allow update: if isAuthenticated() && (
-        (isDistributor() && request.auth.uid == resource.data.distributorUserId) ||
-        (isRetailer() && request.auth.uid == resource.data.retailerUserId && 
-         request.resource.data.status in ['cancelled'] &&
-         resource.data.status in ['draft', 'confirmed'])
-      );
+      allow read: if matchesUser(resourceField('userId')) ||
+                   matchesOrg(resourceField('distributorId')) ||
+                   matchesOrg(resourceField('retailerOrgId')) ||
+                   isAdmin();
+
+      allow create: if matchesUser(requestField('userId')) || isRetailer();
+
+      allow update: if matchesUser(resourceField('userId')) ||
+                     matchesOrg(resourceField('distributorId')) ||
+                     isAdmin();
     }
-    
-    // ========================================================================
-    // PURCHASE ORDERS (B2B)
-    // ========================================================================
 
     match /purchase_orders/{poId} {
-      allow read: if isAuthenticated() && (
-        userMatches(resource.data.retailerUserId) ||
-        userMatches(resource.data.supplierUserId) ||
-        isOrgMemberSafe(resource.data.retailerOrgId) ||
-        isOrgMemberSafe(resource.data.supplierOrgId) ||
-        isAdmin()
-      );
+      allow read: if matchesUser(resourceField('retailerUserId')) ||
+                   matchesUser(resourceField('supplierUserId')) ||
+                   matchesOrg(resourceField('retailerOrgId')) ||
+                   matchesOrg(resourceField('supplierOrgId')) ||
+                   isAdmin();
 
-      allow create: if isAuthenticated() && (
-        userMatches(request.resource.data.retailerUserId) ||
-        isOrgMemberSafe(request.resource.data.retailerOrgId) ||
-        isAdmin()
-      );
+      allow create: if matchesUser(requestField('retailerUserId')) ||
+                     matchesOrg(requestField('retailerOrgId')) ||
+                     isAdmin();
 
-      allow update: if isAuthenticated() && (
-        userMatches(resource.data.retailerUserId) ||
-        userMatches(resource.data.supplierUserId) ||
-        isOrgMemberSafe(resource.data.retailerOrgId) ||
-        isOrgMemberSafe(resource.data.supplierOrgId) ||
-        isAdmin()
-      );
+      allow update: if matchesUser(resourceField('retailerUserId')) ||
+                     matchesUser(resourceField('supplierUserId')) ||
+                     matchesOrg(resourceField('retailerOrgId')) ||
+                     matchesOrg(resourceField('supplierOrgId')) ||
+                     isAdmin();
     }
-
-    // ========================================================================
-    // SALES ORDERS (supplier-facing)
-    // ========================================================================
 
     match /sales_orders/{salesOrderId} {
-      allow read: if isAuthenticated() && (
-        userMatches(resource.data.retailerUserId) ||
-        userMatches(resource.data.supplierUserId) ||
-        isOrgMemberSafe(resource.data.retailerOrgId) ||
-        isOrgMemberSafe(resource.data.supplierOrgId) ||
-        isAdmin()
-      );
+      allow read: if matchesUser(resourceField('retailerUserId')) ||
+                   matchesUser(resourceField('supplierUserId')) ||
+                   matchesOrg(resourceField('retailerOrgId')) ||
+                   matchesOrg(resourceField('supplierOrgId')) ||
+                   isAdmin();
 
-      allow create: if isAuthenticated() && (
-        userMatches(request.resource.data.supplierUserId) ||
-        isOrgMemberSafe(request.resource.data.supplierOrgId) ||
-        isAdmin()
-      );
+      allow create: if matchesUser(requestField('supplierUserId')) ||
+                     matchesOrg(requestField('supplierOrgId')) ||
+                     isAdmin();
 
-      allow update: if isAuthenticated() && (
-        userMatches(resource.data.supplierUserId) ||
-        isOrgMemberSafe(resource.data.supplierOrgId) ||
-        isAdmin()
-      );
+      allow update: if matchesUser(resourceField('supplierUserId')) ||
+                     matchesOrg(resourceField('supplierOrgId')) ||
+                     isAdmin();
     }
-    
-    // ========================================================================
-    // INVOICES
-    // ========================================================================
-    
+
     match /invoices/{invoiceId} {
-      allow read: if isAuthenticated() && (
-        (isDistributor() && request.auth.uid == resource.data.distributorUserId) ||
-        (isRetailer() && request.auth.uid == resource.data.retailerUserId) ||
-        userMatches(resource.data.retailerUserId) ||
-        userMatches(resource.data.supplierUserId) ||
-        isOrgMemberSafe(resource.data.retailerOrgId) ||
-        isOrgMemberSafe(resource.data.supplierOrgId) ||
-        isAdmin()
-      );
-      
-      allow create: if (
-        (isDistributor() && request.auth.uid == request.resource.data.distributorUserId) ||
-        userMatches(request.resource.data.supplierUserId) ||
-        isOrgMemberSafe(request.resource.data.supplierOrgId) ||
-        isAdmin()
-      );
-      
-      allow update: if (
-        (isDistributor() && request.auth.uid == resource.data.distributorUserId) ||
-        userMatches(resource.data.supplierUserId) ||
-        isOrgMemberSafe(resource.data.supplierOrgId) ||
-        isAdmin()
-      );
-    }
+      allow read: if matchesUser(resourceField('retailerUserId')) ||
+                   matchesUser(resourceField('supplierUserId')) ||
+                   matchesOrg(resourceField('retailerOrgId')) ||
+                   matchesOrg(resourceField('supplierOrgId')) ||
+                   isAdmin();
 
-    // ========================================================================
-    // PAYMENTS & LEDGER
-    // ========================================================================
+      allow create: if matchesUser(requestField('supplierUserId')) ||
+                     matchesOrg(requestField('supplierOrgId')) ||
+                     isAdmin();
+
+      allow update: if matchesUser(resourceField('supplierUserId')) ||
+                     matchesOrg(resourceField('supplierOrgId')) ||
+                     isAdmin();
+    }
 
     match /payments/{paymentId} {
-      allow read: if isAuthenticated() && (
-        userMatches(resource.data.retailerUserId) ||
-        userMatches(resource.data.supplierUserId) ||
-        isOrgMemberSafe(resource.data.retailerOrgId) ||
-        isOrgMemberSafe(resource.data.supplierOrgId) ||
-        isAdmin()
-      );
+      allow read: if matchesUser(resourceField('retailerUserId')) ||
+                   matchesUser(resourceField('supplierUserId')) ||
+                   matchesEitherOrg(resourceField('retailerOrgId'), resourceField('supplierOrgId'));
 
-      allow create: if isAuthenticated() && (
-        userMatches(request.resource.data.retailerUserId) ||
-        userMatches(request.resource.data.supplierUserId) ||
-        isAdmin()
-      );
+      allow create: if matchesUser(requestField('retailerUserId')) ||
+                     matchesUser(requestField('supplierUserId')) ||
+                     matchesEitherOrg(requestField('retailerOrgId'), requestField('supplierOrgId'));
 
-      allow update: if isAuthenticated() && (
-        isAdmin() ||
-        userMatches(resource.data.supplierUserId)
-      );
+      allow update: if matchesUser(resourceField('supplierUserId')) ||
+                     matchesEitherOrg(resourceField('retailerOrgId'), resourceField('supplierOrgId'));
     }
 
     match /ledger_entries/{entryId} {
-      allow read: if isAuthenticated() && (
-        userMatches(resource.data.retailerUserId) ||
-        userMatches(resource.data.supplierUserId) ||
-        isOrgMemberSafe(resource.data.retailerOrgId) ||
-        isOrgMemberSafe(resource.data.supplierOrgId) ||
-        isAdmin()
-      );
+      allow read: if matchesEitherOrg(resourceField('retailerOrgId'), resourceField('supplierOrgId')) ||
+                   matchesUser(resourceField('supplierUserId')) ||
+                   matchesUser(resourceField('retailerUserId'));
 
       allow create, update: if isAdmin();
     }
-    
-    // ========================================================================
-    // SETTLEMENTS
-    // ========================================================================
-    
+
     match /settlements/{settlementId} {
-      allow read: if isAuthenticated() && (
-        (isDistributor() && request.auth.uid == resource.data.distributorUserId) ||
-        isAdmin()
-      );
-      
-      allow create, update: if isAdmin(); // Only admins can manage settlements
+      allow read: if matchesOrg(resourceField('distributorId')) || isAdmin();
+      allow create, update: if isAdmin();
     }
-    
-    // ========================================================================
-    // LEGACY COLLECTIONS (Backward Compatibility)
-    // ========================================================================
-    
-    // Legacy pos_products collection
-    match /pos_products/{productId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && resource.data.orgId != null && isOrgMember(resource.data.orgId);
+
+    match /notifications/{notificationId} {
+      allow read: if matchesUser(resourceField('userId'));
+      allow create: if matchesUser(requestField('userId'));
+      allow update, delete: if matchesUser(resourceField('userId'));
     }
-    
-    // Legacy inventory collection
-    match /inventory/{inventoryId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && resource.data.orgId != null && isOrgMember(resource.data.orgId);
+
+    match /invitations/{invitationId} {
+      allow read: if isSignedIn();
+      allow create: if matchesUser(requestField('inviterId')) || isAdmin();
+      allow update, delete: if matchesUser(resourceField('inviterId')) || isAdmin();
     }
-    
-    // Legacy pos_orders collection
-    match /pos_orders/{orderId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && resource.data.orgId != null && isOrgMember(resource.data.orgId);
-    }
-    
-    // Legacy org_settings collection
-    match /org_settings/{orgId} {
-      allow read: if isOrgMember(orgId);
-      allow write: if isOrgMember(orgId) && hasRole(orgId, ['admin', 'owner']);
-    }
-    
-    // ========================================================================
-    // ANALYTICS AND REPORTING (Read-only for most users)
-    // ========================================================================
-    
-    match /analytics/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin(); // Only system can write analytics
-    }
-    
-    // ========================================================================
-    // API KEYS AND AUTHENTICATION
-    // ========================================================================
-    
-    match /api_keys/{keyId} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
-    }
-    
-    // ========================================================================
-    // FILE UPLOADS AND METADATA
-    // ========================================================================
-    
-    match /uploads/{uploadId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == resource.data.uploadedBy;
+
+    match /organizations/{orgId}/pos_orders/{orderId} {
+      allow read: if hasOrgAccess(orgId) || matchesUser(resourceField('userId')) || isAdmin();
+      allow create: if isValidPOSOrder(request.resource.data)
+                    && (hasOrgAccess(orgId) || isAdmin());
+      allow update: if isValidPOSOrder(request.resource.data)
+                    && (hasOrgAccess(orgId) || isAdmin());
+      allow delete: if isAdmin();
     }
   }
 }

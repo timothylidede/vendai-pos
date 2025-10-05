@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -14,6 +14,9 @@ import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/hooks/use-toast'
 import { useGlassmorphicToast } from '../ui/glassmorphic-toast'
 import { LoadingSpinner } from '../loading-spinner'
+import { POSCheckoutModal, type CheckoutResult } from './pos-checkout-modal'
+import { useProcessPayment } from '@/lib/payments'
+import type { ProcessCheckoutSuccess } from '@/lib/payments'
 
 type LegacyImageField = 'imageUrl' | 'image_url' | 'imageURL'
 
@@ -55,7 +58,7 @@ type StoredOrderTab = Omit<OrderTab, 'createdAt'> & { createdAt: string }
 export function POSPage() {
   const [headerCollapsed, setHeaderCollapsed] = useState(true)
   const [cart, setCart] = useState<CartLine[]>([])
-  const [activeTab, setActiveTab] = useState<'register' | 'orders'>('register')
+  const [activeTab, setActiveTab] = useState<'register' | 'sales'>('register')
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState('001')
   const [isExiting, setIsExiting] = useState(false)
@@ -71,6 +74,9 @@ export function POSPage() {
   const [addingToCart, setAddingToCart] = useState<string | null>(null) // Track which product is being added
   const [selectedCartIndex, setSelectedCartIndex] = useState(0)
   const [lastInteractedProductId, setLastInteractedProductId] = useState<string | null>(null)
+  const [checkoutOpen, setCheckoutOpen] = useState(false)
+  const [checkoutSubmitting, setCheckoutSubmitting] = useState(false)
+  const { processCheckout } = useProcessPayment()
 
   const [recentOrders, setRecentOrders] = useState<POSOrderDoc[]>([])
   
@@ -173,7 +179,7 @@ export function POSPage() {
     }
   }
 
-  // Load recent orders for Orders tab
+  // Load recent sales for Sales tab
   useEffect(() => {
     let active = true
     ;(async () => {
@@ -275,6 +281,18 @@ export function POSPage() {
   }
 
   const cartTotal = useMemo(() => cart.reduce((sum, l) => sum + l.price * l.quantity, 0), [cart])
+  const checkoutLines = useMemo(
+    () =>
+      cart.map((line) => ({
+        productId: line.productId,
+        name: line.name,
+        quantity: line.quantity,
+        unitPrice: line.price,
+        lineTotal: line.price * line.quantity,
+        image: line.image,
+      })),
+    [cart],
+  )
 
   useEffect(() => {
     if (cart.length === 0) {
@@ -354,6 +372,220 @@ export function POSPage() {
     return false
   }
 
+  const handleCheckoutSubmit = useCallback(async (result: CheckoutResult) => {
+    const orgId = userData?.organizationName || 'default'
+    const userId = userData?.uid || 'anonymous'
+
+    if (cart.length === 0) {
+      throw new Error('Cart is empty. Add items before checking out.')
+    }
+
+    const orderLines: POSOrderLine[] = cart.map((line) => ({
+      productId: line.productId,
+      name: line.name,
+      quantityPieces: line.quantity,
+      unitPrice: line.price,
+      lineTotal: line.quantity * line.price,
+    }))
+
+    const orderNumber = activeOrderId || selectedOrder
+    const receiptSuffix = Date.now().toString().slice(-6)
+    const receiptNumber = `POS-${orderNumber}-${receiptSuffix}`
+    const itemsCount = cart.reduce((count, line) => count + line.quantity, 0)
+
+    const checkoutContext = {
+      ...result.checkoutContext,
+      registerId: result.checkoutContext.registerId ?? activeOrderId,
+      subtotal: cartTotal,
+      grandTotal: cartTotal,
+      payments: result.checkoutContext.payments ?? result.payments,
+      metadata: {
+        ...(result.checkoutContext.metadata ?? {}),
+        orderNumber,
+        customerType: result.customerType,
+      },
+    }
+
+    setCheckoutSubmitting(true)
+
+    const finalizeSuccess = async (response: ProcessCheckoutSuccess) => {
+      const statusCopy = response.status === 'paid' ? 'paid in full' : 'awaiting payment'
+      toast({
+        title: response.status === 'paid' ? 'Sale completed' : 'Sale saved with balance due',
+        description: `Order #${orderNumber} • ${itemsCount} item(s) • ${formatMoney(cartTotal)} • ${statusCopy}`,
+      })
+
+      setCart([])
+
+      if (orderTabs.size === 1) {
+        addNewOrder()
+      } else if (activeOrderId && orderTabs.has(activeOrderId)) {
+        setOrderTabs((prev) => {
+          const next = new Map(prev)
+          const currentTab = next.get(activeOrderId)
+          if (currentTab) {
+            next.set(activeOrderId, {
+              ...currentTab,
+              cart: [],
+              total: 0,
+            })
+          }
+          return next
+        })
+      }
+
+      try {
+        const refreshedOrders = await listRecentOrders(orgId, 30)
+        setRecentOrders(refreshedOrders)
+      } catch (refreshError) {
+        console.error('Failed to refresh recent orders:', refreshError)
+      }
+
+      setCheckoutOpen(false)
+      showGlassToast('Checkout complete', `Order #${orderNumber} ${statusCopy}`)
+    }
+
+    try {
+      const response = await processCheckout({
+        orgId,
+        userId,
+        registerId: activeOrderId,
+        lines: orderLines,
+        total: cartTotal,
+        payments: result.payments,
+        checkoutContext,
+        status: result.status,
+        balanceDue: result.balanceDue,
+        notes: result.notes,
+        receiptNumber,
+        cashierId: userId,
+        events: {
+          onInfo: (message) => showGlassToast('Payment update', message),
+          onStatus: (status) => console.debug('[payments] status', status),
+          onError: (message) =>
+            toast({
+              title: 'Payment notice',
+              description: message,
+            }),
+        },
+      })
+
+      if (!response.success) {
+        const failure = response.error
+        let toastController: ReturnType<typeof toast> | null = null
+
+        const updateToast = (title: string, description: ReactNode) => {
+          if (!toastController) return
+          toastController.update({
+            id: toastController.id,
+            title,
+            description,
+          })
+        }
+
+        async function handleRetryFromToast() {
+          if (!failure.retry) return
+          setCheckoutSubmitting(true)
+          updateToast('Retrying payment…', renderToastContent('Retrying payment. Confirm the terminal response.'))
+          try {
+            const retryResult = await failure.retry()
+            if (retryResult?.success) {
+              toastController?.dismiss()
+              await finalizeSuccess(retryResult)
+            } else if (retryResult?.error) {
+              updateToast('Payment still failing', renderToastContent(retryResult.error.message))
+            }
+          } catch (retryError) {
+            console.error('Retry failed:', retryError)
+            const message =
+              retryError instanceof Error ? retryError.message : 'Retry attempt failed unexpectedly.'
+            updateToast('Retry failed', renderToastContent(message))
+          } finally {
+            setCheckoutSubmitting(false)
+          }
+        }
+
+        async function handleCancelFromToast() {
+          if (!failure.cancel) return
+          updateToast('Voiding order…', 'Cancelling the order. Please wait…')
+          try {
+            await failure.cancel()
+            toastController?.dismiss()
+            toast({
+              title: 'Order cancelled',
+              description: `Order #${orderNumber} was voided.`,
+            })
+            setCheckoutOpen(false)
+          } catch (cancelError) {
+            console.error('Cancel failed:', cancelError)
+            const message =
+              cancelError instanceof Error ? cancelError.message : 'Unable to cancel the order.'
+            updateToast('Cancel failed', renderToastContent(message))
+          } finally {
+            setCheckoutSubmitting(false)
+          }
+        }
+
+        function renderToastContent(message: string) {
+          return (
+            <div className="flex flex-col gap-3">
+              <span>{message}</span>
+              <div className="flex gap-2">
+                {failure.retry && (
+                  <Button size="sm" variant="secondary" onClick={handleRetryFromToast}>
+                    Retry
+                  </Button>
+                )}
+                {failure.cancel && (
+                  <Button size="sm" variant="ghost" onClick={handleCancelFromToast}>
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </div>
+          )
+        }
+
+        toastController = toast({
+          variant: 'destructive',
+          title: 'Payment failed',
+          description: renderToastContent(failure.message),
+        })
+
+        throw failure
+      }
+
+      await finalizeSuccess(response)
+    } catch (error) {
+      console.error('Checkout failed:', error)
+      const description = error instanceof Error ? error.message : 'Unexpected error during checkout.'
+      toast({
+        title: 'Checkout failed',
+        description,
+        variant: 'destructive',
+      })
+      throw error instanceof Error ? error : new Error(description)
+    } finally {
+      setCheckoutSubmitting(false)
+    }
+  }, [
+    userData?.organizationName,
+    userData?.uid,
+    cart,
+    cartTotal,
+    activeOrderId,
+    selectedOrder,
+    orderTabs,
+    addNewOrder,
+    setOrderTabs,
+    setCart,
+    showGlassToast,
+    processCheckout,
+    setCheckoutOpen,
+    setRecentOrders,
+    toast,
+  ])
+
   return (
     <motion.div 
       className="module-background flex flex-col h-[calc(100vh-2.5rem)] overflow-hidden"
@@ -396,14 +628,14 @@ export function POSPage() {
               <button
                 type="button"
                 className={`px-4 py-2 font-semibold text-base rounded-lg transition-all duration-300 relative
-                  ${activeTab === 'orders' 
+                  ${activeTab === 'sales' 
                     ? 'text-green-400 backdrop-blur-md bg-gradient-to-r from-green-500/[0.15] to-green-500/[0.08] border border-green-500/30 shadow-[0_4px_16px_-8px_rgba(34,197,94,0.3)]' 
                     : 'text-slate-200 hover:text-green-400 hover:bg-white/[0.05] backdrop-blur-sm'}`}
-                onClick={() => setActiveTab('orders')}
+                onClick={() => setActiveTab('sales')}
               >
                 <span className="relative">
-                  Orders
-                  {activeTab === 'orders' && (
+                  Sales
+                  {activeTab === 'sales' && (
                     <span className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-green-400 via-green-200 to-green-400 rounded-full blur-sm animate-pulse"></span>
                   )}
                 </span>
@@ -617,10 +849,10 @@ export function POSPage() {
                         <motion.div
                           key={line.productId}
                           className={cn(
-                            'flex items-center gap-4 rounded-2xl border border-white/5 bg-slate-800/40 px-4 py-3 transition-all duration-300 backdrop-blur-md',
+                            'flex items-center gap-4 rounded-2xl border border-white/6 bg-slate-800/35 px-4 py-3 transition-all duration-300 backdrop-blur-md shadow-[0_10px_24px_-20px_rgba(15,118,110,0.35)]',
                             isActive
-                              ? 'selected border-emerald-400/40 bg-emerald-500/15 shadow-[0_18px_40px_-24px_rgba(16,185,129,0.65)]'
-                              : 'hover:border-emerald-400/30 hover:bg-slate-800/60'
+                              ? 'selected border-emerald-400/35 bg-emerald-500/12 shadow-[0_14px_32px_-26px_rgba(16,185,129,0.45)]'
+                              : 'hover:border-emerald-400/20 hover:bg-slate-800/55'
                           )}
                           whileHover={{ scale: 1.01, x: 4 }}
                           onClick={() => {
@@ -718,65 +950,22 @@ export function POSPage() {
                     <span>Total</span>
                     <span>{formatMoney(cartTotal)}</span>
                   </div>
-                  <motion.button
-                    whileHover={{ scale: 1.05, backgroundColor: 'rgba(16,185,129,0.18)' }}
-                    whileTap={{ scale: 0.97 }}
-                    transition={{ type: 'spring', stiffness: 300 }}
-                    className="w-full bg-gradient-to-r from-green-300 via-green-400 to-slate-800 text-white font-semibold text-lg py-3 rounded-lg"
-                    onClick={async () => {
-                      const orgId = userData?.organizationName || 'default'
-                      const userId = userData?.uid || 'anonymous'
-                      const lines: POSOrderLine[] = cart.map(l => ({
-                        productId: l.productId,
-                        name: l.name,
-                        quantityPieces: l.quantity,
-                        unitPrice: l.price,
-                        lineTotal: l.quantity * l.price,
-                      }))
-                      
-                      // Add order ID to the order
-                      const orderNumber = activeOrderId || selectedOrder
-                      
-                      try {
-                        await addPosOrder(orgId, userId, lines)
-                        const itemsCount = cart.reduce((n, l) => n + l.quantity, 0)
-                        toast({ 
-                          title: 'Order completed!', 
-                          description: `Order #${orderNumber} • ${itemsCount} item(s) • ${formatMoney(cartTotal)}` 
-                        })
-                        
-                        // Clear current tab and create new one if this was the last tab
-                        setCart([])
-                        if (orderTabs.size === 1) {
-                          // Create a new order tab
-                          addNewOrder()
-                        } else {
-                          // Just clear current tab
-                          if (activeOrderId && orderTabs.has(activeOrderId)) {
-                            const clearedTab: OrderTab = {
-                              ...orderTabs.get(activeOrderId)!,
-                              cart: [],
-                              total: 0
-                            }
-                            setOrderTabs(prev => new Map(prev.set(activeOrderId, clearedTab)))
-                          }
-                        }
-                        
-                        // Refresh recent orders list
-                        const refreshedOrders = await listRecentOrders(orgId, 30)
-                        setRecentOrders(refreshedOrders)
-                      } catch (e) {
-                        console.error('Order failed:', e)
-                        toast({ 
-                          title: 'Failed to complete order', 
-                          description: e instanceof Error ? e.message : String(e),
-                          variant: 'destructive'
-                        })
-                      }
-                    }}
+                  <motion.div
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    transition={{ type: 'spring', stiffness: 280, damping: 18 }}
                   >
-                    Complete Order #{activeOrderId}
-                  </motion.button>
+                    <Button
+                      onClick={() => setCheckoutOpen(true)}
+                      disabled={checkoutSubmitting}
+                      className="w-full rounded-xl bg-gradient-to-r from-emerald-400/80 via-emerald-500/80 to-emerald-600/70 px-6 py-3 text-lg font-semibold text-white shadow-[0_16px_38px_-26px_rgba(5,150,105,0.48)] backdrop-blur-md hover:bg-emerald-500/90 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {checkoutSubmitting ? 'Finalizing…' : `Begin Checkout #${activeOrderId}`}
+                    </Button>
+                  </motion.div>
+                  <p className="mt-3 text-xs text-emerald-200/80">
+                    Multi-step checkout supports split tenders, change tracking, and detailed receipt notes.
+                  </p>
                 </div>
               )}
             </div>
@@ -799,10 +988,10 @@ export function POSPage() {
                     return (
                       <motion.div
                         key={p.id}
-                        whileHover={{ scale: 1.08, y: -8 }}
-                        whileTap={{ scale: 0.95 }}
-                        transition={{ type: 'spring', stiffness: 300, damping: 18 }}
-                        className="group relative rounded-3xl overflow-hidden backdrop-blur-2xl border border-white/10 bg-gradient-to-br from-slate-900/70 via-slate-900/45 to-emerald-900/35 transition-all duration-500 shadow-[0_12px_36px_-20px_rgba(15,118,110,0.32)] hover:border-emerald-300/40 hover:shadow-[0_24px_58px_-28px_rgba(5,150,105,0.36)] cursor-pointer"
+                        whileHover={{ scale: 1.05, y: -6 }}
+                        whileTap={{ scale: 0.96 }}
+                        transition={{ type: 'spring', stiffness: 280, damping: 20 }}
+                        className="group relative rounded-3xl overflow-hidden backdrop-blur-2xl border border-white/8 bg-gradient-to-br from-slate-900/65 via-slate-900/42 to-emerald-900/30 transition-all duration-500 shadow-[0_10px_28px_-22px_rgba(12,104,96,0.32)] hover:border-emerald-300/35 hover:shadow-[0_18px_40px_-26px_rgba(5,150,105,0.28)] cursor-pointer"
                         onClick={() => addProductToCart(p)}
                       >
                         <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
@@ -860,16 +1049,16 @@ export function POSPage() {
           </div>
         </div>
       ) : (
-        /* Orders View */
-  <div className="flex flex-1 overflow-hidden min-h-0">
-          {/* Orders List */}
+        /* Sales View */
+        <div className="flex flex-1 overflow-hidden min-h-0">
+          {/* Sales List */}
           <div className="flex-1 flex flex-col">
-            {/* Orders Header */}
+            {/* Sales Header */}
             <div className="bg-slate-900/40 backdrop-blur-sm px-6 py-4 border-b border-slate-500/30">
               <div className="flex items-center justify-between">
                 <div className="relative flex-1 max-w-lg">
                   <Input 
-                    placeholder="Search Orders..." 
+                    placeholder="Search Sales..." 
                     className="bg-slate-700 border-slate-600 text-white placeholder-slate-400 pl-10"
                   />
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -887,7 +1076,7 @@ export function POSPage() {
               </div>
             </div>
 
-            {/* Orders Content */}
+            {/* Sales Content */}
             <div className="flex-1 overflow-y-auto thin-scroll">
               {recentOrders.map((order) => (
                 <div key={order.id} className="flex items-center justify-between px-6 py-4 border-b border-slate-500/30 hover:bg-slate-800/50 cursor-pointer">
@@ -917,17 +1106,26 @@ export function POSPage() {
             </div>
           </div>
 
-          {/* Right Side - Order Selection */}
+          {/* Right Side - Sale Selection */}
           <div className="w-1/3 border-l border-slate-500/30 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center">
             <div className="text-center text-slate-400">
               <ShoppingCart className="w-16 h-16 mx-auto mb-4 text-slate-600" />
-              <p className="text-lg">Select an order or scan QR code</p>
+              <p className="text-lg">Select a sale or scan QR code</p>
             </div>
           </div>
         </div>
       )}
       
       {/* Glassmorphic Toast Container */}
+      <POSCheckoutModal
+        open={checkoutOpen}
+        onOpenChange={setCheckoutOpen}
+        lines={checkoutLines}
+        total={cartTotal}
+        registerId={activeOrderId}
+        submitting={checkoutSubmitting}
+        onSubmit={handleCheckoutSubmit}
+      />
       <ToastContainer />
     </motion.div>
   )

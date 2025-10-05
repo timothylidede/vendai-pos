@@ -65,6 +65,21 @@ declare global {
         releaseNotes?: string;
       }) => void) => void;
       offUpdateDownloaded: (callback: (info: any) => void) => void;
+
+      // POS payment bridges
+      payments?: {
+        openCashDrawer?: () => Promise<void>;
+        processCardPayment?: (payload: {
+          amount: number;
+          currency: string;
+          orderId: string;
+        }) => Promise<{
+          success: boolean;
+          referenceId?: string;
+          message?: string;
+          error?: string;
+        }>;
+      };
     };
     vendaiAPI?: {
       isElectron: boolean;

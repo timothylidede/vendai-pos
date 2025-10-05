@@ -1,3 +1,10 @@
+import type {
+  POSCheckoutContext,
+  POSOrderStatus,
+  POSPayment,
+  POSPaymentSummary,
+  POSReceipt,
+} from '@/types/pos'
 export interface OrderItem {
   id: number
   name: string
@@ -238,10 +245,20 @@ export interface POSOrderDoc {
   id?: string
   orgId: string
   userId: string
+  cashierId?: string
   lines: POSOrderLine[]
+  payments: POSPayment[]
   total: number
+  balanceDue: number
   createdAt: string
-  status: 'pending' | 'paid' | 'cancelled' | 'completed'
+  completedAt?: string | null
+  status: POSOrderStatus
+  receiptNumber?: string
+  checkoutContext?: POSCheckoutContext
+  receipt?: POSReceipt
+  paymentSummary?: POSPaymentSummary
+  updatedAt?: string
+  notes?: string
   paymentMethod?: string
   paymentRef?: string
 }

@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 // Firebase configuration - use environment variables with fallbacks for production
 const getFirebaseConfig = () => {
@@ -31,6 +32,7 @@ if (process.env.NODE_ENV === 'development') {
 let app: any = null;
 let auth: any = null;
 let db: any = null;
+let storageInstance: any = null;
 let googleProvider: any = null;
 
 try {
@@ -45,6 +47,7 @@ try {
   
   auth = getAuth(app);
   db = getFirestore(app);
+  storageInstance = getStorage(app);
   googleProvider = new GoogleAuthProvider();
   
   // Add additional scopes and custom parameters for better OAuth flow
@@ -64,5 +67,5 @@ try {
   throw new Error('Failed to initialize Firebase. Please check your environment configuration.');
 }
 
-export { auth, db, googleProvider };
+export { auth, db, googleProvider, storageInstance as storage };
 export default app;

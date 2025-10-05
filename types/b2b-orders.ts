@@ -208,6 +208,7 @@ export interface LedgerEntry {
   grossAmount: number
   vendaiCommissionAmount: number
   processorFeeAmount: number
+  taxAmount: number
   netPayoutAmount: number
   currency: string
   reconciliationStatus: ReconciliationStatus

@@ -14,9 +14,11 @@ import {
   type MigrationStatus 
 } from '@/lib/firebase-migration-utils'
 import { useAuth } from '@/contexts/auth-context'
+import { useToast } from '@/hooks/use-toast'
 
 export function FirebaseMigrationPanel() {
   const { userData } = useAuth()
+  const { toast } = useToast()
   const [migrationStatus, setMigrationStatus] = useState<MigrationStatus | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isMigrating, setIsMigrating] = useState(false)
@@ -41,6 +43,11 @@ export function FirebaseMigrationPanel() {
     } catch (err) {
       console.error('Error loading migration status:', err)
       setError('Failed to load migration status')
+      toast({
+        title: 'Unable to load migration status',
+        description: 'Please try refreshing the panel.',
+        variant: 'destructive',
+      })
     } finally {
       setIsLoading(false)
     }
@@ -77,6 +84,10 @@ export function FirebaseMigrationPanel() {
         // Reload status to show completion
         await loadMigrationStatus()
         setMigrationProgress({ step: 'Migration completed successfully!', progress: 100 })
+        toast({
+          title: 'Migration complete',
+          description: 'Your organization data has been moved to the optimized structure.',
+        })
       } else {
         throw new Error('Migration failed')
       }
@@ -85,6 +96,11 @@ export function FirebaseMigrationPanel() {
       console.error('Migration error:', err)
       setError(err instanceof Error ? err.message : 'Migration failed')
       setMigrationProgress(null)
+      toast({
+        title: 'Migration failed',
+        description: err instanceof Error ? err.message : 'Please try again or contact support.',
+        variant: 'destructive',
+      })
     } finally {
       setIsMigrating(false)
     }
@@ -99,13 +115,21 @@ export function FirebaseMigrationPanel() {
     try {
       const success = await testOptimizedStructure(userData.organizationName)
       if (success) {
-        alert('✅ Optimized structure test passed!')
+        toast({
+          title: 'Structure test passed',
+          description: 'Optimized hierarchy is working as expected.',
+        })
       } else {
         throw new Error('Structure test failed')
       }
     } catch (err) {
       console.error('Structure test error:', err)
       setError('Structure test failed')
+      toast({
+        title: 'Structure test failed',
+        description: err instanceof Error ? err.message : 'Please retry in a moment.',
+        variant: 'destructive',
+      })
     } finally {
       setIsLoading(false)
     }

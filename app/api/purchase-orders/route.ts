@@ -23,11 +23,16 @@ import {
   toTimestamp,
 } from '@/lib/b2b-order-utils'
 import { sanitizeInput, schemas } from '@/lib/validation'
+import { checkRateLimit } from '@/lib/api-error-handler'
+import { getAuthScopedRateLimitKey, getRateLimitKey } from '@/lib/rate-limit'
 
 const DEFAULT_LIMIT = 50
 
 export async function GET(request: NextRequest) {
   try {
+    const identifier = getRateLimitKey(request, 'purchase-orders', 'GET')
+    checkRateLimit(identifier, 120, 60_000)
+
     const { searchParams } = new URL(request.url)
     const retailerId = searchParams.get('retailerId')
     const supplierId = searchParams.get('supplierId')
@@ -85,6 +90,14 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const parsed = sanitizeInput(body, schemas.purchaseOrderCreate)
+
+    const clientKey = getRateLimitKey(request, 'purchase-orders', 'POST')
+    checkRateLimit(clientKey, 60, 60_000)
+
+    const actorKey = parsed.createdByUserId ?? parsed.retailerUserId ?? parsed.retailerOrgId
+    if (actorKey) {
+      checkRateLimit(getAuthScopedRateLimitKey(request, actorKey, 'purchase-orders'), 20, 60_000)
+    }
 
     const {
       deliveryCheckpoints,

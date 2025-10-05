@@ -14,6 +14,8 @@ import {
 } from '@/lib/b2b-order-utils'
 import { sanitizeInput, schemas } from '@/lib/validation'
 import type { PurchaseOrder, PurchaseOrderStatus } from '@/types/b2b-orders'
+import { checkRateLimit } from '@/lib/api-error-handler'
+import { getRateLimitKey, getAuthScopedRateLimitKey } from '@/lib/rate-limit'
 
 interface RouteContext {
   params: {
@@ -32,8 +34,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       )
     }
 
+    const globalRateLimitKey = getRateLimitKey(request, 'purchase-orders', 'PATCH')
+    checkRateLimit(globalRateLimitKey, 80, 60_000)
+
     const body = await request.json()
     const parsed = sanitizeInput(body, schemas.purchaseOrderUpdate)
+
+    const actorIdentifier = parsed.updatedByUserId ?? purchaseOrderId
+    const actorRateLimitKey = getAuthScopedRateLimitKey(request, actorIdentifier, 'purchase-orders')
+    checkRateLimit(actorRateLimitKey, 30, 60_000)
 
     const snapshot = await getDoc(purchaseOrderDoc(purchaseOrderId))
     if (!snapshot.exists()) {

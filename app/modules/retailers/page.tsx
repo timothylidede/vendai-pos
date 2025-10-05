@@ -19,12 +19,9 @@ import {
   Mail,
   ArrowLeft,
   Plus,
-  Filter,
-  Search,
   TrendingUp,
   Package,
   DollarSign,
-  RefreshCw,
   AlertTriangle,
 } from 'lucide-react'
 
@@ -32,13 +29,6 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { db } from '@/lib/firebase'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
 import {
   Sheet,
@@ -57,6 +47,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Separator } from '@/components/ui/separator'
+import { DashboardSearchControls } from '@/components/modules/dashboard-search-controls'
 
 type RetailerTab = 'partners' | 'orders' | 'analytics'
 type RetailerStatus = 'active' | 'inactive' | 'pending'
@@ -86,6 +77,7 @@ interface RetailerRecord {
   creditLimit: number
   creditUsed: number
   creditExposure: number
+  mismatches: RetailerMismatch[]
 }
 
 interface PurchaseOrderSummary {
@@ -107,9 +99,78 @@ interface InvoiceSummary {
   dueDate: string | null
 }
 
+type MismatchSeverity = 'low' | 'medium' | 'high'
+
+interface RetailerMismatch {
+  id: string
+  title: string
+  reasons: string[]
+  severity: MismatchSeverity
+  relatedPurchaseOrderId?: string
+  relatedInvoiceId?: string
+  outstandingAmount?: number
+  createdAt?: Date | null
+}
+
+interface RetailerPurchaseOrderRecord {
+  id: string
+  retailerId?: string
+  retailerOrgId?: string
+  retailerName?: string
+  status: string
+  totalAmount: number
+  createdAt: Date | null
+  relatedInvoiceId?: string
+}
+
+interface RetailerInvoiceRecord {
+  id: string
+  retailerId?: string
+  retailerOrgId?: string
+  retailerName?: string
+  status: string
+  paymentStatus: string
+  total: number
+  outstanding: number
+  dueDate: Date | null
+  issueDate: Date | null
+  purchaseOrderId?: string
+}
+
+type FirestoreRecord = Record<string, unknown> & { id: string }
+
 const RETAILER_QUERY_LIMIT = 150
 const PURCHASE_ORDER_QUERY_LIMIT = 500
+const INVOICE_QUERY_LIMIT = 500
 const MILLIS_IN_30_DAYS = 30 * 24 * 60 * 60 * 1000
+const MILLISECONDS_IN_DAY = 24 * 60 * 60 * 1000
+
+const hasMeaningfulOutstanding = (outstanding: number, total?: number): boolean => {
+  if (!Number.isFinite(outstanding) || outstanding <= 0) return false
+  if (typeof total === 'number' && Number.isFinite(total) && total > 0) {
+    const tolerance = Math.max(100, total * 0.01)
+    return outstanding > tolerance
+  }
+  return outstanding > 100
+}
+
+const mismatchSeverityStyles: Record<MismatchSeverity, string> = {
+  high: 'text-red-200 border-red-500/40 bg-red-500/10',
+  medium: 'text-amber-200 border-amber-500/40 bg-amber-500/10',
+  low: 'text-slate-200 border-slate-700/40 bg-slate-800/60',
+}
+
+const mismatchSeverityLabels: Record<MismatchSeverity, string> = {
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+}
+
+const mismatchSeverityRank: Record<MismatchSeverity, number> = {
+  low: 0,
+  medium: 1,
+  high: 2,
+}
 
 const parseNumber = (value: unknown): number => {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -378,6 +439,69 @@ function RetailerDetailsSheet({
                 <Progress value={exposurePercent} className="h-2" />
               </section>
 
+              {retailer.mismatches.length > 0 && (
+                <section className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-amber-200">Operations review</h3>
+                    <span className="text-xs text-amber-200/80">
+                      {retailer.mismatches.length === 1
+                        ? '1 mismatch flagged'
+                        : `${retailer.mismatches.length} mismatches flagged`}
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {retailer.mismatches.map((mismatch) => (
+                      <div
+                        key={mismatch.id}
+                        className="rounded-md border border-amber-500/30 bg-slate-950/40 p-3 text-sm text-slate-200"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="font-medium text-white">{mismatch.title}</p>
+                            {mismatch.reasons.map((reason, index) => (
+                              <p key={`${mismatch.id}-reason-${index}`} className="text-xs text-slate-400">
+                                • {reason}
+                              </p>
+                            ))}
+                          </div>
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${mismatchSeverityStyles[mismatch.severity]}`}
+                          >
+                            {mismatchSeverityLabels[mismatch.severity]}
+                          </span>
+                        </div>
+                        <div className="mt-2 grid gap-2 text-xs text-slate-400 sm:grid-cols-2">
+                          {typeof mismatch.outstandingAmount === 'number' && (
+                            <span>
+                              Outstanding:{' '}
+                              <span className="text-slate-200">{formatCurrency(mismatch.outstandingAmount)}</span>
+                            </span>
+                          )}
+                          {mismatch.relatedInvoiceId && (
+                            <span>
+                              Invoice ID:{' '}
+                              <span className="text-slate-200">{mismatch.relatedInvoiceId}</span>
+                            </span>
+                          )}
+                          {mismatch.relatedPurchaseOrderId && (
+                            <span>
+                              PO ID:{' '}
+                              <span className="text-slate-200">{mismatch.relatedPurchaseOrderId}</span>
+                            </span>
+                          )}
+                          {mismatch.createdAt && (
+                            <span>
+                              Last update:{' '}
+                              <span className="text-slate-200">{formatRelativeDate(mismatch.createdAt)}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               <section className="space-y-2">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-slate-200">Recent purchase orders</h3>
@@ -504,18 +628,286 @@ export default function RetailersPage() {
         orderBy('createdAt', 'desc'),
         limit(PURCHASE_ORDER_QUERY_LIMIT),
       )
+      const invoicesQuery = query(collection(db, 'invoices'), limit(INVOICE_QUERY_LIMIT))
 
-      const [retailersSnapshot, purchaseOrdersSnapshot] = await Promise.all([
+      const [retailersSnapshot, purchaseOrdersSnapshot, invoicesSnapshot] = await Promise.all([
         getDocs(retailersQuery),
         getDocs(purchaseOrdersQuery),
+        getDocs(invoicesQuery),
       ])
 
-      const aggregateMap = buildAggregates(
-        purchaseOrdersSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })),
-      )
+      const purchaseOrderRawRecords: FirestoreRecord[] = purchaseOrdersSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+
+      const aggregateMap = buildAggregates(purchaseOrderRawRecords)
+
+      const purchaseOrderRecords: RetailerPurchaseOrderRecord[] = purchaseOrderRawRecords.map((record) => {
+        const amount = (() => {
+          const data = record.amount as Record<string, unknown> | undefined
+          if (data && typeof data === 'object') {
+            const candidate = parseNumber(data.total ?? data.gross ?? data.net ?? 0)
+            if (candidate) return candidate
+          }
+          return parseNumber(record.total ?? record.orderTotal ?? record.amount ?? 0)
+        })()
+
+        return {
+          id: record.id,
+          retailerId: parseString(record.retailerId ?? record.customerId ?? record.buyerId ?? record.accountId),
+          retailerOrgId: parseString(
+            record.retailerOrgId ?? record.orgId ?? record.distributorOrgId ?? record.supplierOrgId,
+          ),
+          retailerName: parseString(
+            record.retailerName ?? record.customerName ?? record.accountName ?? record.buyerName,
+          ) ?? undefined,
+          status: parseString(record.status ?? record.state) ?? 'pending',
+          totalAmount: amount,
+          createdAt: toDateSafe(record.createdAt ?? record.placedAt ?? record.submittedAt),
+          relatedInvoiceId: parseString(
+            record.invoiceId ?? record.relatedInvoiceId ?? record.invoiceRef ?? record.latestInvoiceId,
+          ) ?? undefined,
+        }
+      })
+
+      const purchaseOrderById = new Map<string, RetailerPurchaseOrderRecord>()
+      purchaseOrderRecords.forEach((po) => {
+        purchaseOrderById.set(po.id, po)
+      })
+
+      const invoiceRawRecords: FirestoreRecord[] = invoicesSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+
+      const invoiceRecords: RetailerInvoiceRecord[] = invoiceRawRecords.map((record) => {
+        const amountData = record.amount as Record<string, unknown> | undefined
+        const paymentData = record.payments as Record<string, unknown> | undefined
+
+        const total = (() => {
+          if (amountData && typeof amountData === 'object') {
+            const candidate = parseNumber(amountData.total ?? amountData.gross ?? amountData.net ?? 0)
+            if (candidate) return candidate
+          }
+          return parseNumber(record.total ?? record.amount ?? 0)
+        })()
+
+        const totalPaid = (() => {
+          if (paymentData && typeof paymentData === 'object') {
+            const candidate = parseNumber(
+              paymentData.totalPaid ?? paymentData.total ?? paymentData.amount ?? paymentData.net ?? 0,
+            )
+            if (candidate) return candidate
+          }
+          return parseNumber(record.totalPaid ?? record.paidAmount ?? record.amountPaid ?? 0)
+        })()
+
+        const explicitBalance = parseNumber(
+          (record.balance as { amount?: unknown } | undefined)?.amount ??
+            (record.summary as { outstanding?: unknown } | undefined)?.outstanding ??
+            record.outstanding ??
+            record.outstandingAmount ??
+            record.balance ??
+            record.balanceDue ??
+            0,
+        )
+
+        const outstanding = explicitBalance > 0 ? explicitBalance : Math.max(0, total - totalPaid)
+
+        return {
+          id: record.id,
+          retailerId: parseString(record.retailerId ?? record.customerId ?? record.buyerId ?? record.accountId) ?? undefined,
+          retailerOrgId: parseString(
+            record.retailerOrgId ?? record.orgId ?? record.distributorOrgId ?? record.supplierOrgId,
+          ) ?? undefined,
+          retailerName: parseString(
+            record.retailerName ?? record.customerName ?? record.accountName ?? record.buyerName,
+          ) ?? undefined,
+          status: parseString(record.status) ?? 'unknown',
+          paymentStatus: parseString(record.paymentStatus ?? record.payment_state) ?? 'unknown',
+          total,
+          outstanding,
+          dueDate: toDateSafe(record.dueDate ?? record.paymentDueDate ?? record.expectedPaymentDate),
+          issueDate: toDateSafe(record.issueDate ?? record.createdAt ?? record.generatedAt),
+          purchaseOrderId: parseString(
+            record.purchaseOrderId ?? record.poId ?? record.relatedPurchaseOrderId ?? record.orderId,
+          ) ?? undefined,
+        }
+      })
+
+      const invoiceById = new Map<string, RetailerInvoiceRecord>()
+      const invoicesByRetailer = new Map<string, RetailerInvoiceRecord[]>()
+      const invoicesByPurchaseOrder = new Map<string, RetailerInvoiceRecord[]>()
+
+      invoiceRecords.forEach((invoice) => {
+        invoiceById.set(invoice.id, invoice)
+        const keys = [invoice.retailerOrgId, invoice.retailerId].filter(Boolean) as string[]
+        keys.forEach((key) => {
+          const existing = invoicesByRetailer.get(key)
+          if (existing) {
+            existing.push(invoice)
+          } else {
+            invoicesByRetailer.set(key, [invoice])
+          }
+        })
+
+        if (invoice.purchaseOrderId) {
+          const existing = invoicesByPurchaseOrder.get(invoice.purchaseOrderId)
+          if (existing) {
+            existing.push(invoice)
+          } else {
+            invoicesByPurchaseOrder.set(invoice.purchaseOrderId, [invoice])
+          }
+        }
+      })
+
+      const mismatchesByRetailer = new Map<string, RetailerMismatch[]>()
+
+      const registerMismatch = (keys: Array<string | undefined>, mismatch: RetailerMismatch) => {
+        keys.forEach((key) => {
+          if (!key) return
+          const existing = mismatchesByRetailer.get(key)
+          if (existing) {
+            const index = existing.findIndex((item) => item.id === mismatch.id)
+            if (index >= 0) {
+              const item = existing[index]
+              const combinedReasons = Array.from(new Set([...item.reasons, ...mismatch.reasons]))
+              const severity =
+                mismatchSeverityRank[mismatch.severity] > mismatchSeverityRank[item.severity]
+                  ? mismatch.severity
+                  : item.severity
+              existing[index] = {
+                ...item,
+                reasons: combinedReasons,
+                severity,
+                relatedInvoiceId: item.relatedInvoiceId ?? mismatch.relatedInvoiceId,
+                relatedPurchaseOrderId: item.relatedPurchaseOrderId ?? mismatch.relatedPurchaseOrderId,
+                outstandingAmount:
+                  typeof mismatch.outstandingAmount === 'number'
+                    ? mismatch.outstandingAmount
+                    : item.outstandingAmount,
+                createdAt: mismatch.createdAt ?? item.createdAt,
+              }
+            } else {
+              existing.push(mismatch)
+            }
+          } else {
+            mismatchesByRetailer.set(key, [mismatch])
+          }
+        })
+      }
+
+      const resolveInvoiceForPurchaseOrder = (
+        purchaseOrderId: string,
+        declaredInvoiceId?: string,
+      ): RetailerInvoiceRecord | undefined => {
+        if (declaredInvoiceId) {
+          const match = invoiceById.get(declaredInvoiceId)
+          if (match) return match
+        }
+        const candidates = invoicesByPurchaseOrder.get(purchaseOrderId)
+        if (!candidates || candidates.length === 0) return undefined
+        return candidates.reduce<RetailerInvoiceRecord | undefined>((latest, current) => {
+          if (!latest) return current
+          if (!latest.issueDate) return current
+          if (!current.issueDate) return latest
+          return current.issueDate.getTime() > latest.issueDate.getTime() ? current : latest
+        }, candidates[0])
+      }
+
+      purchaseOrderRecords.forEach((po) => {
+        const status = po.status.toLowerCase()
+        if (!['fulfilled', 'completed', 'delivered'].includes(status)) {
+          return
+        }
+
+        const resolvedInvoice = po.relatedInvoiceId
+          ? invoiceById.get(po.relatedInvoiceId) ?? resolveInvoiceForPurchaseOrder(po.id, po.relatedInvoiceId)
+          : resolveInvoiceForPurchaseOrder(po.id)
+
+        if (!resolvedInvoice) {
+          registerMismatch(
+            [po.retailerOrgId, po.retailerId],
+            {
+              id: `po-${po.id}-no-invoice`,
+              title: `PO ${po.id} missing invoice`,
+              reasons: ['Fulfilled purchase order is missing a matching invoice.'],
+              severity: 'high',
+              relatedPurchaseOrderId: po.id,
+              createdAt: po.createdAt,
+            },
+          )
+          return
+        }
+
+  if (hasMeaningfulOutstanding(resolvedInvoice.outstanding, resolvedInvoice.total)) {
+          registerMismatch(
+            [po.retailerOrgId, po.retailerId],
+            {
+              id: `po-${po.id}-invoice-outstanding`,
+              title: `PO ${po.id} still outstanding`,
+              reasons: ['Linked invoice still has an outstanding balance after fulfillment.'],
+              severity: 'medium',
+              relatedPurchaseOrderId: po.id,
+              relatedInvoiceId: resolvedInvoice.id,
+              outstandingAmount: resolvedInvoice.outstanding,
+              createdAt: resolvedInvoice.issueDate ?? resolvedInvoice.dueDate,
+            },
+          )
+        }
+      })
+
+      const now = Date.now()
+
+      invoiceRecords.forEach((invoice) => {
+        const keys = [invoice.retailerOrgId, invoice.retailerId]
+        const status = invoice.status.toLowerCase()
+        const paymentStatus = invoice.paymentStatus.toLowerCase()
+        const isPaidStatus = ['paid', 'settled', 'complete', 'completed'].some((state) =>
+          status.includes(state) || paymentStatus.includes(state),
+        )
+
+  if (isPaidStatus && hasMeaningfulOutstanding(invoice.outstanding, invoice.total)) {
+          registerMismatch(keys, {
+            id: `invoice-${invoice.id}-paid-outstanding`,
+            title: `Invoice ${invoice.id} needs reconciliation`,
+            reasons: ['Invoice is marked as paid but retains an outstanding balance.'],
+            severity: 'high',
+            relatedInvoiceId: invoice.id,
+            outstandingAmount: invoice.outstanding,
+            createdAt: invoice.issueDate,
+          })
+        }
+
+        if (
+          hasMeaningfulOutstanding(invoice.outstanding, invoice.total) &&
+          invoice.dueDate &&
+          invoice.dueDate.getTime() + MILLISECONDS_IN_DAY < now
+        ) {
+          registerMismatch(keys, {
+            id: `invoice-${invoice.id}-overdue`,
+            title: `Invoice ${invoice.id} overdue`,
+            reasons: ['Invoice is overdue and still outstanding.'],
+            severity: 'medium',
+            relatedInvoiceId: invoice.id,
+            outstandingAmount: invoice.outstanding,
+            createdAt: invoice.dueDate,
+          })
+        }
+
+        if (invoice.purchaseOrderId && !purchaseOrderById.has(invoice.purchaseOrderId)) {
+          registerMismatch(keys, {
+            id: `invoice-${invoice.id}-missing-po`,
+            title: `Invoice ${invoice.id} missing PO`,
+            reasons: ['Invoice references a purchase order not found in recent records.'],
+            severity: 'low',
+            relatedInvoiceId: invoice.id,
+            relatedPurchaseOrderId: invoice.purchaseOrderId,
+            createdAt: invoice.issueDate,
+          })
+        }
+      })
 
       const mappedRetailers: RetailerRecord[] = retailersSnapshot.docs.map((doc) => {
         const data = doc.data() as Record<string, unknown>
@@ -533,7 +925,7 @@ export default function RetailersPage() {
 
         const credit = data.credit as { limit?: number; used?: number; outstanding?: number } | undefined
         const creditProfile = data.credit_profile as { limit?: number; utilised?: number; outstanding?: number } | undefined
-        
+
         const creditLimit = parseNumber(
           data.creditLimit ?? credit?.limit ?? creditProfile?.limit ?? 0,
         )
@@ -543,6 +935,14 @@ export default function RetailersPage() {
         const outstanding = parseNumber(
           data.creditOutstanding ?? credit?.outstanding ?? creditProfile?.outstanding ?? creditUsed,
         )
+
+        const mismatchList =
+          mismatchesByRetailer.get(aggregateKey ?? '') ?? mismatchesByRetailer.get(retailerId) ?? []
+        const sortedMismatches = mismatchList.length
+          ? [...mismatchList].sort(
+              (a, b) => mismatchSeverityRank[b.severity] - mismatchSeverityRank[a.severity],
+            )
+          : []
 
         return {
           id: retailerId,
@@ -573,6 +973,7 @@ export default function RetailersPage() {
           creditLimit,
           creditUsed,
           creditExposure: computeCreditExposure(creditLimit, outstanding || creditUsed),
+          mismatches: sortedMismatches,
         }
       })
 
@@ -754,55 +1155,41 @@ export default function RetailersPage() {
               ))}
             </div>
 
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-1 items-center gap-4">
-                <div className="relative flex-1 min-w-[220px]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder="Search by retailer, location, or contact"
-                    className="w-full pl-10 pr-4 py-3 bg-slate-800/60 border border-slate-700/50 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400/50"
-                  />
-                </div>
-                <Button
-                  onClick={loadRetailers}
-                  variant="secondary"
-                  className="bg-slate-800/60 border border-slate-700/60 text-slate-200 hover:text-white"
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Refresh
-                </Button>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | RetailerStatus)}>
-                  <SelectTrigger className="w-[150px] bg-slate-800/60 border-slate-700/50 text-slate-200">
-                    <Filter className="w-4 h-4 mr-2" />
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
-                    <SelectItem value="all">All statuses</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select value={sortKey} onValueChange={(value) => setSortKey(value as typeof sortKey)}>
-                  <SelectTrigger className="w-[150px] bg-slate-800/60 border-slate-700/50 text-slate-200">
-                    <SelectValue placeholder="Sort by" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
-                    <SelectItem value="recent">Recent activity</SelectItem>
-                    <SelectItem value="gmv">GMV (desc)</SelectItem>
-                    <SelectItem value="orders">Orders (desc)</SelectItem>
-                    <SelectItem value="credit">Credit exposure</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            <DashboardSearchControls
+              accent="cyan"
+              searchValue={searchTerm}
+              onSearchChange={setSearchTerm}
+              searchPlaceholder="Search by retailer, location, or contact"
+              onRefresh={loadRetailers}
+              filters={[
+                {
+                  id: 'status',
+                  value: statusFilter,
+                  placeholder: 'Status',
+                  onValueChange: (value) => setStatusFilter(value as 'all' | RetailerStatus),
+                  options: [
+                    { value: 'all', label: 'All statuses' },
+                    { value: 'active', label: 'Active' },
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'inactive', label: 'Inactive' },
+                  ],
+                  triggerClassName: 'w-[150px]',
+                },
+                {
+                  id: 'sort',
+                  value: sortKey,
+                  placeholder: 'Sort by',
+                  onValueChange: (value) => setSortKey(value as typeof sortKey),
+                  options: [
+                    { value: 'recent', label: 'Recent activity' },
+                    { value: 'gmv', label: 'GMV (desc)' },
+                    { value: 'orders', label: 'Orders (desc)' },
+                    { value: 'credit', label: 'Credit exposure' },
+                  ],
+                  triggerClassName: 'w-[150px]',
+                },
+              ]}
+            />
 
             {retailersError && (
               <Card className="border border-red-500/30 bg-red-950/20 p-4 text-sm text-red-200 flex items-center gap-3">
@@ -875,6 +1262,17 @@ export default function RetailersPage() {
                           <p className="text-lg font-semibold text-white">{formatCurrency(retailer.monthlyGMV)}</p>
                         </div>
                       </div>
+
+                      {retailer.mismatches.length > 0 && (
+                        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                          <AlertTriangle className="h-4 w-4" />
+                          <span>
+                            {retailer.mismatches.length === 1
+                              ? '1 mismatch flagged for review'
+                              : `${retailer.mismatches.length} mismatches flagged for review`}
+                          </span>
+                        </div>
+                      )}
 
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm text-slate-400">

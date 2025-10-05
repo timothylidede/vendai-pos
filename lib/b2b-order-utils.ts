@@ -109,6 +109,7 @@ export const serializeLedgerEntry = (
     grossAmount: entry.grossAmount ?? 0,
     vendaiCommissionAmount: entry.vendaiCommissionAmount ?? 0,
     processorFeeAmount: entry.processorFeeAmount ?? 0,
+  taxAmount: entry.taxAmount ?? 0,
     netPayoutAmount: entry.netPayoutAmount ?? 0,
     currency: entry.currency ?? 'KES',
     reconciliationStatus: entry.reconciliationStatus ?? 'pending',

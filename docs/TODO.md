@@ -1,10 +1,34 @@
 # VendAI POS - Development TODO
 
-_Last updated: 4 Oct 2025_
+_Last updated: 5 Oct 2025_
 
-## 🔧 Recent Fixes (4 Oct 2025)
+## 🔧 Recent Fixes (5 Oct 2025)
 
-### Fixed Issues in Supplier & Inventory Modules
+- ✅ Retailer supplier module restyled with cool-toned visuals, inventory-aware distributor suggestions, and a minimal empty state (`components/modules/supplier-module.tsx`).
+
+### Fixed Issues in Suppli## 🎨 U### Reconciliation & Reporting
+
+- [x] Build reconciliation service (PO ↔ Invoice ↔ Payment matching) ✅ Cloud Function `reconciliationWorker` matches PO, invoice, and payment documents nightly.
+- [x] Generate ledger entries (commission, supplier payout, tax breakdown) ✅ Ledger records now capture tax amounts and supplier payout metadata during payment release and webhook ingestion.
+- [x] Flag mismatches for operations review
+- [ ] `GET /api/reports/settlements` - Monthly settlement statements
+- [ ] `GET /api/reports/reconciliation` - Reconciliation status dashboard
+
+## 🎨 UX & Polish
+
+- [x] Swap `alert()` calls for toast notifications (`components/ui/use-toast`) ✅ `useToast` is wired across distributor and retailer modules; no `alert()` usage remains.
+- [x] Provide loading/empty/error states for supplier, invoice, retailer, logistics tables ✅ VERIFIED
+- [x] Standardise search/filter UI across distributor dashboards ✅ Shared dashboard search controls rolled out across logistics, retailers, and supplier views.
+- [x] Add animated pagination/skeleton loaders consistent with VendAI design ✅ VERIFIED
+- [x] Add dashboard widget summarising supplier to-dos (pending POs, invoices due, today's deliveries) ✅ VERIFIED
+- [x] Swap `alert()` calls for toast notifications (`components/ui/use-toast`).
+- [x] Build reconciliation service (PO ↔ Invoice ↔ Payment matching)
+- [x] Provide loading/empty/error states for supplier, invoice, retailer, logistics tables.
+- [x] Standardise search/filter UI across distributor dashboards. ✅ Unified dashboard search component adopted by logistics, retailers, and supplier modules.
+- [x] Generate ledger entries (commission, supplier payout, tax breakdown) ✅ Ledger entries now include explicit tax amounts alongside commission and payout data.
+- [x] Add animated pagination/skeleton loaders consistent with VendAI design.
+- [x] Add dashboard widget summarising supplier to-dos (pending POs, invoices due, today's deliveries). ✅ VERIFIED
+- [x] Flag mismatches for operations review
 - ✅ **Supplier Module** (`components/modules/supplier-module.tsx`)
   - Fixed Image component errors (removed `fill` prop, added explicit width/height)
   - Fixed variable declaration order (moved useMemo hooks before callbacks that depend on them)
@@ -52,7 +76,7 @@ _Last updated: 4 Oct 2025_
 
   - [x] Ensure `loadSuppliers` reads canonical distributor source and surfaces failures in the UI (no `alert` usage).
 
-  - [x] Add distributor "to-do" panel (pending PO approvals, overdue deliveries, unpaid invoices) backed by real queries.## 🚨 Blockers (must ship before production cutover)- [ ] `PATCH /api/invoices/[id]` - Update invoice status, payments ❌ NOT IMPLEMENTED (only GET/POST exist)
+  - [x] Add distributor "to-do" panel (pending PO approvals, overdue deliveries, unpaid invoices) backed by real queries.## 🚨 Blockers (must ship before production cutover)
 
 - [x] **Logistics module** (`app/modules/logistics/page.tsx`) ✅ VERIFIED
   - [x] Replace static deliveries/routes/drivers arrays with live Firestore data (`sales_orders`, `drivers`, `routes`).
@@ -86,6 +110,7 @@ _Last updated: 4 Oct 2025_
   - [x] Add debounced search input wired to Firestore queries.
   - [x] Implement real pagination/infinite scroll with smooth transitions (via `framer-motion`); stop loading entire collections.
   - [x] Fixed `limitQuery` compile error - replaced with proper `limit` function
+  - [x] **Fixed Firestore index error** - Deployed composite index for `pos_products` (orgId + searchKeywords + updatedAt) ✅ DEPLOYED (5 Oct 2025)
   
 - [x] **Supplier workspace accuracy** (`components/modules/supplier-module.tsx`) ✅ VERIFIED & FIXED
   - [x] Surface quick "Create PO" CTA on low-stock alerts to close ordering loop.
@@ -96,9 +121,8 @@ _Last updated: 4 Oct 2025_
   - [x] Added missing InvoicePayment.id field
   - [x] Added missing `loading` state variable
 
-- [ ] **Retailer-side supplier experience**
-
-  - [ ] Remove sample fallback data for invoices/retailers; display proper empty/error states instead of hardcoded suppliers.
+- [x] **Retailer-side supplier experience** ✅ VERIFIED
+  - [x] Remove sample fallback data for invoices/retailers; display proper empty/error states instead of hardcoded suppliers.
 
 ### Credit & Risk Management
 
@@ -118,127 +142,92 @@ _Last updated: 4 Oct 2025_
 
 
 ## 🔜 High Priority (after blockers)
-- [x] **Distributor logistics module** (`app/modules/logistics/page.tsx`)
-- [x] `PATCH /api/credit/limits` - Manual limit adjustments ✅ VERIFIED
+- [x] Background job for credit score recalculation after payments ✅ DEPLOYED (functions/src/index.ts: recalculateCreditScores cron + onPaymentReceived trigger)
+- [x] Build reconciliation worker (Cloud Function or scheduler) to match PO ↔ Invoice ↔ Payment and backfill ledger entries. ✅ DEPLOYED (functions/src/index.ts: reconciliationWorker - 2GB memory, daily 02:00)
+- [x] Schedule overdue invoice reminders (email/SMS/in-app). ✅ DEPLOYED (functions/src/index.ts: overdueInvoiceReminders with communication queue - daily 09:00)
+- [x] Extend credit engine integration to downgrade scores on disputes and update watchlist. ✅ DEPLOYED (functions/src/index.ts: onDisputeCreated, onDisputeResolved with real-time triggers)
 
-- [ ] Add `PATCH /api/invoices/{id}` for status transitions, payment IDs, status history.
-
-- [x] Expose `/api/payments/release` to handle escrow payouts post-delivery.
-
-  - [x] Replace static deliveries/routes/drivers arrays with Firestore-backed data (`sales_orders`, `drivers`, `routes`).
-  - [x] Provide actions to update delivery status, assign drivers, and store proof-of-delivery metadata.
-  - [x] Integrate chosen maps provider for live route/ETA visualisation.
-
-- [ ] Background job for credit score recalculation after payments
-
-- [ ] Build reconciliation worker (Cloud Function or scheduler) to match PO ↔ Invoice ↔ Payment and backfill ledger entries.
-
-- [ ] Schedule overdue invoice reminders (email/SMS/in-app).
-
-- [ ] Extend credit engine integration to downgrade scores on disputes and update watchlist.
-
-  - [ ] Integrate chosen maps provider for live route/ETA visualisation.### Reconciliation & Reporting
+### Reconciliation & Reporting
 
 ## 🎨 UX & Polish
 
-- [ ] Swap `alert()` calls for toast notifications (`components/ui/use-toast`).- [ ] **Distributor retailers module** (`app/modules/retailers/page.tsx`)- [ ] Build reconciliation service (PO ↔ Invoice ↔ Payment matching)
+- [x] Swap `alert()` calls for toast notifications (`components/ui/use-toast`). ✅ UPDATED (Firebase Migration Panel now surfaces success/error toasts)
+- [ ] **Distributor retailers module** (`app/modules/retailers/page.tsx`)
+- [x] Build reconciliation service (PO ↔ Invoice ↔ Payment matching) ✅ DEPLOYED (see Cloud Function `reconciliationWorker`)
 
-- [ ] Provide loading/empty/error states for supplier, invoice, retailer, logistics tables.
+- [x] Provide loading/empty/error states for supplier, invoice, retailer, logistics tables. ✅ Logistics map overlay & retry affordances added
 
-- [ ] Standardise search/filter UI across distributor dashboards.  - [ ] Swap hardcoded retailer list for Firestore (`users` where role = retailer) enriched with order/GMV aggregates.- [ ] Generate ledger entries (commission, supplier payout, tax breakdown)
+- [x] Standardise search/filter UI across distributor dashboards. ✅ Unified dashboard search component adopted by logistics, retailers, and supplier modules.
+  - [x] Swap hardcoded retailer list for Firestore (`users` where role = retailer) enriched with order/GMV aggregates.
+  - [x] Generate ledger entries (commission, supplier payout, tax breakdown) ✅ Tax amounts recorded on ledger entries during webhook + release flows.
 
-- [ ] Add animated pagination/skeleton loaders consistent with VendAI design.
+- [x] Add animated pagination/skeleton loaders consistent with VendAI design. ✅ Already rolled out across modules
 
-- [ ] Add dashboard widget summarising supplier to-dos (pending POs, invoices due, today’s deliveries).  - [ ] Inject filtering, sorting, and credit exposure metrics; support drill-down to PO/invoice history.- [ ] Flag mismatches for operations review
+- [x] Add dashboard widget summarising supplier to-dos (pending POs, invoices due, today’s deliveries). ✅ VERIFIED
+  - [x] Inject filtering, sorting, and credit exposure metrics; support drill-down to PO/invoice history.
+  - [x] Flag mismatches for operations review
 
 
 
-## 🛡️ Security & Ops- [ ] **Inventory module UX gaps** (`components/modules/inventory-module.tsx`)- [ ] `GET /api/reports/settlements` - Monthly settlement statements
+## 🛡️ Security & Ops
 
-- [ ] Audit `firestore.rules` / `firestore-optimized.rules` for new collections (distributors, retailers, payments, ledger_entries, settlements).
+- [x] Audit `firestore.rules` / `firestore-optimized.rules` for new collections (distributors, retailers, payments, ledger_entries, settlements)
+  - Updated helpers and match blocks to enforce org-scoped access and mirrored changes in `firestore-optimized.rules`.
+- [ ] Populate prod secrets (M-Pesa, Stripe/Flutterwave, credit engine, Firebase admin) and document deployment steps
+  - [x] Authored `docs/PROD-SECRETS.md` with provisioning + deployment instructions.
+  - [ ] Provision production values in Vercel/Firebase (ops handoff).
+- [x] Add rate limiting / abuse protection for payment + order APIs
+  - Applied global + actor-scoped rate limits to `app/api/invoices` and `app/api/purchase-orders/[purchaseOrderId]`.
+- [x] Remove remaining fallback/sample data before release; rely on telemetry + empty states ✅ VERIFIED
+- [ ] Confirm required Firestore indexes exist (suppliers by org, invoices by status, sales orders by driver/date)
+  - [x] Reviewed `firestore.indexes.json` for coverage.
+  - [ ] Validate presence in Firebase console before launch.
 
-- [ ] Populate prod secrets (M-Pesa, Stripe/Flutterwave, credit engine, Firebase admin) and document deployment steps.  - [ ] Add debounced search input tied to Firestore queries.- [ ] `GET /api/reports/reconciliation` - Reconciliation status dashboard
-
-- [ ] Add rate limiting / abuse protection for payment + order APIs.
-
-- [ ] Remove remaining fallback/sample data before release; rely on telemetry + empty states.  - [ ] Implement real pagination / infinite scroll with smooth transitions using `framer-motion`; avoid loading entire collections at once.
-
-- [ ] Confirm required Firestore indexes exist (suppliers by org, invoices by status, sales orders by driver/date).
-
-  - [ ] Surface quick "Create PO" CTA for low-stock items to close the PO loop.---
+---
 
 ## 📚 Launch Readiness
 
-- [ ] Update `GO-LIVE-GUIDE.md` with final flow diagrams, endpoint list, incident response.- [ ] **Retailer-side supplier experience**
-
+- [ ] Update `GO-LIVE-GUIDE.md` with final flow diagrams, endpoint list, incident response.
 - [ ] Produce distributor & retailer user guides (PO creation, invoice download, payment tracking).
-
-- [ ] Document rollback procedure for payment/credit issues.  - [ ] Remove the Retailers tab when the shared `SupplierModule` renders for retailer personas; split view components if necessary.## B. Frontend Modules - Distributor Side
-
+- [ ] Document rollback procedure for payment/credit issues.
 - [ ] Capture performance benchmarks (API latency, dashboard load) and add to `PRODUCTION-READINESS-REPORT.md`.
+- [ ] Assemble final sign-off checklist assigning owners for backend, distributor UI, retailer UI, payments, credit, ops.
 
-- [ ] Assemble final sign-off checklist assigning owners for backend, distributor UI, retailer UI, payments, credit, ops.  - [ ] Ensure supplier listings read from live distributor data and expose PO creation + invoice tracking workflows for retailers.
+---
 
+## B. Frontend Modules - Distributor Side
 
-- [ ] **End-to-end validation**### 1. Supplier Module (Distributor View)
-
-  - [ ] Execute and document a full scenario: low stock → PO submission → supplier approval → invoice creation → payment webhook → credit update → ledger entry. Capture logs/screenshots for go-live.- [ ] **Remove all hardcoded supplier data** - fetch from Firestore `distributors` collection
+### 1. Supplier Module (Distributor View)
 
 - [ ] **PO Inbox** - Display incoming purchase orders from retailers
-
-## 🔜 High Priority (immediately after blockers)  - [ ] Approve/Edit/Reject actions with status history
-
-- [ ] Implement `PATCH /api/invoices/{id}` for status transitions, payment ID linkage, and status history updates.  - [ ] Bulk approval for multiple POs
-
-- [ ] Expose `/api/payments/release` to process escrow payouts after confirmed delivery.  - [ ] Filtering by status, retailer, date range
-
-- [ ] Build reconciliation worker (Cloud Function / scheduled job) to match PO ↔ Invoice ↔ Payment, flag mismatches, and backfill ledger docs.- [ ] **Sales Orders** - Convert approved POs to sales orders
-
-- [ ] Schedule reminders for overdue invoices (email/SMS/notifications).  - [ ] Fulfillment checklist with delivery checkpoints
-
-- [ ] Extend credit engine integration to downgrade scores on disputes and update the watchlist collection.  - [ ] Assign driver/warehouse
+  - [ ] Approve/Edit/Reject actions with status history
+  - [ ] Bulk approval for multiple POs
+  - [ ] Filtering by status, retailer, date range
+- [ ] **Sales Orders** - Convert approved POs to sales orders
+  - [ ] Fulfillment checklist with delivery checkpoints
+  - [ ] Assign driver/warehouse
 
   - [ ] Mark as delivered with proof capture
-
-## 🎨 UX & Polish- [ ] **Commission Dashboard** - Visualize earnings and payouts
-
-- [ ] Replace `alert()` calls with toast notifications via `components/ui/use-toast`.  - [ ] Use `components/ui/chart.tsx` for revenue trends
-
-- [ ] Provide loading, empty, and error states for supplier, invoice, retailer, and logistics tables.  - [ ] Show pending vs paid commissions
-
-- [ ] Standardise search/filter controls across distributor dashboards (suppliers, invoices, retailers, logistics).  - [ ] Payout schedule calendar
-
-- [ ] Add animated pagination or skeleton loaders to align with VendAI visual language.- [ ] **Invoice Management** - Auto-generated invoices
-
-- [ ] Ship a dashboard widget summarising supplier to-dos (pending POs, invoices due, deliveries today).  - [ ] Link invoices to POs and payments
-
+- [ ] **Commission Dashboard** - Visualize earnings and payouts
+  - [ ] Use `components/ui/chart.tsx` for revenue trends
+  - [ ] Show pending vs paid commissions
+  - [ ] Payout schedule calendar
+- [ ] **Invoice Management** - Auto-generated invoices
+  - [ ] Link invoices to POs and payments
   - [ ] Download/print invoice PDFs
+  - [ ] Track payment status
 
-## 🛡️ Security & Ops  - [ ] Track payment status
+### 2. Inventory Module (Distributor View)
 
-- [ ] Audit `firestore.rules` / `firestore-optimized.rules` for new collections (`distributors`, `retailers`, `payments`, `ledger_entries`, `settlements`) to ensure org-level access control.
+- [ ] **Product catalog management** - Add/edit distributor products
+- [ ] **Stock level tracking** - Real-time inventory counts
+- [x] **Low stock alerts** - Notifications when stock < threshold ✅ VERIFIED
+- [x] **Add search bar** with debounced filtering ✅ VERIFIED
+- [x] **Implement cool pagination effect** (animated transitions, infinite scroll or load more) ✅ VERIFIED
+- [ ] Bulk product upload via CSV
+- [ ] Product image management with lazy loading
 
-- [ ] Populate production secrets (M-Pesa, Stripe/Flutterwave, credit engine, Firebase admin) and document deployment steps.### 2. Inventory Module (Distributor View)
-
-- [ ] Add rate limiting / abuse protection for payment and order endpoints.- [ ] **Product catalog management** - Add/edit distributor products
-
-- [ ] Purge remaining fallback/sample data blocks before final build; rely on telemetry + empty states.- [ ] **Stock level tracking** - Real-time inventory counts
-
-- [ ] Verify required Firestore indexes exist (suppliers by org, invoices by status, sales orders by driver/date).- [ ] **Low stock alerts** - Notifications when stock < threshold
-
-- [ ] **Add search bar** with debounced filtering
-
-## 📚 Documentation & Launch Readiness- [ ] **Implement cool pagination effect** (animated transitions, infinite scroll or load more)
-
-- [ ] Update `GO-LIVE-GUIDE.md` with final flow diagrams, endpoint list, and incident response steps.- [ ] Bulk product upload via CSV
-
-- [ ] Deliver distributor and retailer user guides (PO creation, invoice download, payments tracking).- [ ] Product image management with lazy loading
-
-- [ ] Document rollback procedures for payment failures and credit mis-calculations.
-
-- [ ] Capture performance benchmarks (API latency, dashboard load times) and summarize in `PRODUCTION-READINESS-REPORT.md`.### 3. Logistics Module (Distributor View)
-
-- [ ] Compile a final sign-off checklist assigning owners for backend, distributor UI, retailer UI, payments, credit, and ops.- [ ] **Make fully functional** - Remove hardcoded data
+### 3. Logistics Module (Distributor View)
 
 - [ ] **Active Deliveries** - Real-time delivery tracking
   - [ ] Fetch from `sales_orders` where status = 'in_transit'
@@ -256,7 +245,7 @@ _Last updated: 4 Oct 2025_
   - [ ] Driver availability calendar
 
 ### 4. Retailers Module (Distributor View)
-- [ ] **Make fully functional** - Remove hardcoded data
+
 - [ ] **Retail Partners** - Manage retailer network
   - [ ] Fetch from `users` where role = 'retailer'
   - [ ] View retailer profiles and business info
@@ -275,8 +264,8 @@ _Last updated: 4 Oct 2025_
 ## C. Frontend Modules - Retailer Side
 
 ### 1. Supplier Module (Retailer View)
-- [ ] **Remove Retailers tab completely** - Not relevant for retailer view
-- [ ] **Remove all hardcoded supplier data** - fetch from Firestore
+- [x] **Remove Retailers tab completely** - Not relevant for retailer view ✅ VERIFIED
+- [x] **Remove all hardcoded supplier data** - fetch from Firestore ✅ VERIFIED
 - [ ] **Supplier Discovery** - Browse and connect with distributors
   - [ ] Search by name, category, location
   - [ ] View supplier profiles (products, terms, ratings)
@@ -300,9 +289,9 @@ _Last updated: 4 Oct 2025_
   - [ ] VendAI credit terms and limits
 
 ### 2. Inventory Module (Retailer View)
-- [ ] **Add search bar** with real-time filtering
-- [ ] **Implement cool pagination effect** (animated page transitions or infinite scroll)
-- [ ] **Low stock alerts** - Visual indicators for products < reorder level
+- [x] **Add search bar** with real-time filtering ✅ VERIFIED
+- [x] **Implement cool pagination effect** (animated page transitions or infinite scroll) ✅ VERIFIED
+- [x] **Low stock alerts** - Visual indicators for products < reorder level ✅ VERIFIED
   - [ ] Quick "Create PO" button from low-stock item
   - [ ] Suggested order quantities
 - [ ] **Stock adjustment** - Record wastage, theft, returns
@@ -316,7 +305,7 @@ _Last updated: 4 Oct 2025_
 ### M-Pesa Integration
 - [ ] STK Push implementation via Safaricom Daraja or aggregator
 - [ ] Store Till/Paybill credentials in secure env vars
-- [ ] Callback handler at `/api/payments/webhook`
+- [x] Callback handler at `/api/payments/webhook` ✅ `app/api/payments/webhook/route.ts` handles processor callbacks with signature verification and idempotency guards.
 - [ ] Auto-match payments to invoices using `account_reference`
 - [ ] Handle payment failures and retries
 
@@ -335,12 +324,12 @@ _Last updated: 4 Oct 2025_
 
 ## E. Credit Engine Integration
 
-- [ ] Wire credit engine to payment flow
-  - [ ] Call `assessCredit` after successful payment
-  - [ ] Update credit score snapshot
-  - [ ] Recalculate credit limits
-- [ ] Lower scores on payment failure/dispute
-- [ ] Update watchlist collection for high-risk accounts
+- [x] Wire credit engine to payment flow ✅ Payment webhook triggers `updateCreditProfile` to refresh metrics and limits.
+  - [x] Call `assessCredit` after successful payment
+  - [x] Update credit score snapshot
+  - [x] Recalculate credit limits
+- [x] Lower scores on payment failure/dispute ✅ Dispute/webhook flows adjust metrics and manual adjustments.
+- [x] Update watchlist collection for high-risk accounts ✅ Cloud Functions persist watchlist entries when score dips or disputes spike.
 - [ ] **Credit Insights Dashboard** (new component)
   - [ ] Display credit tier, limit, available balance
   - [ ] Forecast sparkline using `forecastCreditTrajectory`
@@ -352,15 +341,15 @@ _Last updated: 4 Oct 2025_
 ## F. UI/UX Enhancements
 
 ### Search & Filtering
-- [ ] Add search bars to all list views (suppliers, products, invoices, orders)
-- [ ] Implement debounced search for performance
+- [x] Add search bars to all list views (suppliers, products, invoices, orders) ✅ VERIFIED
+- [x] Implement debounced search for performance ✅ VERIFIED
 - [ ] Advanced filters (date range, status, category, etc.)
 - [ ] Save filter presets
 
 ### Pagination & Loading States
-- [ ] Replace basic pagination with animated transitions
-- [ ] Implement infinite scroll or "Load More" with smooth animations
-- [ ] Skeleton loaders for better perceived performance
+- [x] Replace basic pagination with animated transitions ✅ VERIFIED
+- [x] Implement infinite scroll or "Load More" with smooth animations ✅ VERIFIED
+- [x] Skeleton loaders for better perceived performance ✅ VERIFIED
 - [ ] Optimistic UI updates
 
 ### Data Visualization
@@ -460,17 +449,17 @@ _Last updated: 4 Oct 2025_
 ## Priority Matrix
 
 ### High Priority (This Sprint)
-1. Remove hardcoded data from Supplier Module
-2. Add search bars and pagination to Inventory Module
-3. Remove Retailers tab from Retailer-side Supplier Module
+1. ✅ Remove hardcoded data from Supplier Module - COMPLETED
+2. ✅ Add search bars and pagination to Inventory Module - COMPLETED
+3. ✅ Remove Retailers tab from Retailer-side Supplier Module - COMPLETED
 4. Make Logistics Module fetch real data
 5. Make Retailers Module fetch real data
 
 ### Medium Priority (Next Sprint)
-1. Implement payment webhook handler
-2. Wire credit engine to payment flow
+1. ✅ Implement payment webhook handler - COMPLETED
+2. Wire credit engine to payment flow - IN PROGRESS (need background recalc job)
 3. Add PO inbox for distributors
-4. Implement invoice PATCH endpoint
+4. ✅ Implement invoice PATCH endpoint - COMPLETED
 5. Build reconciliation service
 
 ### Low Priority (Backlog)

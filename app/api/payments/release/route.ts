@@ -14,6 +14,8 @@ import {
 import { z } from 'zod'
 
 import { db } from '@/lib/firebase'
+import { checkRateLimit } from '@/lib/api-error-handler'
+import { getAuthScopedRateLimitKey, getRateLimitKey } from '@/lib/rate-limit'
 import {
   createLedgerEntry,
   invoiceDoc,
@@ -107,6 +109,9 @@ const buildSalesOrderHistory = (payload: ReleasePayload, status: string) => ({
 
 export async function POST(request: Request) {
   try {
+    const rateLimitKey = getRateLimitKey(request, 'payments-release', 'POST')
+    checkRateLimit(rateLimitKey, 40, 60_000)
+
     const json = await request.json()
     const parsed = releaseSchema.safeParse(json)
 
@@ -121,6 +126,8 @@ export async function POST(request: Request) {
     }
 
     const payload = parsed.data
+    checkRateLimit(getAuthScopedRateLimitKey(request, payload.releasedBy.id, 'payments-release'), 10, 60_000)
+
     const paymentRef = paymentDoc(payload.paymentId)
     const paymentSnapshot = await getDoc(paymentRef)
 
@@ -147,6 +154,8 @@ export async function POST(request: Request) {
       resolveAmount(paymentData.netAmount) ??
       resolveAmount(paymentData.amount) ??
       0
+
+    let invoiceAmountSummary: { total: number; tax: number; currency?: string } | null = null
 
     const releaseMetadata: Record<string, unknown> = {
       releasedById: payload.releasedBy.id,
@@ -187,6 +196,14 @@ export async function POST(request: Request) {
           payload.releasedBy.name,
           payload.releaseNote ?? 'Escrow release applied',
         )
+
+        const invoiceData = invoiceSnapshot.data() as Record<string, unknown>
+        const amountData = (invoiceData.amount as Record<string, unknown> | undefined) ?? undefined
+        invoiceAmountSummary = {
+          total: resolveAmount(amountData?.total) ?? 0,
+          tax: resolveAmount(amountData?.tax) ?? 0,
+          currency: typeof amountData?.currency === 'string' ? amountData.currency : undefined,
+        }
 
         await updateDoc(invoiceRef, {
           paymentStatus: 'paid',
@@ -257,6 +274,13 @@ export async function POST(request: Request) {
 
     let ledgerUpdate: 'created' | 'updated' | 'skipped' = 'skipped'
     try {
+      const grossAmount = invoiceAmountSummary?.total ?? resolveAmount(paymentData.amount) ?? releaseAmount
+      const taxAmount = invoiceAmountSummary?.tax ?? 0
+      const fees = paymentData.fees ?? {}
+      const vendaiCommissionAmount = Number(fees.vendaiCommission ?? 0) || 0
+      const processorFeeAmount = Number(fees.processor ?? 0) || 0
+      const currency = invoiceAmountSummary?.currency ?? (typeof paymentData.currency === 'string' ? paymentData.currency : 'KES')
+
       const ledgerQuery = query(
         ledgerEntriesCollection(),
         where('paymentId', '==', payload.paymentId),
@@ -269,11 +293,11 @@ export async function POST(request: Request) {
           payoutStatus: 'paid',
           payoutDate: serverTimestamp(),
           netPayoutAmount: releaseAmount,
+          taxAmount,
           updatedAt: serverTimestamp(),
         })
         ledgerUpdate = 'updated'
       } else if (invoiceId && purchaseOrderId) {
-        const fees = paymentData.fees ?? {}
         const ledgerPayload: LedgerEntryCreateInput = {
           retailerOrgId: (paymentData.retailerOrgId as string) ?? '',
           supplierOrgId: (paymentData.supplierOrgId as string) ?? undefined,
@@ -284,11 +308,12 @@ export async function POST(request: Request) {
           supplierName: undefined,
           retailerId: (paymentData.retailerId as string) ?? '',
           retailerName: undefined,
-          grossAmount: Number(paymentData.amount ?? releaseAmount ?? 0) || 0,
-          vendaiCommissionAmount: Number(fees.vendaiCommission ?? 0) || 0,
-          processorFeeAmount: Number(fees.processor ?? 0) || 0,
+          grossAmount: Number(grossAmount) || 0,
+          vendaiCommissionAmount,
+          processorFeeAmount,
+          taxAmount,
           netPayoutAmount: releaseAmount,
-          currency: (paymentData.currency as string) ?? 'KES',
+          currency,
           reconciliationStatus: 'matched',
           payoutStatus: 'paid',
           payoutDate: Timestamp.fromDate(new Date()),

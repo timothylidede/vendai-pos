@@ -10,6 +10,8 @@ import {
 } from 'firebase/firestore'
 
 import { db } from '@/lib/firebase'
+import { checkRateLimit } from '@/lib/api-error-handler'
+import { getRateLimitKey } from '@/lib/rate-limit'
 import {
   createLedgerEntry,
   createPaymentRecord,
@@ -554,6 +556,7 @@ const createLedgerEntryForPayment = async (
     grossAmount: payment.amount,
     vendaiCommissionAmount: payment.vendaiCommission,
     processorFeeAmount: payment.processorFee,
+    taxAmount: invoice.amount?.tax ?? 0,
     netPayoutAmount: payment.netAmount,
     currency: payment.currency,
     reconciliationStatus: payment.status === 'paid' ? 'matched' : payment.status === 'partial' ? 'partial' : 'flagged',
@@ -704,6 +707,9 @@ const updateCreditProfile = async (
 }
 
 export async function POST(request: NextRequest) {
+  const rateLimitKey = getRateLimitKey(request, 'payments-webhook')
+  checkRateLimit(rateLimitKey, 300, 60_000)
+
   const rawBody = await request.text()
 
   if (!verifyWebhookSignature(request, rawBody)) {
@@ -730,6 +736,10 @@ export async function POST(request: NextRequest) {
       { success: false, error: 'Unsupported webhook payload' },
       { status: 400 },
     )
+  }
+
+  if (normalized.invoiceId) {
+    checkRateLimit(getRateLimitKey(request, 'payments-webhook', normalized.invoiceId), 60, 60_000)
   }
 
   const { ref: eventRef, alreadyProcessed } = await ensureEventIdempotency(normalized)

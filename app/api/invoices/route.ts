@@ -17,9 +17,14 @@ import {
 } from '@/lib/b2b-invoice-utils'
 import { sanitizeInput, schemas } from '@/lib/validation'
 import type { Invoice, InvoiceStatus } from '@/types/b2b-orders'
+import { checkRateLimit } from '@/lib/api-error-handler'
+import { getRateLimitKey, getAuthScopedRateLimitKey } from '@/lib/rate-limit'
 
 export async function GET(request: NextRequest) {
   try {
+    const rateLimitKey = getRateLimitKey(request, 'invoices', 'GET')
+    checkRateLimit(rateLimitKey, 120, 60_000)
+
     const searchParams = request.nextUrl.searchParams
     const purchaseOrderId = searchParams.get('purchaseOrderId')
     const retailerOrgId = searchParams.get('retailerOrgId')
@@ -74,8 +79,23 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const globalRateLimitKey = getRateLimitKey(request, 'invoices', 'POST')
+    checkRateLimit(globalRateLimitKey, 60, 60_000)
+
     const body = await request.json()
     const parsed = sanitizeInput(body, schemas.invoiceCreate)
+
+    const actorIdentifier =
+      parsed.createdByUserId ||
+      parsed.supplierUserId ||
+      parsed.retailerUserId ||
+      parsed.supplierOrgId ||
+      parsed.retailerOrgId
+
+    if (actorIdentifier) {
+      const actorRateLimitKey = getAuthScopedRateLimitKey(request, actorIdentifier, 'invoices')
+      checkRateLimit(actorRateLimitKey, 20, 60_000)
+    }
 
     const issueDate = parseIssueDate(parsed.issueDate)
     const dueDate = parseDueDate(parsed.dueDate, issueDate, parsed.paymentTerms)

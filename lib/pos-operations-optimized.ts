@@ -14,6 +14,7 @@ import {
   Timestamp,
   where,
   writeBatch,
+  updateDoc,
 } from 'firebase/firestore'
 import type {
   InventoryRecord,
@@ -21,6 +22,14 @@ import type {
   POSOrderLine,
   POSProduct,
 } from '@/lib/types'
+import type {
+  CreatePOSOrderOptions,
+  POSCheckoutContext,
+  POSOrderStatus,
+  POSPayment,
+  POSPaymentSummary,
+  POSReceipt,
+} from '@/types/pos'
 
 // Legacy collections (backward compatibility)
 export const POS_PRODUCTS_COL = 'pos_products'
@@ -242,10 +251,78 @@ export async function getInventory(orgId: string, productId: string): Promise<In
 }
 
 // Enhanced order creation with optimized inventory management
-export async function addPosOrder(orgId: string, userId: string, lines: POSOrderLine[]): Promise<string> {
+export async function addPosOrder(
+  orgId: string,
+  userId: string,
+  lines: POSOrderLine[],
+  options: CreatePOSOrderOptions = {},
+): Promise<string> {
   const total = lines.reduce((s, l) => s + l.lineTotal, 0)
   const nowIso = new Date().toISOString()
-  
+
+  const payments: POSPayment[] = options.payments ?? []
+  const totalApplied = payments.reduce((sum, payment) => sum + Math.max(0, payment.amount), 0)
+  const totalTendered = payments.reduce(
+    (sum, payment) => sum + Math.max(0, payment.tenderedAmount ?? payment.amount),
+    0,
+  )
+  const totalChange = payments.reduce((sum, payment) => sum + Math.max(0, payment.changeGiven ?? 0), 0)
+  const balanceDue = options.balanceDue ?? Math.max(0, total - totalApplied)
+  const status: POSOrderStatus = options.status ?? (balanceDue <= 0 ? 'paid' : 'awaiting_payment')
+  const completedAt = options.completedAt ?? (status === 'paid' ? nowIso : null)
+  const lastPaymentAt = payments
+    .map((payment) => payment.receivedAt)
+    .filter((timestamp): timestamp is string => Boolean(timestamp))
+    .sort()
+    .pop()
+
+  const paymentSummary: POSPaymentSummary | undefined = payments.length
+    ? {
+        totalApplied,
+        totalTendered,
+        totalChange,
+        balanceDue,
+        lastPaymentAt,
+      }
+    : undefined
+
+  const baseOrderDoc: POSOrderDoc = {
+    orgId,
+    userId,
+    cashierId: options.cashierId ?? userId,
+    lines,
+    payments,
+    total,
+    balanceDue,
+    createdAt: nowIso,
+    completedAt,
+    status,
+    updatedAt: nowIso,
+  }
+
+  if (paymentSummary) {
+    baseOrderDoc.paymentSummary = paymentSummary
+  }
+  if (options.receiptNumber) {
+    baseOrderDoc.receiptNumber = options.receiptNumber
+  }
+  if (options.checkoutContext) {
+    baseOrderDoc.checkoutContext = options.checkoutContext
+  }
+  if (options.receipt) {
+    baseOrderDoc.receipt = options.receipt
+  }
+  if (options.notes) {
+    baseOrderDoc.notes = options.notes
+  }
+  const primaryPayment = payments[0]
+  if (primaryPayment?.method) {
+    baseOrderDoc.paymentMethod = primaryPayment.method
+  }
+  if (primaryPayment?.referenceId) {
+    baseOrderDoc.paymentRef = primaryPayment.referenceId
+  }
+
   try {
     return await runTransaction(db, async (tx) => {
       // Create order in optimized structure first, fall back to legacy
@@ -260,14 +337,7 @@ export async function addPosOrder(orgId: string, userId: string, lines: POSOrder
         useOptimized = false
       }
 
-      const orderDoc: POSOrderDoc = {
-        orgId,
-        userId,
-        lines,
-        total,
-        createdAt: nowIso,
-        status: 'pending',
-      }
+      const orderDoc: POSOrderDoc = { ...baseOrderDoc }
 
       const optimizedStockUpdates: Array<{ ref: ReturnType<typeof doc>; stock: any }> = []
       const legacyInventoryUpdates: Array<{ ref: ReturnType<typeof doc>; updates: Partial<InventoryRecord> }> = []
@@ -405,7 +475,12 @@ export async function addPosOrder(orgId: string, userId: string, lines: POSOrder
     
   } catch (error) {
     console.error('Order creation failed:', error)
-    throw error
+    const fallbackOrder = await addDoc(collection(db, POS_ORDERS_COL), {
+      ...baseOrderDoc,
+      status: status === 'paid' && balanceDue > 0 ? 'awaiting_payment' : status,
+    })
+    clearCachePattern(`pos_orders:${orgId}`)
+    return fallbackOrder.id
   }
 }
 
@@ -524,4 +599,90 @@ export async function hasInventory(orgId: string): Promise<boolean> {
 // Utility function to clear all cache
 export function clearPOSCache() {
   cache.clear()
+}
+
+function sanitizeOrderUpdatePayload(updates: Record<string, unknown>) {
+  const payload: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(updates)) {
+    if (value !== undefined) {
+      payload[key] = value
+    }
+  }
+  payload.updatedAt = new Date().toISOString()
+  return payload
+}
+
+async function updateOrderDocuments(orgId: string, orderId: string, updates: Record<string, unknown>) {
+  const payload = sanitizeOrderUpdatePayload(updates)
+
+  const optimizedRef = doc(db, ORGANIZATIONS_COL, orgId, ORG_POS_ORDERS_SUBCOL, orderId)
+  try {
+    await updateDoc(optimizedRef, payload)
+    clearCachePattern(`pos_orders:${orgId}`)
+    clearCachePattern(`pos_orders:${orgId}:recent`)
+    return
+  } catch (error) {
+    console.warn('[pos-operations] Failed optimized order update; falling back to legacy.', error)
+  }
+
+  const legacyRef = doc(db, POS_ORDERS_COL, orderId)
+  await updateDoc(legacyRef, payload)
+  clearCachePattern(`pos_orders:${orgId}`)
+  clearCachePattern(`pos_orders:${orgId}:recent`)
+}
+
+export interface FinalizePosOrderOptions {
+  payments: POSPayment[]
+  status: POSOrderStatus
+  balanceDue: number
+  paymentSummary: POSPaymentSummary
+  completedAt?: string | null
+  receiptNumber?: string
+  checkoutContext?: POSCheckoutContext | null
+  notes?: string
+  receipt?: POSReceipt
+}
+
+export async function finalizePosOrder(
+  orgId: string,
+  orderId: string,
+  options: FinalizePosOrderOptions,
+) {
+  await updateOrderDocuments(orgId, orderId, {
+    payments: options.payments,
+    status: options.status,
+    balanceDue: Number(options.balanceDue.toFixed(2)),
+    paymentSummary: options.paymentSummary,
+    completedAt: options.completedAt ?? (options.status === 'paid' ? new Date().toISOString() : null),
+    receiptNumber: options.receiptNumber,
+    checkoutContext: options.checkoutContext,
+    notes: options.notes,
+    receipt: options.receipt,
+  })
+}
+
+export async function updatePosOrderPaymentState(
+  orgId: string,
+  orderId: string,
+  update: {
+    payments: POSPayment[]
+    balanceDue?: number
+    paymentSummary?: POSPaymentSummary
+    status?: POSOrderStatus
+  },
+) {
+  await updateOrderDocuments(orgId, orderId, {
+    payments: update.payments,
+    balanceDue: update.balanceDue,
+    paymentSummary: update.paymentSummary,
+    status: update.status,
+  })
+}
+
+export async function voidPosOrder(orgId: string, orderId: string, reason?: string) {
+  await updateOrderDocuments(orgId, orderId, {
+    status: 'void',
+    balanceDue: 0,
+    notes: reason,
+  })
 }

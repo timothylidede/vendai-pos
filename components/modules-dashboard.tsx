@@ -7,7 +7,8 @@ import {
   ShoppingCart, Package, HeartHandshake, Truck, Users,
   ArrowRightCircle,
   Settings, UserCircle, ChevronDown, 
-  User, Mail, MapPin, LogOut, X
+  User, Mail, MapPin, LogOut, X,
+  TrendingUp, PieChart, RefreshCw, AlertTriangle, Receipt
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { signOut } from 'firebase/auth'
@@ -20,6 +21,8 @@ import { hasInventory } from '@/lib/pos-operations'
 import { getOrgSettings } from '@/lib/org-operations'
 import { LoadingSpinner } from './loading-spinner'
 import { UniversalLoading } from './universal-loading'
+import { db } from '@/lib/firebase'
+import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore'
 
 const retailerModules = [
   {

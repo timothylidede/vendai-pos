@@ -39,18 +39,18 @@ Bring the `POSPage` experience in line with a production-ready retail POS that s
 - [x] Surface failures to the UI with actionable retry/cancel options.
 
 ## 4. Receipt Generation & Printing
-- [ ] Build `lib/receipts/receipt-builder.ts` to assemble receipt data.
-- [ ] Create React receipt preview component for web/print.
-- [ ] Add HTML ↔ PDF export (for email / archive).
-- [ ] Wire ESC/POS command generator for thermal printers (Electron path).
-- [ ] Implement IPC bridge `electron/receipt-printer.ts` for USB/Bluetooth printers.
-- [ ] Persist receipt metadata & storage location on the order doc.
+- [x] Build `lib/receipts/receipt-builder.ts` to assemble receipt data.
+- [x] Create React receipt preview component for web/print.
+- [x] Add HTML ↔ PDF export (for email / archive).
+- [x] Wire ESC/POS command generator for thermal printers (Electron path).
+- [x] Implement IPC bridge `electron/receipt-printer.ts` for USB/Bluetooth printers.
+- [x] Persist receipt metadata & storage location on the order doc.
 
 ## 5. Hardware Integrations
-- [ ] Barcode scanner: confirm HID support & add focus management helpers.
-- [ ] Cash drawer: trigger via printer kick or dedicated relay (Electron IPC).
-- [ ] Card reader SDK: encapsulate vendor-specific flows.
-- [ ] Device status indicators in the UI (connected/disconnected).
+- [x] Barcode scanner: confirm HID support & add focus management helpers.
+- [x] Cash drawer: trigger via printer kick or dedicated relay (Electron IPC).
+- [x] Card reader SDK: encapsulate vendor-specific flows.
+- [x] Device status indicators in the UI (connected/disconnected).
 
 ## 6. Inventory & Reporting Enhancements
 - [ ] Ensure stock deductions reflect multi-tender transactions (e.g., void on failure).

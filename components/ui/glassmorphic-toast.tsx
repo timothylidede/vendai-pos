@@ -8,9 +8,10 @@ interface GlassmorphicToastProps {
   description?: string
   duration?: number
   onClose: () => void
+  offsetTop?: number
 }
 
-export function GlassmorphicToast({ show, title, description, duration = 3000, onClose }: GlassmorphicToastProps) {
+export function GlassmorphicToast({ show, title, description, duration = 3000, onClose, offsetTop }: GlassmorphicToastProps) {
   useEffect(() => {
     if (show) {
       const timer = setTimeout(() => {
@@ -33,7 +34,8 @@ export function GlassmorphicToast({ show, title, description, duration = 3000, o
             damping: 20,
             duration: 0.5 
           }}
-          className="fixed top-4 right-4 z-[9999] max-w-sm"
+          className="fixed right-4 z-[9999] max-w-sm"
+          style={{ top: offsetTop ?? 96 }}
         >
           {/* Glassmorphic Toast */}
           <div className="relative rounded-2xl backdrop-blur-2xl bg-gradient-to-br from-white/[0.15] to-white/[0.08] border border-white/[0.12] shadow-[0_8px_32px_-8px_rgba(0,0,0,0.4)] overflow-hidden">
@@ -168,15 +170,15 @@ export function useGlassmorphicToast() {
   const ToastContainer = () => (
     <>
       {toasts.map((toast, index) => (
-        <div key={toast.id} style={{ top: `${16 + index * 80}px` }}>
-          <GlassmorphicToast
-            show={true}
-            title={toast.title}
-            description={toast.description}
-            duration={toast.duration}
-            onClose={() => hideToast(toast.id)}
-          />
-        </div>
+        <GlassmorphicToast
+          key={toast.id}
+          show={true}
+          title={toast.title}
+          description={toast.description}
+          duration={toast.duration}
+          onClose={() => hideToast(toast.id)}
+          offsetTop={96 + index * 88}
+        />
       ))}
     </>
   )

@@ -189,7 +189,11 @@ export const htmlStringToUint8Array = (html: string): Uint8Array => new TextEnco
 
 export const downloadPdf = (pdfBytes: Uint8Array, fileName = 'receipt.pdf') => {
   if (typeof window === 'undefined') return
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+  // Convert Uint8Array to a proper blob-compatible format
+  const buffer = new ArrayBuffer(pdfBytes.length)
+  const view = new Uint8Array(buffer)
+  view.set(pdfBytes)
+  const blob = new Blob([buffer], { type: 'application/pdf' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url

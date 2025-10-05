@@ -3,7 +3,6 @@ import type { POSOrderDoc, POSOrderLine } from '@/lib/types'
 import type { POSReceiptPaymentLine } from '@/types/pos'
 import {
   RECEIPT_BUILDER_VERSION,
-  type ReceiptArtifacts,
   type ReceiptBuilderInput,
   type ReceiptBuilderOptions,
   type ReceiptBuilderResult,
@@ -129,12 +128,14 @@ export const buildReceipt = (
 
   const receiptNumber = order.receiptNumber ?? `POS-${order.id ?? Date.now()}`
   const issuedAt = options.issuedAt ?? order.completedAt ?? order.updatedAt ?? formatISO(new Date())
-  const issuedBy =
+  const issuedBy = String(
     options.issuedBy ??
     options.cashierName ??
     order.checkoutContext?.metadata?.cashierName ??
     order.cashierId ??
-    order.userId
+    order.userId ??
+    'system'
+  )
 
   const receipt = {
     receiptNumber,

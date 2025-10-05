@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import Script from 'next/script'
 import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/contexts/auth-context'
+import { HardwareProvider } from '@/contexts/hardware-context'
 import { VendaiPanel } from '@/components/vendai-panel'
 import { Toaster } from '@/components/ui/toaster'
 import { ErrorBoundary } from '@/components/error-boundary'
@@ -48,11 +49,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
           {/* Main content */}
           <AuthProvider>
-            <ErrorBoundary>
-              <main className="pt-10">
-                {children}
-              </main>
-            </ErrorBoundary>
+            <HardwareProvider>
+              <ErrorBoundary>
+                <main className="pt-10">
+                  {children}
+                </main>
+              </ErrorBoundary>
+            </HardwareProvider>
           </AuthProvider>
           
           {/* vendai Panel */}

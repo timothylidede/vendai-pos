@@ -71,7 +71,7 @@ const PAYMENT_METHOD_LABELS: Record<POSPaymentMethod, string> = {
   other: 'Other',
 }
 
-type PaymentIcon = (props: { className?: string }) => JSX.Element
+type PaymentIcon = React.ComponentType<{ className?: string }>
 
 const PAYMENT_ICONS: Record<POSPaymentMethod, PaymentIcon> = {
   cash: Banknote,

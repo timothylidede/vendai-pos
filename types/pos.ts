@@ -35,6 +35,42 @@ export interface POSPayment {
 	metadata?: Record<string, unknown>
 }
 
+export type POSPaymentAuditEvent =
+	| 'order_created'
+	| 'payment_update'
+	| 'order_finalized'
+	| 'order_voided'
+
+export interface POSInventoryAdjustment {
+	productId: string
+	docPath: string[]
+	qtyBaseDelta: number
+	qtyLooseDelta: number
+	structure: 'optimized' | 'legacy'
+	unitsPerBase?: number
+	appliedAt: string
+}
+
+export interface POSPaymentAuditEntry {
+	id?: string
+	orgId: string
+	orderId: string
+	paymentId?: string
+	method: POSPaymentMethod
+	amount: number
+	tenderedAmount?: number
+	changeGiven?: number
+	status: POSPaymentStatus
+	cashierId?: string
+	processedBy?: string
+	event: POSPaymentAuditEvent
+	note?: string
+	metadata?: Record<string, unknown>
+	receivedAt?: string
+	occurredAt: string
+	recordedAt?: string
+}
+
 export interface POSReceiptPaymentLine {
 	method: POSPaymentMethod
 	amount: number

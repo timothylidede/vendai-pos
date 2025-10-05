@@ -9,14 +9,20 @@ import { motion } from 'framer-motion'
 import type { POSProduct, POSOrderLine, POSOrderDoc } from '@/lib/types'
 import { cn } from '@/lib/utils'
 // Gradually migrating to optimized operations
-import { listPOSProducts, addPosOrder, listRecentOrders, getInventory } from '@/lib/pos-operations-optimized'
+import { listPOSProducts, listRecentOrders, getInventory } from '@/lib/pos-operations-optimized'
 import { useAuth } from '@/contexts/auth-context'
+import { useHardware } from '@/contexts/hardware-context'
 import { useToast } from '@/hooks/use-toast'
 import { useGlassmorphicToast } from '../ui/glassmorphic-toast'
 import { LoadingSpinner } from '../loading-spinner'
 import { POSCheckoutModal, type CheckoutResult } from './pos-checkout-modal'
 import { useProcessPayment } from '@/lib/payments'
 import type { ProcessCheckoutSuccess } from '@/lib/payments'
+import { ReceiptPreview } from '@/components/receipts/receipt-preview'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog'
+import { downloadPdf, type ReceiptPreviewBundle } from '@/lib/receipts'
+import { useScannerFocus } from '@/lib/scanner-focus'
+import { HardwareStatusStrip } from '@/components/hardware-status-strip'
 
 type LegacyImageField = 'imageUrl' | 'image_url' | 'imageURL'
 
@@ -77,8 +83,11 @@ export function POSPage() {
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [checkoutSubmitting, setCheckoutSubmitting] = useState(false)
   const { processCheckout } = useProcessPayment()
+  const { openCashDrawer } = useHardware()
 
   const [recentOrders, setRecentOrders] = useState<POSOrderDoc[]>([])
+  const [receiptPreviewBundle, setReceiptPreviewBundle] = useState<ReceiptPreviewBundle | null>(null)
+  const [receiptDialogOpen, setReceiptDialogOpen] = useState(false)
   
   // Enhanced persistent order tabs
   const [orderTabs, setOrderTabs] = useState<Map<string, OrderTab>>(new Map())
@@ -210,6 +219,63 @@ export function POSPage() {
 
   // Helpers
   const formatMoney = (ksh: number) => `KSh ${ksh.toFixed(2)}`
+
+  const handleDownloadReceiptPdf = useCallback(() => {
+    if (!receiptPreviewBundle?.artifacts) {
+      showGlassToast('Receipt unavailable', 'No receipt artifacts to download yet.')
+      return
+    }
+
+    if (receiptPreviewBundle.artifacts.pdfBytes) {
+      downloadPdf(
+        receiptPreviewBundle.artifacts.pdfBytes,
+        `${receiptPreviewBundle.result.receipt.receiptNumber}.pdf`,
+      )
+      return
+    }
+
+    showGlassToast('PDF not ready', 'The PDF copy is still generating. Try again shortly.')
+  }, [receiptPreviewBundle, showGlassToast])
+
+  const handlePrintReceipt = useCallback(async () => {
+    if (!receiptPreviewBundle) {
+      showGlassToast('Receipt unavailable', 'No receipt data available to print yet.')
+      return
+    }
+
+    const escposBase64 =
+      receiptPreviewBundle.artifacts?.escposBase64 ||
+      (typeof receiptPreviewBundle.result.receipt.metadata?.escposBase64 === 'string'
+        ? (receiptPreviewBundle.result.receipt.metadata?.escposBase64 as string)
+        : undefined)
+
+    if (typeof window !== 'undefined' && window.electronAPI?.receiptPrinter?.printEscPos && escposBase64) {
+      try {
+        await window.electronAPI.receiptPrinter.printEscPos({
+          commandsBase64: escposBase64,
+          jobName: receiptPreviewBundle.result.receipt.receiptNumber,
+        })
+        showGlassToast('Receipt sent to printer', receiptPreviewBundle.result.receipt.receiptNumber)
+        return
+      } catch (error) {
+        console.error('ESC/POS print failed', error)
+        showGlassToast('Printer error', error instanceof Error ? error.message : 'Failed to print receipt')
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      const previewWindow = window.open('', '_blank', 'width=420,height=600')
+      if (previewWindow) {
+        previewWindow.document.write(receiptPreviewBundle.artifacts?.html ?? '')
+        previewWindow.document.close()
+        previewWindow.focus()
+        previewWindow.print()
+        previewWindow.close()
+      } else {
+        window.print()
+      }
+    }
+  }, [receiptPreviewBundle, showGlassToast])
 
   // Add product to cart with duplicate prevention  
   const addProductToCart = useCallback(async (p: POSProduct) => {
@@ -361,16 +427,59 @@ export function POSPage() {
 
   const filteredProducts = products
 
-  const tryQuickAddByCode = (input: string) => {
+  const tryQuickAddByCode = useCallback((input: string) => {
     const raw = input.trim().toLowerCase()
     if (!raw) return false
-    // Match by piece or carton barcode, or exact id
-    const byBarcode = products.find(p => p.pieceBarcode?.toLowerCase() === raw || p.cartonBarcode?.toLowerCase() === raw)
-    if (byBarcode) { addProductToCart(byBarcode); return true }
-    const byId = products.find(p => p.id.toLowerCase() === raw)
-    if (byId) { addProductToCart(byId); return true }
+    const byBarcode = products.find(
+      (p) => p.pieceBarcode?.toLowerCase() === raw || p.cartonBarcode?.toLowerCase() === raw,
+    )
+    if (byBarcode) {
+      addProductToCart(byBarcode)
+      return true
+    }
+    const byId = products.find((p) => p.id.toLowerCase() === raw)
+    if (byId) {
+      addProductToCart(byId)
+      return true
+    }
     return false
-  }
+  }, [addProductToCart, products])
+
+  const handleBarcodeScan = useCallback(
+    (raw: string) => {
+      const code = raw.trim()
+      if (!code) return
+
+      const added = tryQuickAddByCode(code)
+      if (added) {
+        showGlassToast('Scanned', code)
+        setSearchTerm('')
+        return
+      }
+
+      const normalized = code.toLowerCase()
+      const candidate = products.find((product) =>
+        product.name?.toLowerCase().includes(normalized) || product.id.toLowerCase() === normalized,
+      )
+
+      if (candidate) {
+        addProductToCart(candidate)
+        showGlassToast('Scanned', candidate.name)
+        setSearchTerm('')
+        return
+      }
+
+      setSearchTerm(code)
+      showGlassToast('Barcode not found', code)
+    },
+    [addProductToCart, products, showGlassToast, tryQuickAddByCode],
+  )
+
+  const { attach: attachScannerInput, focus: focusScannerInput } = useScannerFocus({
+    targetRef: searchRef,
+    onScan: handleBarcodeScan,
+    updateInputValue: false,
+  })
 
   const handleCheckoutSubmit = useCallback(async (result: CheckoutResult) => {
     const orgId = userData?.organizationName || 'default'
@@ -414,6 +523,14 @@ export function POSPage() {
         title: response.status === 'paid' ? 'Sale completed' : 'Sale saved with balance due',
         description: `Order #${orderNumber} • ${itemsCount} item(s) • ${formatMoney(cartTotal)} • ${statusCopy}`,
       })
+
+      if (response.receiptBundle) {
+        setReceiptPreviewBundle({
+          result: response.receiptBundle,
+          artifacts: response.receiptArtifacts,
+        })
+        setReceiptDialogOpen(true)
+      }
 
       setCart([])
 
@@ -467,6 +584,12 @@ export function POSPage() {
               title: 'Payment notice',
               description: message,
             }),
+          onOpenCashDrawer: async () => {
+            const opened = await openCashDrawer()
+            if (!opened) {
+              showGlassToast('Drawer warning', 'Unable to trigger cash drawer automatically.')
+            }
+          },
         },
       })
 
@@ -584,6 +707,7 @@ export function POSPage() {
     setCheckoutOpen,
     setRecentOrders,
     toast,
+    openCashDrawer,
   ])
 
   return (
@@ -702,7 +826,7 @@ export function POSPage() {
           <div className="flex items-center space-x-4">
             <div className="relative">
               <Input 
-                ref={searchRef}
+                ref={attachScannerInput}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={(e) => {
@@ -724,7 +848,7 @@ export function POSPage() {
               </div>
             </div>
             <button 
-              onClick={() => searchRef.current?.focus()}
+              onClick={focusScannerInput}
               className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
             >
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] via-transparent to-blue-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
@@ -737,6 +861,10 @@ export function POSPage() {
           </div>
         </div>
       </div>
+
+        <div className="px-4 py-3 bg-slate-900/30 border-b border-white/10">
+          <HardwareStatusStrip className="max-w-4xl" />
+        </div>
 
       {/* Order Selection Modal */}
       {showOrderModal && (
@@ -1127,6 +1255,38 @@ export function POSPage() {
         onSubmit={handleCheckoutSubmit}
       />
       <ToastContainer />
+        <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
+          <DialogContent className="max-w-3xl" showCloseButton>
+            <DialogHeader>
+              <DialogTitle className="text-base font-semibold text-slate-100">
+                Receipt preview
+              </DialogTitle>
+            </DialogHeader>
+            {receiptPreviewBundle ? (
+              <ReceiptPreview
+                data={receiptPreviewBundle.result}
+                artifacts={receiptPreviewBundle.artifacts}
+                className="mt-2"
+                actions={
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={handlePrintReceipt}>
+                      Print receipt
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleDownloadReceiptPdf}
+                    >
+                      Download PDF
+                    </Button>
+                  </div>
+                }
+              />
+            ) : (
+              <p className="text-sm text-slate-300">No receipt available yet.</p>
+            )}
+          </DialogContent>
+        </Dialog>
     </motion.div>
   )
 }

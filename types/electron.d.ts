@@ -3,6 +3,58 @@
 export {};
 
 declare global {
+  type HardwareDeviceType = 'barcode-scanner' | 'cash-drawer' | 'card-reader'
+
+  interface HardwareDeviceInfo {
+    id: string
+    label: string
+    type: HardwareDeviceType
+    connected: boolean
+    simulated?: boolean
+    transport?: string
+    vendorId?: number
+    productId?: number
+    path?: string
+    lastSeenAt?: number
+    error?: string | null
+  }
+
+  interface HardwareStatusSnapshot {
+    scanners: HardwareDeviceInfo[]
+    cashDrawers: HardwareDeviceInfo[]
+    cardReaders: HardwareDeviceInfo[]
+    updatedAt: number
+  }
+
+  interface HardwareScannerEvent {
+    deviceId?: string
+    data: string
+    at: number
+    simulated?: boolean
+  }
+
+  interface HardwareRendererEvent<T = unknown> {
+    type: string
+    payload?: T
+  }
+
+  interface CardTransactionRequest {
+    readerId?: string
+    orderId?: string
+    amount: number
+    currency?: string
+    metadata?: Record<string, unknown>
+  }
+
+  interface CardTransactionResponse {
+    success: boolean
+    status?: 'approved' | 'declined' | 'cancelled' | 'error' | 'processing' | 'idle'
+    referenceId?: string
+    message?: string
+    error?: string
+    raw?: unknown
+  }
+
   interface Window {
     electronAPI?: {
       getVersion: () => Promise<string>;
@@ -79,6 +131,27 @@ declare global {
           message?: string;
           error?: string;
         }>;
+      };
+      receiptPrinter?: {
+        printEscPos?: (payload: {
+          commandsBase64: string;
+          jobName?: string;
+        }) => Promise<void>;
+      };
+      hardware?: {
+        getStatus: () => Promise<HardwareStatusSnapshot>;
+        refreshDevices: () => Promise<HardwareStatusSnapshot>;
+        openCashDrawer: (deviceId?: string | null) => Promise<{
+          success: boolean;
+          deviceId?: string;
+          openedAt?: number;
+          error?: string;
+        }>;
+        startCardTransaction: (payload: CardTransactionRequest) => Promise<CardTransactionResponse>;
+        cancelCardTransaction: (reason?: string) => Promise<CardTransactionResponse>;
+        simulateScan: (payload: { data: string; deviceId?: string }) => Promise<HardwareScannerEvent>;
+        onEvent: (callback: (event: HardwareRendererEvent) => void) => () => void;
+        onScannerData: (callback: (event: HardwareScannerEvent) => void) => () => void;
       };
     };
     vendaiAPI?: {

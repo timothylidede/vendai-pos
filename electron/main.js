@@ -14,6 +14,8 @@ const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const express = require('express');
 const crypto = require('crypto');
+const { registerReceiptPrinterIpc } = require('./receipt-printer');
+const { registerHardwareIpc } = require('./hardware-manager');
 const isDev = process.env.NODE_ENV === 'development';
 
 // Single instance lock for proper deep-link handling on Windows
@@ -362,6 +364,8 @@ app.whenReady().then(() => {
 
   createWindow();
   createMenu();
+  registerReceiptPrinterIpc();
+  registerHardwareIpc();
 
   // On Windows, handle protocol URL passed on first launch (cold start)
   try {

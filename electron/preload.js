@@ -59,7 +59,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   offUpdateDownloadProgress: (callback) => ipcRenderer.removeListener('update-download-progress', callback),
   
   onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (event, info) => callback(info)),
-  offUpdateDownloaded: (callback) => ipcRenderer.removeListener('update-downloaded', callback)
+  offUpdateDownloaded: (callback) => ipcRenderer.removeListener('update-downloaded', callback),
+
+  hardware: {
+    getStatus: () => ipcRenderer.invoke('hardware:get-status'),
+    refreshDevices: () => ipcRenderer.invoke('hardware:refresh-devices'),
+    openCashDrawer: (deviceId) => ipcRenderer.invoke('hardware:cash-drawer-open', deviceId ?? null),
+    startCardTransaction: (payload) => ipcRenderer.invoke('hardware:card-transaction-start', payload ?? {}),
+    cancelCardTransaction: (reason) => ipcRenderer.invoke('hardware:card-transaction-cancel', reason),
+    simulateScan: (payload) => ipcRenderer.invoke('hardware:simulate-scan', payload ?? {}),
+    onEvent: (callback) => {
+      if (typeof callback !== 'function') return () => {}
+      const handler = (_event, data) => callback(data)
+      ipcRenderer.on('hardware:event', handler)
+      return () => ipcRenderer.removeListener('hardware:event', handler)
+    },
+    onScannerData: (callback) => {
+      if (typeof callback !== 'function') return () => {}
+      const handler = (_event, data) => callback(data)
+      ipcRenderer.on('hardware:scanner-data', handler)
+      return () => ipcRenderer.removeListener('hardware:scanner-data', handler)
+    },
+  },
+
+  // Receipt printer bridge
+  receiptPrinter: {
+    printEscPos: (payload) => ipcRenderer.invoke('receipt-printer:print-escpos', payload),
+  },
 });
 
 // Expose a limited API for the renderer

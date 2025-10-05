@@ -8,14 +8,24 @@ import type {
   ProcessCheckoutSuccess,
 } from './types'
 import { PaymentProcessorError, type ProcessCheckoutFailure } from './types'
-import type { POSPayment, POSCheckoutContext, POSOrderStatus, POSPaymentSummary } from '@/types/pos'
-import type { POSOrderLine } from '@/lib/types'
+import type { POSPayment, POSCheckoutContext, POSOrderStatus, POSPaymentSummary, POSReceipt } from '@/types/pos'
+import type { POSOrderDoc, POSOrderLine } from '@/lib/types'
 import {
   addPosOrder,
   finalizePosOrder,
   updatePosOrderPaymentState,
   voidPosOrder,
 } from '@/lib/pos-operations-optimized'
+import {
+  buildReceipt,
+  buildEscPosCommands,
+  encodeEscPosAsBase64,
+  renderReceiptToHtml,
+  renderReceiptToPdfBytes,
+  saveReceiptDocuments,
+  type ReceiptArtifacts,
+  type ReceiptBuilderResult,
+} from '@/lib/receipts'
 
 type AsyncRetry = () => Promise<ProcessCheckoutResponse>
 
@@ -49,6 +59,7 @@ interface ActivePaymentState {
   payments: NormalizedPayment[]
   orderId: string
   currentIndex: number
+  createdAt: string
 }
 
 export interface UseProcessPaymentResult {
@@ -115,6 +126,7 @@ export const useProcessPayment = (options: UseProcessPaymentOptions = {}): UsePr
   const eventsRef = useRef<PaymentProcessorEvents | undefined>(undefined)
   const baseParamsRef = useRef<ProcessCheckoutParams | null>(null)
   const attemptsRef = useRef<Map<number, number>>(new Map())
+  const orderCreatedAtRef = useRef<string | null>(null)
 
   const resetState = useCallback(() => {
     controllerRef.current?.abort()
@@ -123,6 +135,7 @@ export const useProcessPayment = (options: UseProcessPaymentOptions = {}): UsePr
     baseParamsRef.current = null
     attemptsRef.current = new Map()
     eventsRef.current = undefined
+    orderCreatedAtRef.current = null
   }, [])
 
   const resolveOrderId = useCallback(async (): Promise<string> => {
@@ -145,6 +158,9 @@ export const useProcessPayment = (options: UseProcessPaymentOptions = {}): UsePr
       },
     }
 
+    const createdAt = new Date().toISOString()
+    orderCreatedAtRef.current = createdAt
+
     const orderId = await addPosOrder(params.orgId, params.userId, params.lines, {
       status: 'awaiting_payment',
       payments: [],
@@ -159,6 +175,7 @@ export const useProcessPayment = (options: UseProcessPaymentOptions = {}): UsePr
       orderId,
       payments: normalizePayments(params.payments),
       currentIndex: 0,
+      createdAt,
     }
 
     return orderId
@@ -232,6 +249,7 @@ export const useProcessPayment = (options: UseProcessPaymentOptions = {}): UsePr
             orderId,
             payments: normalizedPayments,
             currentIndex: idx + 1,
+            createdAt: stateRef.current?.createdAt ?? orderCreatedAtRef.current ?? new Date().toISOString(),
           }
         } catch (adapterError) {
           const appliedPayments = normalizedPayments.slice(0, idx)
@@ -281,6 +299,7 @@ export const useProcessPayment = (options: UseProcessPaymentOptions = {}): UsePr
             orderId,
             payments: normalizedPayments,
             currentIndex: idx,
+            createdAt: stateRef.current?.createdAt ?? orderCreatedAtRef.current ?? new Date().toISOString(),
           }
 
           setLastError(processorError)
@@ -317,6 +336,165 @@ export const useProcessPayment = (options: UseProcessPaymentOptions = {}): UsePr
 
       const orderIdForFinalize = currentState.orderId
 
+      const contextMetadata =
+        params.checkoutContext.metadata && typeof params.checkoutContext.metadata === 'object'
+          ? (params.checkoutContext.metadata as Record<string, unknown>)
+          : {}
+
+      const deriveString = (value: unknown): string | undefined =>
+        typeof value === 'string' && value.trim().length > 0 ? value : undefined
+
+      const orgAddressLines = (() => {
+        const lines = contextMetadata.orgAddressLines
+        if (Array.isArray(lines)) {
+          return lines.filter((line): line is string => typeof line === 'string' && line.trim().length > 0)
+        }
+        const single = deriveString(contextMetadata.orgAddress)
+        return single ? [single] : undefined
+      })()
+
+      const receiptOrg = {
+        id: params.orgId,
+        name:
+          deriveString(contextMetadata.displayOrgName) ??
+          params.checkoutContext.location?.name ??
+          params.orgId,
+        legalName: deriveString(contextMetadata.orgLegalName),
+        addressLines: orgAddressLines,
+        contactEmail: deriveString(contextMetadata.orgEmail),
+        contactPhone: deriveString(contextMetadata.orgPhone),
+        taxRegistration: deriveString(contextMetadata.taxNumber),
+        websiteUrl: deriveString(contextMetadata.orgWebsite),
+        logoUrl: deriveString(contextMetadata.orgLogoUrl),
+        footerNote: deriveString(contextMetadata.receiptFooter),
+        currency: deriveString(contextMetadata.currencyCode) ?? 'KES',
+      }
+
+      const extraFields = [] as { label: string; value: string }[]
+      if (params.checkoutContext.shiftId) {
+        extraFields.push({ label: 'Shift', value: params.checkoutContext.shiftId })
+      }
+      if (params.checkoutContext.channel) {
+        extraFields.push({ label: 'Channel', value: params.checkoutContext.channel })
+      }
+
+      const headerLinesCandidate = contextMetadata.receiptHeaderLines
+      const footerLinesCandidate = contextMetadata.receiptFooterLines
+
+      const receiptOptions = {
+        org: receiptOrg,
+        cashierName: deriveString(contextMetadata.cashierName) ?? params.cashierId ?? params.userId,
+        registerId: params.checkoutContext.registerId ?? params.registerId,
+        notes: params.notes,
+        changeDueOverride: summary.totalChange,
+        extraFields,
+        metadata: {
+          checkoutChannel: params.checkoutContext.channel,
+          builder: 'useProcessPayment',
+        },
+        template: {
+          headerLines:
+            Array.isArray(headerLinesCandidate)
+              ? headerLinesCandidate.filter((line): line is string => typeof line === 'string')
+              : undefined,
+          footerLines:
+            Array.isArray(footerLinesCandidate)
+              ? footerLinesCandidate.filter((line): line is string => typeof line === 'string')
+              : undefined,
+          accentColor: deriveString(contextMetadata.receiptAccentColor),
+        },
+      }
+
+      const nowIso = new Date().toISOString()
+      const orderForReceipt: POSOrderDoc = {
+        id: orderIdForFinalize,
+        orgId: params.orgId,
+        userId: params.userId,
+        cashierId: params.cashierId ?? params.userId,
+        lines: params.lines,
+        payments: finalPayments,
+        total: params.total,
+        balanceDue: summary.balanceDue,
+        createdAt: orderCreatedAtRef.current ?? nowIso,
+        completedAt: finalStatus === 'paid' ? nowIso : null,
+        status: finalStatus,
+        receiptNumber: params.receiptNumber,
+        checkoutContext: enrichedCheckoutContext,
+        paymentSummary: summary,
+        updatedAt: nowIso,
+        notes: params.notes,
+      }
+
+      let receiptResult: ReceiptBuilderResult | undefined
+      let receiptArtifacts: ReceiptArtifacts | undefined
+      let receiptRecord: POSReceipt | undefined
+
+      try {
+        receiptResult = buildReceipt({ order: orderForReceipt }, receiptOptions)
+        const escposBuffer = buildEscPosCommands(receiptResult)
+        const escposBase64 = encodeEscPosAsBase64(escposBuffer)
+        const receiptHtml = renderReceiptToHtml(receiptResult)
+
+        let pdfBytes: Uint8Array | undefined
+        if (typeof window !== 'undefined') {
+          try {
+            pdfBytes = await renderReceiptToPdfBytes(receiptResult)
+          } catch (pdfError) {
+            console.warn('[payments] Receipt PDF generation failed', pdfError)
+          }
+        }
+
+        const persisted: Pick<ReceiptArtifacts, 'documentUrls' | 'storagePaths'> = await (async () => {
+          try {
+            return await saveReceiptDocuments({
+              orgId: params.orgId,
+              orderId: orderIdForFinalize,
+              html: receiptHtml,
+              pdfBytes,
+              metadata: {
+                receiptNumber: receiptResult!.receipt.receiptNumber,
+                builderVersion: receiptResult!.builderMeta.version,
+                orgId: params.orgId,
+              },
+            })
+          } catch (storageError) {
+            console.warn('[payments] Failed to persist receipt documents', storageError)
+            return {}
+          }
+        })()
+
+        const documentUrls = {
+          ...(receiptResult.receipt.documentUrls ?? {}),
+          ...(persisted.documentUrls ?? {}),
+        }
+        const hasDocumentUrls = Boolean(documentUrls.html || documentUrls.pdf)
+
+        const receiptMetadata: Record<string, unknown> = {
+          ...receiptResult.receipt.metadata,
+          escposBase64,
+        }
+
+        if (persisted.storagePaths && (persisted.storagePaths.html || persisted.storagePaths.pdf)) {
+          receiptMetadata.storagePaths = persisted.storagePaths
+        }
+
+        receiptRecord = {
+          ...receiptResult.receipt,
+          documentUrls: hasDocumentUrls ? documentUrls : undefined,
+          metadata: receiptMetadata,
+        }
+
+        receiptArtifacts = {
+          html: receiptHtml,
+          pdfBytes,
+          escposBase64,
+          documentUrls: persisted.documentUrls,
+          storagePaths: persisted.storagePaths,
+        }
+      } catch (receiptError) {
+        console.warn('[payments] Receipt generation failed', receiptError)
+      }
+
       await finalizePosOrder(params.orgId, orderIdForFinalize, {
         payments: finalPayments,
         status: finalStatus,
@@ -325,6 +503,7 @@ export const useProcessPayment = (options: UseProcessPaymentOptions = {}): UsePr
         checkoutContext: enrichedCheckoutContext,
         receiptNumber: params.receiptNumber,
         notes: params.notes,
+        receipt: receiptRecord,
       })
 
       const response: ProcessCheckoutSuccess = {
@@ -334,6 +513,9 @@ export const useProcessPayment = (options: UseProcessPaymentOptions = {}): UsePr
         payments: finalPayments,
         paymentSummary: summary,
         balanceDue: summary.balanceDue,
+        receipt: receiptRecord,
+        receiptBundle: receiptResult,
+        receiptArtifacts,
       }
 
       resetState()
@@ -364,6 +546,7 @@ export const useProcessPayment = (options: UseProcessPaymentOptions = {}): UsePr
             orderId: stateRef.current?.orderId ?? '',
             payments,
             currentIndex: 0,
+            createdAt: orderCreatedAtRef.current ?? new Date().toISOString(),
           }
         }
 
@@ -376,6 +559,7 @@ export const useProcessPayment = (options: UseProcessPaymentOptions = {}): UsePr
           orderId,
           payments: stateRef.current?.payments ?? normalizePayments(params.payments),
           currentIndex: stateRef.current?.currentIndex ?? 0,
+          createdAt: stateRef.current?.createdAt ?? orderCreatedAtRef.current ?? new Date().toISOString(),
         }
 
         const startIndex = stateRef.current.currentIndex ?? 0

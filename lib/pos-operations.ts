@@ -14,6 +14,14 @@ import {
   Timestamp,
   where,
 } from 'firebase/firestore'
+
+// Ensure db is initialized
+function getDb() {
+  if (!db) {
+    throw new Error('Firestore is not initialized')
+  }
+  return db
+}
 import type {
   InventoryRecord,
   POSOrderDoc,
@@ -84,7 +92,7 @@ export async function listPOSProducts(orgId: string, search?: string, limitN = 6
   try {
     const scopedLimit = Math.min(500, Math.max(hardLimit, 100))
     const qy = query(
-      collection(db, POS_PRODUCTS_COL),
+      collection(getDb(), POS_PRODUCTS_COL),
       where('orgId', '==', orgId),
       limit(scopedLimit)
     )
@@ -92,7 +100,7 @@ export async function listPOSProducts(orgId: string, search?: string, limitN = 6
     let rows = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))
 
     if (!rows.length) {
-      const allSnap = await getDocs(query(collection(db, POS_PRODUCTS_COL), limit(scopedLimit)))
+      const allSnap = await getDocs(query(collection(getDb(), POS_PRODUCTS_COL), limit(scopedLimit)))
       rows = allSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))
     }
 
@@ -106,7 +114,7 @@ export async function listPOSProducts(orgId: string, search?: string, limitN = 6
     return mapped.slice(0, hardLimit)
   } catch (err) {
     console.error('Failed to list POS products', err)
-    const allSnap = await getDocs(query(collection(db, POS_PRODUCTS_COL), limit(500)))
+    const allSnap = await getDocs(query(collection(getDb(), POS_PRODUCTS_COL), limit(500)))
     const rows = allSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }))
     rows.sort((a: any, b: any) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
     const mapped = rows.map(toPOSItem)
@@ -120,7 +128,7 @@ export async function listPOSProducts(orgId: string, search?: string, limitN = 6
 }
 
 export async function getInventory(orgId: string, productId: string): Promise<InventoryRecord | null> {
-  const invRef = doc(db, INVENTORY_COL, `${orgId}_${productId}`)
+  const invRef = doc(getDb(), INVENTORY_COL, `${orgId}_${productId}`)
   const snap = await getDoc(invRef)
   if (!snap.exists()) return null
   return snap.data() as InventoryRecord
@@ -133,7 +141,7 @@ export async function addPosOrder(
   options: CreatePOSOrderOptions = {},
 ): Promise<string> {
   const total = lines.reduce((s, l) => s + l.lineTotal, 0)
-  const orderRef = collection(db, POS_ORDERS_COL)
+  const orderRef = collection(getDb(), POS_ORDERS_COL)
 
   const payments: POSPayment[] = options.payments ?? []
   const totalApplied = payments.reduce((sum, payment) => sum + Math.max(0, payment.amount), 0)
@@ -197,7 +205,7 @@ export async function addPosOrder(
   }
 
   try {
-    const id = await runTransaction(db, async (tx) => {
+    const id = await runTransaction(getDb(), async (tx) => {
       // Create order
       const orderDoc: POSOrderDoc = { ...baseOrderDoc }
       const created = await addDoc(orderRef, orderDoc)
@@ -206,7 +214,7 @@ export async function addPosOrder(
       for (const line of lines) {
         try {
           const invId = `${orgId}_${line.productId}`
-          const invRef = doc(db, INVENTORY_COL, invId)
+          const invRef = doc(getDb(), INVENTORY_COL, invId)
           const snap = await tx.get(invRef)
           
           if (snap.exists()) {
@@ -254,7 +262,7 @@ export async function addPosOrder(
 
       return created.id
     })
-    return id
+    return id as string
   } catch (error) {
     console.error('Transaction failed:', error)
     // If transaction fails, create a simple order without inventory updates
@@ -270,7 +278,7 @@ export async function addPosOrder(
 export async function listRecentOrders(orgId: string, limitN = 30): Promise<{ orders: any[]; missingIndex: boolean; indexHint?: string }> {
   try {
     const qy = query(
-      collection(db, POS_ORDERS_COL),
+      collection(getDb(), POS_ORDERS_COL),
       where('orgId', '==', orgId),
       orderBy('createdAt', 'desc'),
       limit(limitN)
@@ -282,7 +290,7 @@ export async function listRecentOrders(orgId: string, limitN = 30): Promise<{ or
     const isIndex = msg.includes('requires an index')
     // Fallback: no orderBy; client-side sort
     const qy2 = query(
-      collection(db, POS_ORDERS_COL),
+      collection(getDb(), POS_ORDERS_COL),
       where('orgId', '==', orgId),
       limit(limitN)
     )
@@ -299,7 +307,7 @@ export async function listRecentOrders(orgId: string, limitN = 30): Promise<{ or
 export async function hasInventory(orgId: string): Promise<boolean> {
   try {
     // First check inventory collection with exact orgId match
-    const q = query(collection(db, INVENTORY_COL), where('orgId', '==', orgId), limit(1))
+    const q = query(collection(getDb(), INVENTORY_COL), where('orgId', '==', orgId), limit(1))
     const c = await getCountFromServer(q as any)
     if (typeof c.data?.().count === 'number') {
       const count = c.data().count

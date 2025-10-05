@@ -17,6 +17,10 @@ export const saveReceiptDocuments = async (
     return {}
   }
 
+  if (!storage) {
+    throw new Error('Firebase Storage has not been initialized. Ensure firebase.ts exports storage.')
+  }
+
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   const basePath = `receipts/${params.orgId}/${params.orderId}`
   const documentUrls: ReceiptArtifacts['documentUrls'] = {}

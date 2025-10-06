@@ -1,4 +1,4 @@
-# Debugging Authentication Issues on Vercel (app.vendai.digital)
+ Debugging Authentication Issues on Vercel (app.vendai.digital)
 
 ## Error: "An error occurred during sign in. Please try again."
 

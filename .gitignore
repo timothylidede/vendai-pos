@@ -57,3 +57,9 @@ cache/
 tmp/
 temp/
 .vercel
+
+# Scripts with secrets - DO NOT COMMIT
+scripts/setup-all-vercel-env.ps1
+scripts/setup-vercel-env.ps1
+scripts/*-secrets.ps1
+scripts/*-api-keys.*

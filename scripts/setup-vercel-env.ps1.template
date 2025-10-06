@@ -1,0 +1,43 @@
+#!/usr/bin/env pwsh
+# Template: Add Firebase environment variables to Vercel
+# 
+# INSTRUCTIONS:
+# 1. Copy this file to: scripts/setup-vercel-env.ps1 (it's in .gitignore)
+# 2. Fill in your actual API keys from .env.local
+# 3. Run the script to add variables to Vercel
+# 4. DO NOT commit the filled version!
+
+Write-Host "Adding Firebase environment variables to Vercel Production..." -ForegroundColor Cyan
+Write-Host ""
+
+# TODO: Fill in your actual values from .env.local
+$vars = @{
+    "NEXT_PUBLIC_FIREBASE_API_KEY" = "YOUR_FIREBASE_API_KEY_HERE"
+    "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN" = "YOUR_AUTH_DOMAIN_HERE"
+    "NEXT_PUBLIC_FIREBASE_PROJECT_ID" = "YOUR_PROJECT_ID_HERE"
+    "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET" = "YOUR_STORAGE_BUCKET_HERE"
+    "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID" = "YOUR_SENDER_ID_HERE"
+    "NEXT_PUBLIC_FIREBASE_APP_ID" = "YOUR_APP_ID_HERE"
+}
+
+# Check if user filled in the template
+if ($vars["NEXT_PUBLIC_FIREBASE_API_KEY"] -eq "YOUR_FIREBASE_API_KEY_HERE") {
+    Write-Host "ERROR: Please fill in your actual API keys before running this script!" -ForegroundColor Red
+    Write-Host "Copy values from .env.local file." -ForegroundColor Yellow
+    exit 1
+}
+
+foreach ($key in $vars.Keys) {
+    Write-Host "Adding $key..." -ForegroundColor Yellow
+    $value = $vars[$key]
+    echo $value | npx vercel env add $key production
+    Write-Host ""
+}
+
+Write-Host "Done! Now checking what was added..." -ForegroundColor Green
+Write-Host ""
+npx vercel env ls
+
+Write-Host ""
+Write-Host "IMPORTANT: You must redeploy for changes to take effect!" -ForegroundColor Yellow
+Write-Host "Run: npx vercel --prod" -ForegroundColor Cyan

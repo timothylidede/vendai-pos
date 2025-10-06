@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from './ui/button';
 import { motion } from 'framer-motion';
-import { signInWithPopup, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithRedirect, signInWithCredential, GoogleAuthProvider, getRedirectResult } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '@/lib/firebase';
 import { useEffect, useState } from 'react';
@@ -54,7 +54,34 @@ export function WelcomePage() {
     );
 
     setIsElectron(detectedElectron);
+
+    // Handle redirect result from Google Sign-In
+    if (!detectedElectron && auth) {
+      handleRedirectResult();
+    }
   }, []);
+
+  const handleRedirectResult = async () => {
+    try {
+      setIsLoading(true);
+      const result = await getRedirectResult(auth!);
+      
+      if (result?.user) {
+        console.log('✅ Redirect authentication successful');
+        await handleUserAuthentication(result.user);
+      }
+    } catch (error: any) {
+      console.error('🔴 Redirect result error:', error);
+      
+      // Only show error if it's not a user cancellation
+      if (error?.code && !error.code.includes('cancelled') && !error.code.includes('closed')) {
+        setErrorMessage(getErrorMessage(error));
+        setTimeout(() => setErrorMessage(null), 6000);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!isMounted || authLoading) return;
@@ -66,6 +93,33 @@ export function WelcomePage() {
     setIsRedirecting(true);
     router.replace(targetRoute);
   }, [authLoading, isMounted, router, user, userData?.onboardingCompleted]);
+
+  const getErrorMessage = (error: any): string => {
+    if (error?.code === 'auth/unauthorized-domain') {
+      return 'This domain is not authorized. Please check Firebase console settings.';
+    } else if (error?.code === 'auth/popup-blocked') {
+      return 'Pop-up was blocked. Using redirect method instead...';
+    } else if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
+      return 'Sign in was cancelled. Click the button again to continue.';
+    } else if (error?.code === 'auth/network-request-failed') {
+      return 'Network error. Please check your internet connection and try again.';
+    } else if (error?.code === 'auth/too-many-requests') {
+      return 'Too many sign-in attempts. Please wait a few minutes and try again.';
+    } else if (error?.code === 'auth/invalid-action-code') {
+      return 'Sign-in request expired or invalid. Please try again.';
+    } else if (typeof error?.message === 'string') {
+      if (error.message.includes('The requested action is invalid')) {
+        return 'Sign-in request expired. Please try again.';
+      } else if (error.message.includes('OAuth timeout') || error.message.includes('timeout')) {
+        return 'Sign in timed out. Please try again.';
+      } else if (error.message.includes('cancelled') || error.message.includes('closed')) {
+        return 'Sign in was cancelled. Click the button again to continue.';
+      } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        return 'Network error. Please check your internet connection and try again.';
+      }
+    }
+    return 'An error occurred during sign in. Please try again.';
+  };
 
   const handleGoogleSignIn = async () => {
     if (!isMounted || isRedirecting || authLoading) return;
@@ -102,35 +156,7 @@ export function WelcomePage() {
         hasGoogleProvider: Boolean(googleProvider),
       });
 
-      let friendlyMessage = 'An error occurred during sign in. Please try again.';
-
-      if (error?.code === 'auth/unauthorized-domain') {
-        friendlyMessage = 'This domain is not authorized for Google sign-in. Please contact support or try again later.';
-      } else if (error?.code === 'auth/popup-blocked') {
-        friendlyMessage = 'Pop-up was blocked. Please allow pop-ups for this site and try again.';
-      } else if (error?.code === 'auth/popup-closed-by-user') {
-        friendlyMessage = 'Sign in was cancelled. Click the button again to continue.';
-      } else if (error?.code === 'auth/cancelled-popup-request') {
-        friendlyMessage = 'Sign in was cancelled. Click the button again to continue.';
-      } else if (error?.code === 'auth/network-request-failed') {
-        friendlyMessage = 'Network error. Please check your internet connection and try again.';
-      } else if (error?.code === 'auth/too-many-requests') {
-        friendlyMessage = 'Too many sign-in attempts. Please wait a few minutes and try again.';
-      } else if (error?.code === 'auth/invalid-action-code') {
-        friendlyMessage = 'Sign-in request expired or invalid. Please try again.';
-      } else if (typeof error?.message === 'string') {
-        if (error.message.includes('The requested action is invalid')) {
-          friendlyMessage = 'Sign-in request expired. Please try again.';
-        } else if (error.message.includes('OAuth timeout') || error.message.includes('timeout')) {
-          friendlyMessage = 'Sign in timed out. Please try again.';
-        } else if (error.message.includes('cancelled') || error.message.includes('closed')) {
-          friendlyMessage = 'Sign in was cancelled. Click the button again to continue.';
-        } else if (error.message.includes('network') || error.message.includes('fetch')) {
-          friendlyMessage = 'Network error. Please check your internet connection and try again.';
-        }
-      }
-
-      setErrorMessage(friendlyMessage);
+      setErrorMessage(getErrorMessage(error));
       setTimeout(() => setErrorMessage(null), 6000);
     } finally {
       setIsLoading(false);
@@ -148,8 +174,10 @@ export function WelcomePage() {
         await auth.signOut();
       }
       
-      const result = await signInWithPopup(auth, googleProvider);
-      await handleUserAuthentication(result.user);
+      // Use redirect instead of popup - works better with popup blockers
+      console.log('🔄 Redirecting to Google sign-in...');
+      await signInWithRedirect(auth, googleProvider);
+      // User will be redirected away, result handled in handleRedirectResult
     } catch (error) {
       // Re-throw to be handled by the main error handler
       throw error;

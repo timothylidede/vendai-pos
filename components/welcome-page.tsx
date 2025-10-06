@@ -75,8 +75,12 @@ export function WelcomePage() {
 
     try {
       console.log('🚀 Starting authentication process...');
+      console.log('- Environment:', process.env.NODE_ENV);
+      console.log('- Current Domain:', window.location.hostname);
       console.log('- Is Electron:', isElectron);
-      console.log('- Firebase Config Auth Domain:', auth.app.options.authDomain);
+      console.log('- Firebase Auth Domain:', auth?.app?.options?.authDomain);
+      console.log('- Firebase Project ID:', auth?.app?.options?.projectId);
+      console.log('- Firebase API Key (last 4):', auth?.app?.options?.apiKey?.slice(-4));
       
       if (isElectron && (window as any).electronAPI) {
         await handleElectronSignIn();
@@ -88,7 +92,14 @@ export function WelcomePage() {
       console.error('Error details:', {
         code: error?.code,
         message: error?.message,
+        customData: error?.customData,
         stack: error?.stack
+      });
+      console.error('Firebase state:', {
+        authDomain: auth?.app?.options?.authDomain,
+        currentDomain: window.location.hostname,
+        hasAuth: Boolean(auth),
+        hasGoogleProvider: Boolean(googleProvider),
       });
 
       let friendlyMessage = 'An error occurred during sign in. Please try again.';
@@ -127,6 +138,10 @@ export function WelcomePage() {
   };
 
   const handleWebSignIn = async () => {
+    if (!auth || !googleProvider) {
+      throw new Error('Firebase authentication not initialized');
+    }
+
     try {
       // Clear any existing auth state first
       if (auth.currentUser) {
@@ -150,6 +165,10 @@ export function WelcomePage() {
     }
 
     try {
+      if (!auth) {
+        throw new Error('Firebase authentication not initialized');
+      }
+
       const credential = GoogleAuthProvider.credential(
         oauthResult.tokens.idToken || null,
         oauthResult.tokens.accessToken || null
@@ -164,6 +183,10 @@ export function WelcomePage() {
   };
 
   const handleUserAuthentication = async (user: FirebaseUser) => {
+    if (!db) {
+      throw new Error('Firestore not initialized');
+    }
+
     const userDocRef = doc(db, 'users', user.uid);
     const snapshot = await getDoc(userDocRef);
 
@@ -194,6 +217,10 @@ export function WelcomePage() {
   };
 
   const handleElectronFallback = async (googleUser: ElectronOAuthResult['user']) => {
+    if (!db) {
+      throw new Error('Firestore not initialized');
+    }
+
     const userDocRef = doc(db, 'users', googleUser.id);
     const snapshot = await getDoc(userDocRef);
 

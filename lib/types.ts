@@ -4,7 +4,6 @@ import type {
   POSPayment,
   POSPaymentSummary,
   POSReceipt,
-  POSInventoryAdjustment,
 } from '@/types/pos'
 export interface OrderItem {
   id: number
@@ -262,8 +261,4 @@ export interface POSOrderDoc {
   notes?: string
   paymentMethod?: string
   paymentRef?: string
-  inventoryAdjustments?: POSInventoryAdjustment[]
-  inventoryCommitted?: boolean
-  voidedAt?: string | null
-  voidReason?: string
 }

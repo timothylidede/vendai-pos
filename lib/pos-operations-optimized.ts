@@ -16,7 +16,6 @@ import {
   writeBatch,
   updateDoc,
 } from 'firebase/firestore'
-import type { DocumentReference, Transaction } from 'firebase/firestore'
 
 // Ensure db is initialized
 function getDb() {
@@ -38,8 +37,6 @@ import type {
   POSPayment,
   POSPaymentSummary,
   POSReceipt,
-  POSInventoryAdjustment,
-  POSPaymentAuditEvent,
 } from '@/types/pos'
 
 // Legacy collections (backward compatibility)
@@ -52,8 +49,6 @@ export const ORGANIZATIONS_COL = 'organizations'
 export const ORG_PRODUCTS_SUBCOL = 'products'
 export const ORG_INVENTORY_SUBCOL = 'inventory'
 export const ORG_POS_ORDERS_SUBCOL = 'pos_orders'
-export const ORG_POS_PAYMENT_AUDIT_SUBCOL = 'pos_payment_audit'
-export const POS_PAYMENT_AUDIT_COL = 'pos_payment_audit'
 
 // Performance cache
 const cache = new Map<string, { data: any; timestamp: number; ttl: number }>()
@@ -84,16 +79,6 @@ function clearCachePattern(pattern: string) {
       cache.delete(key)
     }
   }
-}
-
-function compactRecord<T extends Record<string, unknown>>(data: T): T {
-  const result: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(data)) {
-    if (value !== undefined) {
-      result[key] = value
-    }
-  }
-  return result as T
 }
 
 // Convert product doc to POS-ready item (supports both old and new structure)
@@ -346,11 +331,8 @@ export async function addPosOrder(
     baseOrderDoc.paymentRef = primaryPayment.referenceId
   }
 
-  let lastInventoryAdjustments: POSInventoryAdjustment[] = []
-  let lastInventoryCommitted = false
-
   try {
-    const createdOrderId = await runTransaction(getDb(), async (tx) => {
+    return await runTransaction(getDb(), async (tx) => {
       // Create order in optimized structure first, fall back to legacy
       let orderRef
       let useOptimized = true
@@ -363,11 +345,10 @@ export async function addPosOrder(
         useOptimized = false
       }
 
-  const orderDoc: POSOrderDoc = { ...baseOrderDoc }
+      const orderDoc: POSOrderDoc = { ...baseOrderDoc }
 
-  const optimizedStockUpdates: Array<{ ref: ReturnType<typeof doc>; stock: any }> = []
-  const legacyInventoryUpdates: Array<{ ref: ReturnType<typeof doc>; updates: Partial<InventoryRecord> }> = []
-  const inventoryAdjustments: POSInventoryAdjustment[] = []
+      const optimizedStockUpdates: Array<{ ref: ReturnType<typeof doc>; stock: any }> = []
+      const legacyInventoryUpdates: Array<{ ref: ReturnType<typeof doc>; updates: Partial<InventoryRecord> }> = []
 
       // Update inventory for each product line
       for (const line of lines) {
@@ -382,8 +363,6 @@ export async function addPosOrder(
             if (productSnap.exists()) {
               const productData = productSnap.data()
               const currentStock = productData.stock || { qtyBase: 0, qtyLoose: 0, unitsPerBase: 1 }
-              const prevQtyBase = currentStock.qtyBase ?? 0
-              const prevQtyLoose = currentStock.qtyLoose ?? 0
               
               // Calculate stock deduction
               const { base: baseToDeduct, loose: looseToDeduct } = computeIssueFromPieces(
@@ -408,27 +387,12 @@ export async function addPosOrder(
                 qtyBase: Math.max(0, newQtyBase),
                 qtyLoose: Math.max(0, newQtyLoose),
                 available: Math.max(0, (Math.max(0, newQtyBase) * (currentStock.unitsPerBase || 1)) + Math.max(0, newQtyLoose)),
-                lastUpdated: nowIso,
-                updatedBy: baseOrderDoc.cashierId ?? userId,
+                lastUpdated: nowIso
               }
               optimizedStockUpdates.push({
                 ref: productRef,
                 stock: updatedStock
               })
-
-              const deltaBase = (updatedStock.qtyBase ?? 0) - prevQtyBase
-              const deltaLoose = (updatedStock.qtyLoose ?? 0) - prevQtyLoose
-              if (deltaBase !== 0 || deltaLoose !== 0) {
-                inventoryAdjustments.push({
-                  productId: line.productId,
-                  docPath: [ORGANIZATIONS_COL, orgId, ORG_PRODUCTS_SUBCOL, line.productId],
-                  qtyBaseDelta: deltaBase,
-                  qtyLooseDelta: deltaLoose,
-                  structure: 'optimized',
-                  unitsPerBase: currentStock.unitsPerBase || 1,
-                  appliedAt: nowIso,
-                })
-              }
             } else {
               // Fallback to legacy inventory for missing optimized docs
               const invRef = doc(getDb(), INVENTORY_COL, `${orgId}_${line.productId}`)
@@ -449,30 +413,13 @@ export async function addPosOrder(
                   }
                 }
 
-                const clampedBase = Math.max(0, newQtyBase)
-                const clampedLoose = Math.max(0, newQtyLoose)
-
                 legacyInventoryUpdates.push({
                   ref: invRef,
                   updates: {
-                    qtyBase: clampedBase,
-                    qtyLoose: clampedLoose
+                    qtyBase: Math.max(0, newQtyBase),
+                    qtyLoose: Math.max(0, newQtyLoose)
                   }
                 })
-
-                const deltaBase = clampedBase - inv.qtyBase
-                const deltaLoose = clampedLoose - inv.qtyLoose
-                if (deltaBase !== 0 || deltaLoose !== 0) {
-                  inventoryAdjustments.push({
-                    productId: line.productId,
-                    docPath: [INVENTORY_COL, `${orgId}_${line.productId}`],
-                    qtyBaseDelta: deltaBase,
-                    qtyLooseDelta: deltaLoose,
-                    structure: 'legacy',
-                    unitsPerBase: inv.unitsPerBase || 1,
-                    appliedAt: nowIso,
-                  })
-                }
               }
             }
           } else {
@@ -496,30 +443,13 @@ export async function addPosOrder(
                   newQtyBase -= 1
                 }
               }
-              const clampedBase = Math.max(0, newQtyBase)
-              const clampedLoose = Math.max(0, newQtyLoose)
-
               legacyInventoryUpdates.push({
                 ref: invRef,
                 updates: {
-                  qtyBase: clampedBase,
-                  qtyLoose: clampedLoose
+                  qtyBase: Math.max(0, newQtyBase),
+                  qtyLoose: Math.max(0, newQtyLoose)
                 }
               })
-
-              const deltaBase = clampedBase - inv.qtyBase
-              const deltaLoose = clampedLoose - inv.qtyLoose
-              if (deltaBase !== 0 || deltaLoose !== 0) {
-                inventoryAdjustments.push({
-                  productId: line.productId,
-                  docPath: [INVENTORY_COL, invId],
-                  qtyBaseDelta: deltaBase,
-                  qtyLooseDelta: deltaLoose,
-                  structure: 'legacy',
-                  unitsPerBase: inv.unitsPerBase || 1,
-                  appliedAt: nowIso,
-                })
-              }
             }
           }
           
@@ -528,16 +458,6 @@ export async function addPosOrder(
           // Continue with order creation even if inventory update fails
         }
       }
-
-      if (inventoryAdjustments.length) {
-        orderDoc.inventoryAdjustments = inventoryAdjustments
-        orderDoc.inventoryCommitted = true
-      } else {
-        orderDoc.inventoryCommitted = false
-      }
-
-      lastInventoryAdjustments = inventoryAdjustments
-      lastInventoryCommitted = inventoryAdjustments.length > 0
 
       // Perform writes after all reads to satisfy Firestore transaction requirements
       tx.set(orderRef, orderDoc)
@@ -550,11 +470,7 @@ export async function addPosOrder(
       }
 
       for (const update of legacyInventoryUpdates) {
-        tx.update(update.ref, {
-          ...update.updates,
-          updatedAt: nowIso,
-          updatedBy: baseOrderDoc.cashierId ?? userId,
-        })
+        tx.update(update.ref, update.updates)
       }
 
       // Clear relevant cache entries
@@ -564,41 +480,14 @@ export async function addPosOrder(
 
       return orderRef.id
     })
-
-    if (payments.length) {
-      try {
-        await recordPaymentAuditEntries(orgId, createdOrderId, payments, {
-          event: 'order_created',
-          cashierId: baseOrderDoc.cashierId ?? userId,
-          orderStatus: status,
-        })
-      } catch (auditError) {
-        console.warn('[pos-operations] failed to record payment audit entry for order creation', auditError)
-      }
-    }
-
-    return createdOrderId
     
   } catch (error) {
     console.error('Order creation failed:', error)
     const fallbackOrder = await addDoc(collection(getDb(), POS_ORDERS_COL), {
       ...baseOrderDoc,
       status: status === 'paid' && balanceDue > 0 ? 'awaiting_payment' : status,
-      inventoryAdjustments: lastInventoryAdjustments,
-      inventoryCommitted: lastInventoryCommitted,
     })
     clearCachePattern(`pos_orders:${orgId}`)
-    if (payments.length) {
-      try {
-        await recordPaymentAuditEntries(orgId, fallbackOrder.id, payments, {
-          event: 'order_created',
-          cashierId: baseOrderDoc.cashierId ?? userId,
-          orderStatus: status,
-        })
-      } catch (auditError) {
-        console.warn('[pos-operations] failed to record payment audit for fallback order', auditError)
-      }
-    }
     return fallbackOrder.id
   }
 }
@@ -750,119 +639,6 @@ async function updateOrderDocuments(orgId: string, orderId: string, updates: Rec
   clearCachePattern(`pos_orders:${orgId}:recent`)
 }
 
-type OrderResolution = {
-  ref: DocumentReference
-  data: POSOrderDoc & {
-    inventoryAdjustments?: POSInventoryAdjustment[]
-    inventoryCommitted?: boolean
-  }
-  structure: 'optimized' | 'legacy'
-}
-
-async function resolveOrderDoc(
-  orgId: string,
-  orderId: string,
-  tx?: Transaction,
-): Promise<OrderResolution | null> {
-  const optimizedRef = doc(getDb(), ORGANIZATIONS_COL, orgId, ORG_POS_ORDERS_SUBCOL, orderId)
-  try {
-    const optimizedSnap = tx ? await tx.get(optimizedRef) : await getDoc(optimizedRef)
-    if (optimizedSnap.exists()) {
-      return {
-        ref: optimizedRef,
-        data: { id: orderId, ...(optimizedSnap.data() as POSOrderDoc) },
-        structure: 'optimized',
-      }
-    }
-  } catch (error) {
-    console.warn('[pos-operations] resolveOrderDoc optimized lookup failed', error)
-  }
-
-  const legacyRef = doc(getDb(), POS_ORDERS_COL, orderId)
-  const legacySnap = tx ? await tx.get(legacyRef) : await getDoc(legacyRef)
-  if (legacySnap.exists()) {
-    return {
-      ref: legacyRef,
-      data: { id: orderId, ...(legacySnap.data() as POSOrderDoc) },
-      structure: 'legacy',
-    }
-  }
-
-  return null
-}
-
-interface PaymentAuditContext {
-  event: POSPaymentAuditEvent
-  cashierId?: string | null
-  note?: string
-  orderStatus?: POSOrderStatus
-  metadata?: Record<string, unknown>
-}
-
-async function recordPaymentAuditEntries(
-  orgId: string,
-  orderId: string,
-  payments: POSPayment[],
-  context: PaymentAuditContext,
-) {
-  if (!payments?.length) {
-    return
-  }
-
-  const recordedAtIso = new Date().toISOString()
-  const primaryCollection = collection(getDb(), ORGANIZATIONS_COL, orgId, ORG_POS_PAYMENT_AUDIT_SUBCOL)
-
-  await Promise.all(
-    payments.map(async (payment, index) => {
-      if (!payment) return
-
-      const metadata: Record<string, unknown> = { ...(payment.metadata ?? {}) }
-      if (context.metadata) {
-        for (const [key, value] of Object.entries(context.metadata)) {
-          if (value !== undefined) {
-            metadata[key] = value
-          }
-        }
-      }
-      if (context.orderStatus) {
-        metadata.orderStatus = context.orderStatus
-      }
-      metadata.sequence = index
-
-      const baseEntry = compactRecord({
-        orgId,
-        orderId,
-        paymentId: payment.id,
-        method: payment.method,
-        amount: Number(Number(payment.amount ?? 0).toFixed(2)),
-        tenderedAmount: payment.tenderedAmount,
-        changeGiven: payment.changeGiven,
-        status: payment.status,
-        cashierId: context.cashierId ?? payment.processedBy,
-        processedBy: payment.processedBy ?? context.cashierId,
-        event: context.event,
-        note: context.note ?? payment.note,
-        metadata: Object.keys(metadata).length ? metadata : undefined,
-        receivedAt: payment.receivedAt,
-        occurredAt: payment.receivedAt ?? recordedAtIso,
-        recordedAt: recordedAtIso,
-      })
-
-      const payload = {
-        ...baseEntry,
-        createdAt: serverTimestamp(),
-      }
-
-      try {
-        await addDoc(primaryCollection, payload)
-      } catch (error) {
-        console.warn('[pos-operations] primary payment audit write failed, retrying in legacy collection', error)
-        await addDoc(collection(getDb(), POS_PAYMENT_AUDIT_COL), payload)
-      }
-    }),
-  )
-}
-
 export interface FinalizePosOrderOptions {
   payments: POSPayment[]
   status: POSOrderStatus
@@ -891,19 +667,6 @@ export async function finalizePosOrder(
     notes: options.notes,
     receipt: options.receipt,
   })
-
-  if (options.payments?.length) {
-    try {
-      const resolved = await resolveOrderDoc(orgId, orderId)
-      await recordPaymentAuditEntries(orgId, orderId, options.payments, {
-        event: 'order_finalized',
-        cashierId: resolved?.data?.cashierId ?? resolved?.data?.userId,
-        orderStatus: options.status,
-      })
-    } catch (error) {
-      console.warn('[pos-operations] failed to record payment audit entry during finalization', error)
-    }
-  }
 }
 
 export async function updatePosOrderPaymentState(
@@ -922,128 +685,12 @@ export async function updatePosOrderPaymentState(
     paymentSummary: update.paymentSummary,
     status: update.status,
   })
-
-  const latestPayment = update.payments?.[update.payments.length - 1]
-  if (!latestPayment) {
-    return
-  }
-
-  try {
-    const resolved = await resolveOrderDoc(orgId, orderId)
-    await recordPaymentAuditEntries(orgId, orderId, [latestPayment], {
-      event: 'payment_update',
-      cashierId: resolved?.data?.cashierId ?? resolved?.data?.userId,
-      orderStatus: update.status ?? resolved?.data?.status,
-    })
-  } catch (error) {
-    console.warn('[pos-operations] failed to record payment audit entry during update', error)
-  }
 }
 
 export async function voidPosOrder(orgId: string, orderId: string, reason?: string) {
-  const nowIso = new Date().toISOString()
-  let resolvedSnapshot: OrderResolution | null = null
-
-  await runTransaction(getDb(), async (tx) => {
-    const resolved = await resolveOrderDoc(orgId, orderId, tx)
-    if (!resolved) {
-      throw new Error(`Order ${orderId} not found for void operation`)
-    }
-
-    resolvedSnapshot = resolved
-
-    const adjustments = resolved.data.inventoryAdjustments ?? []
-    const operatorId = resolved.data.cashierId ?? resolved.data.userId
-
-    for (const adjustment of adjustments) {
-      if (!adjustment || !Array.isArray(adjustment.docPath) || adjustment.docPath.length < 2) {
-        continue
-      }
-
-      const inventoryRef = doc(getDb(), ...adjustment.docPath)
-      let inventorySnap
-      try {
-        inventorySnap = await tx.get(inventoryRef)
-      } catch (error) {
-        console.warn('[pos-operations] failed to load inventory doc during void', error)
-        continue
-      }
-
-      if (!inventorySnap.exists()) {
-        continue
-      }
-
-      const deltaBase = adjustment.qtyBaseDelta ?? 0
-      const deltaLoose = adjustment.qtyLooseDelta ?? 0
-
-      if (deltaBase === 0 && deltaLoose === 0) {
-        continue
-      }
-
-      if (adjustment.structure === 'optimized') {
-        const productData = inventorySnap.data() ?? {}
-        const currentStock = productData.stock || { qtyBase: 0, qtyLoose: 0, unitsPerBase: adjustment.unitsPerBase || 1 }
-        const unitsPerBase = currentStock.unitsPerBase || adjustment.unitsPerBase || 1
-        const nextQtyBase = Math.max(0, (currentStock.qtyBase ?? 0) - deltaBase)
-        const nextQtyLoose = Math.max(0, (currentStock.qtyLoose ?? 0) - deltaLoose)
-        const nextAvailable = Math.max(0, nextQtyBase * unitsPerBase + nextQtyLoose)
-
-        const stockUpdate = compactRecord({
-          ...currentStock,
-          qtyBase: nextQtyBase,
-          qtyLoose: nextQtyLoose,
-          available: nextAvailable,
-          lastUpdated: nowIso,
-          updatedBy: operatorId,
-        })
-
-        tx.update(inventoryRef, {
-          stock: stockUpdate,
-          updatedAt: nowIso,
-        })
-      } else {
-        const invData = inventorySnap.data() as InventoryRecord
-        const nextQtyBase = Math.max(0, (invData.qtyBase ?? 0) - deltaBase)
-        const nextQtyLoose = Math.max(0, (invData.qtyLoose ?? 0) - deltaLoose)
-
-        tx.update(inventoryRef, compactRecord({
-          qtyBase: nextQtyBase,
-          qtyLoose: nextQtyLoose,
-          updatedAt: nowIso,
-          updatedBy: operatorId,
-        }))
-      }
-    }
-
-    const voidPayload = compactRecord({
-      status: 'void',
-      balanceDue: 0,
-      inventoryCommitted: false,
-      inventoryAdjustments: [],
-      voidReason: reason ?? resolved.data.voidReason ?? 'Cancelled after payment failure',
-      voidedAt: nowIso,
-      notes: reason ?? resolved.data.notes,
-      updatedAt: nowIso,
-    })
-
-    tx.update(resolved.ref, voidPayload)
+  await updateOrderDocuments(orgId, orderId, {
+    status: 'void',
+    balanceDue: 0,
+    notes: reason,
   })
-
-  clearCachePattern(`pos_orders:${orgId}`)
-  clearCachePattern(`pos_orders:${orgId}:recent`)
-  clearCachePattern(`pos_products:${orgId}`)
-  clearCachePattern(`inventory:${orgId}`)
-
-  if (resolvedSnapshot?.data?.payments?.length) {
-    try {
-      await recordPaymentAuditEntries(orgId, orderId, resolvedSnapshot.data.payments, {
-        event: 'order_voided',
-        cashierId: resolvedSnapshot.data.cashierId ?? resolvedSnapshot.data.userId,
-        note: reason,
-        orderStatus: 'void',
-      })
-    } catch (error) {
-      console.warn('[pos-operations] failed to record payment audit entry during void', error)
-    }
-  }
 }

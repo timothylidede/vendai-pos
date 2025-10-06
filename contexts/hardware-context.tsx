@@ -196,9 +196,10 @@ const normalizeSnapshot = (snapshot?: Partial<HardwareStatus> | null): HardwareS
 }
 
 export function HardwareProvider({ children }: { children: ReactNode }) {
-	const hardwareApiRef = useRef<Window['electronAPI']['hardware'] | undefined>(undefined)
+	const hardwareApiRef = useRef<NonNullable<Window['electronAPI']>['hardware'] | undefined>(undefined)
 	const [hardwareAvailable, setHardwareAvailable] = useState(false)
 	const [status, setStatus] = useState<HardwareStatus>(() => simulatedSnapshot)
+	const statusRef = useRef<HardwareStatus>(simulatedSnapshot)
 	const [refreshing, setRefreshing] = useState(false)
 	const [lastScan, setLastScan] = useState<HardwareScannerPayload | null>(null)
 	const [transaction, setTransaction] = useState<CardTransactionProgress>(defaultTransaction)
@@ -232,6 +233,7 @@ export function HardwareProvider({ children }: { children: ReactNode }) {
 
 	const applySnapshot = useCallback((snapshot?: Partial<HardwareStatus> | null) => {
 		const normalized = normalizeSnapshot(snapshot)
+		statusRef.current = normalized
 		setStatus(normalized)
 	}, [])
 
@@ -294,13 +296,13 @@ export function HardwareProvider({ children }: { children: ReactNode }) {
 					break
 				}
 				case 'cash-drawer:status':
-					applySnapshot((event.payload as HardwareStatus) ?? status)
+					applySnapshot((event.payload as HardwareStatus) ?? statusRef.current)
 					break
 				default:
 					break
 			}
 		},
-		[applySnapshot, handleScannerData, status],
+		[applySnapshot, handleScannerData],
 	)
 
 	useEffect(() => {
@@ -323,8 +325,8 @@ export function HardwareProvider({ children }: { children: ReactNode }) {
 		let offScanner: (() => void) | undefined
 
 		try {
-			offEvent = api.onEvent?.((event) => handleHardwareEvent(event))
-			offScanner = api.onScannerData?.((payload) => handleScannerData(payload))
+			offEvent = api.onEvent?.((event: HardwareRendererEvent) => handleHardwareEvent(event))
+			offScanner = api.onScannerData?.((payload: HardwareScannerPayload) => handleScannerData(payload))
 		} catch (error) {
 			console.warn('[hardware] failed to attach IPC listeners', error)
 		}
@@ -422,7 +424,7 @@ export function HardwareProvider({ children }: { children: ReactNode }) {
 			})
 			return {
 				success: true,
-				status: 'approved',
+				status: 'approved' as const,
 				referenceId: fallbackRef,
 				message: 'Simulated approval',
 			}
@@ -447,7 +449,7 @@ export function HardwareProvider({ children }: { children: ReactNode }) {
 			})
 			return {
 				success: false,
-				status: 'error',
+				status: 'error' as const,
 				error: error instanceof Error ? error.message : 'Card transaction failed.',
 			}
 		}
@@ -459,7 +461,7 @@ export function HardwareProvider({ children }: { children: ReactNode }) {
 			setTransaction({ status: 'idle' })
 			return {
 				success: true,
-				status: 'idle',
+				status: 'idle' as const,
 				message: 'No hardware transaction to cancel.',
 			}
 		}
@@ -477,7 +479,7 @@ export function HardwareProvider({ children }: { children: ReactNode }) {
 			setTransaction({ status: 'error', error: error instanceof Error ? error.message : 'Cancel failed.' })
 			return {
 				success: false,
-				status: 'error',
+				status: 'error' as const,
 				error: error instanceof Error ? error.message : 'Cancel failed.',
 			}
 		}

@@ -7,8 +7,7 @@ import {
   ShoppingCart, Package, HeartHandshake, Truck, Users,
   ArrowRightCircle,
   Settings, UserCircle, ChevronDown, 
-  User, Mail, MapPin, LogOut, X,
-  TrendingUp, PieChart, RefreshCw, AlertTriangle, Receipt
+  User, Mail, MapPin, LogOut, X
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { signOut } from 'firebase/auth'
@@ -21,8 +20,6 @@ import { hasInventory } from '@/lib/pos-operations'
 import { getOrgSettings } from '@/lib/org-operations'
 import { LoadingSpinner } from './loading-spinner'
 import { UniversalLoading } from './universal-loading'
-import { db } from '@/lib/firebase'
-import { collection, getDocs, limit, orderBy, query, where } from 'firebase/firestore'
 
 const retailerModules = [
   {
@@ -173,6 +170,7 @@ export function ModulesDashboard() {
   const orgId = useMemo(() => userData?.organizationName || 'default', [userData?.organizationName])
   const prefetchedRoutesRef = useRef<Set<string>>(new Set())
   const prefetchedBundlesRef = useRef<Set<string>>(new Set())
+  const initialPrefetchDoneRef = useRef(false)
 
   const currentModules = useMemo(() => {
     if (!userData?.role) return []
@@ -316,7 +314,10 @@ export function ModulesDashboard() {
   }, [prefetchModuleResources])
 
   useEffect(() => {
-    currentModules.forEach(module => prefetchModuleResources(module.title))
+    if (!initialPrefetchDoneRef.current && currentModules.length > 0) {
+      currentModules.forEach(module => prefetchModuleResources(module.title))
+      initialPrefetchDoneRef.current = true
+    }
   }, [currentModules, prefetchModuleResources])
 
   // Show loading state while checking authentication

@@ -18,11 +18,16 @@ export default function HomePage() {
   const router = useRouter()
 
   useEffect(() => {
+    if (!auth || !db) {
+      setIsLoading(false)
+      return
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
       if (authUser) {
         try {
           // Check if user has completed onboarding
-          const userDocRef = doc(db, 'users', authUser.uid)
+          const userDocRef = doc(db!, 'users', authUser.uid)
           const userDoc = await getDoc(userDocRef)
           
           if (userDoc.exists()) {
@@ -58,7 +63,7 @@ export default function HomePage() {
     })
 
     return () => unsubscribe()
-  }, [router])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Show loading while checking authentication
   if (isLoading) {

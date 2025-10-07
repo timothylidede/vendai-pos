@@ -88,6 +88,7 @@ export function POSPage() {
   const [recentOrders, setRecentOrders] = useState<POSOrderDoc[]>([])
   const [receiptPreviewBundle, setReceiptPreviewBundle] = useState<ReceiptPreviewBundle | null>(null)
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false)
+  const [hardwareStatusCollapsed, setHardwareStatusCollapsed] = useState(false)
   
   // Enhanced persistent order tabs
   const [orderTabs, setOrderTabs] = useState<Map<string, OrderTab>>(new Map())
@@ -854,17 +855,28 @@ export function POSPage() {
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] via-transparent to-blue-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
               <ScanBarcode className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
             </button>
-            <button className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105">
+            <button 
+              onClick={() => setHardwareStatusCollapsed(!hardwareStatusCollapsed)}
+              className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
+            >
               <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.03] via-transparent to-pink-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
-              <span className="relative text-slate-300 group-hover:text-white transition-colors duration-300 font-medium">☰</span>
+              <span className={`relative text-slate-300 group-hover:text-white transition-colors duration-300 font-medium transform ${hardwareStatusCollapsed ? 'rotate-90' : ''}`}>☰</span>
             </button>
           </div>
         </div>
       </div>
 
-        <div className="px-4 py-3 bg-slate-900/30 border-b border-white/10">
-          <HardwareStatusStrip className="max-w-4xl" />
-        </div>
+        {!hardwareStatusCollapsed && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="px-4 py-3 bg-slate-900/30 border-b border-white/10 overflow-hidden"
+          >
+            <HardwareStatusStrip className="max-w-4xl" />
+          </motion.div>
+        )}
 
       {/* Order Selection Modal */}
       {showOrderModal && (
@@ -1073,7 +1085,7 @@ export function POSPage() {
 
               {/* Cart Total */}
               {cart.length > 0 && (
-                <div className="sticky bottom-0 p-6 bg-slate-900/70 backdrop-blur">
+                <div className="sticky bottom-0 p-6 bg-slate-900/30 backdrop-blur border-t border-white/10">
                   <div className="flex justify-between text-lg font-semibold mb-4 text-white">
                     <span>Total</span>
                     <span>{formatMoney(cartTotal)}</span>

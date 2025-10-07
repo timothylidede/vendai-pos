@@ -1,0 +1,39 @@
+{
+  "id": "sam-west",
+  "name": "Sam West",
+  "displayName": "Sam West Distributors Ltd",
+  "description": "Leading distributor of premium FMCG products across East Africa. Trusted partner for quality brands and reliable supply chain management.",
+  "logoUrl": "/images/sam-west-logo.png",
+  "contact": {
+    "email": "info@samwest.co.ke",
+    "phone": "+254 700 123 456",
+    "address": "100 Dagoretti Rd, Nairobi"
+  },
+  "businessInfo": {
+    "paymentTerms": "Net 30",
+    "creditLimit": 500000,
+    "taxRate": 16,
+    "minimumOrderValue": 5000
+  },
+  "location": {
+    "city": "Nairobi",
+    "country": "Kenya",
+    "address": "100 Dagoretti Rd, Nairobi",
+    "coordinates": {
+      "lat": -1.2921,
+      "lng": 36.7516
+    }
+  },
+  "stats": {
+    "totalRetailers": 0,
+    "totalOrders": 3420,
+    "totalProducts": 20,
+    "averageOrderValue": 3655,
+    "onTimeDeliveryRate": 98
+  },
+  "status": "active",
+  "connected": true,
+  "categories": ["Beverages", "Snacks", "Personal Care", "Household", "Food", "Rice", "Sugar"],
+  "pricelistSource": "data/SAM WEST SUPERMARKET PRICELIST_20250726_094811 (2)_extracted_text.txt",
+  "lastUpdated": "2025-07-26T09:48:00Z"
+}

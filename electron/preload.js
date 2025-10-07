@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // OAuth
   googleOAuth: () => ipcRenderer.invoke('google-oauth'),
   onOAuthCallback: (callback) => ipcRenderer.on('oauth-callback', callback),
+  onOAuthCompleted: (callback) => ipcRenderer.on('oauth-completed', callback),
+  removeOAuthListeners: () => {
+    ipcRenderer.removeAllListeners('oauth-callback');
+    ipcRenderer.removeAllListeners('oauth-completed');
+  },
   
   // Listen to events from main process
   onOpenPreferences: (callback) => {

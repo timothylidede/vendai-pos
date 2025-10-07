@@ -40,7 +40,21 @@ export function WelcomePage() {
   const [isElectron, setIsElectron] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
-  const { user, userData, loading: authLoading } = useAuth();
+  const { user, userData, electronUser, loading: authLoading, isElectron: contextIsElectron } = useAuth();
+
+  // Timeout to prevent infinite loading
+  useEffect(() => {
+    if (isLoading) {
+      const timeout = setTimeout(() => {
+        console.warn('⚠️ Loading timeout reached, clearing loading state');
+        setIsLoading(false);
+        setErrorMessage('Sign-in took too long. Please try again.');
+        setTimeout(() => setErrorMessage(null), 6000);
+      }, 30000); // 30 second timeout
+
+      return () => clearTimeout(timeout);
+    }
+  }, [isLoading]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -60,6 +74,42 @@ export function WelcomePage() {
       handleRedirectResult();
     }
   }, []);
+
+  // Separate effect for Electron-specific setup
+  useEffect(() => {
+    if (!isElectron || !isMounted) return;
+
+    // Check for stored authentication data on startup - use context's electronUser
+    if (electronUser && !user) {
+      console.log('🔄 Found Electron user in context, checking authentication status...');
+      // The user was previously authenticated, redirect to appropriate page
+      const role = localStorage.getItem('vendai-user-role') || 'retailer';
+      const isFirstLogin = localStorage.getItem('vendai-first-login') === 'true';
+      setIsRedirecting(true);
+      router.push(isFirstLogin ? '/onboarding/choose' : '/modules');
+    }
+
+    // Set up OAuth completion listener for Electron
+    const electronAPI = (window as any).electronAPI;
+    if (electronAPI && electronAPI.onOAuthCompleted) {
+      const handleOAuthCompleted = (event: any, result: any) => {
+        console.log('🎉 OAuth completed via event listener:', result);
+        if (result.success) {
+          // Handle the OAuth result just like in handleElectronSignIn
+          handleElectronOAuthResult(result);
+        }
+      };
+
+      electronAPI.onOAuthCompleted(handleOAuthCompleted);
+
+      // Cleanup on unmount
+      return () => {
+        if (electronAPI.removeOAuthListeners) {
+          electronAPI.removeOAuthListeners();
+        }
+      };
+    }
+  }, [isElectron, isMounted, electronUser, user, router]);
 
   const handleRedirectResult = async () => {
     try {
@@ -131,12 +181,13 @@ export function WelcomePage() {
       console.log('🚀 Starting authentication process...');
       console.log('- Environment:', process.env.NODE_ENV);
       console.log('- Current Domain:', window.location.hostname);
-      console.log('- Is Electron:', isElectron);
+      console.log('- Is Electron (local):', isElectron);
+      console.log('- Is Electron (context):', contextIsElectron);
       console.log('- Firebase Auth Domain:', auth?.app?.options?.authDomain);
       console.log('- Firebase Project ID:', auth?.app?.options?.projectId);
       console.log('- Firebase API Key (last 4):', auth?.app?.options?.apiKey?.slice(-4));
       
-      if (isElectron && (window as any).electronAPI) {
+      if ((isElectron || contextIsElectron) && (window as any).electronAPI) {
         await handleElectronSignIn();
       } else {
         await handleWebSignIn();
@@ -184,17 +235,16 @@ export function WelcomePage() {
     }
   };
 
-  const handleElectronSignIn = async () => {
-    const electronAPI = (window as any).electronAPI;
-    const oauthResult = await electronAPI.googleOAuth() as ElectronOAuthResult | undefined;
-
-    if (!oauthResult || !oauthResult.success || !oauthResult.user) {
-      throw new Error('Electron OAuth failed or was cancelled');
-    }
-
+  const handleElectronOAuthResult = async (oauthResult: ElectronOAuthResult) => {
     try {
+      console.log('🔄 Processing OAuth result from event listener...');
+      setIsLoading(true);
+      setErrorMessage(null);
+      
       if (!auth) {
-        throw new Error('Firebase authentication not initialized');
+        console.log('No Firebase auth, using fallback');
+        await handleElectronFallback(oauthResult.user);
+        return;
       }
 
       const credential = GoogleAuthProvider.credential(
@@ -202,10 +252,54 @@ export function WelcomePage() {
         oauthResult.tokens.accessToken || null
       );
 
+      console.log('🔄 Attempting Firebase credential sign-in from event...');
       const userCred = await signInWithCredential(auth, credential);
+      console.log('✅ Firebase credential sign-in successful');
       await handleUserAuthentication(userCred.user);
     } catch (firebaseError) {
-      console.warn('Firebase credential sign-in failed, falling back to local profile creation.', firebaseError);
+      console.warn('⚠️ Firebase credential sign-in failed, falling back to local profile creation.', firebaseError);
+      try {
+        await handleElectronFallback(oauthResult.user);
+      } catch (fallbackError) {
+        console.error('❌ Fallback authentication also failed:', fallbackError);
+        setErrorMessage('Authentication failed. Please try again.');
+        setTimeout(() => setErrorMessage(null), 6000);
+      }
+    } finally {
+      console.log('🏁 OAuth result processing complete, clearing loading state');
+      setIsLoading(false);
+    }
+  };
+
+  const handleElectronSignIn = async () => {
+    console.log('🚀 Starting Electron OAuth flow...');
+    const electronAPI = (window as any).electronAPI;
+    const oauthResult = await electronAPI.googleOAuth() as ElectronOAuthResult | undefined;
+
+    if (!oauthResult || !oauthResult.success || !oauthResult.user) {
+      throw new Error('Electron OAuth failed or was cancelled');
+    }
+
+    console.log('✅ OAuth result received:', oauthResult);
+
+    try {
+      if (!auth) {
+        console.log('No Firebase auth available, using fallback');
+        await handleElectronFallback(oauthResult.user);
+        return;
+      }
+
+      const credential = GoogleAuthProvider.credential(
+        oauthResult.tokens.idToken || null,
+        oauthResult.tokens.accessToken || null
+      );
+
+      console.log('🔄 Attempting Firebase credential sign-in...');
+      const userCred = await signInWithCredential(auth, credential);
+      console.log('✅ Firebase credential sign-in successful');
+      await handleUserAuthentication(userCred.user);
+    } catch (firebaseError) {
+      console.warn('⚠️ Firebase credential sign-in failed, falling back to local profile creation.', firebaseError);
       await handleElectronFallback(oauthResult.user);
     }
   };
@@ -245,37 +339,63 @@ export function WelcomePage() {
   };
 
   const handleElectronFallback = async (googleUser: ElectronOAuthResult['user']) => {
+    console.log('🔄 Using Electron fallback authentication for user:', googleUser.email);
+    
     if (!db) {
-      throw new Error('Firestore not initialized');
-    }
-
-    const userDocRef = doc(db, 'users', googleUser.id);
-    const snapshot = await getDoc(userDocRef);
-
-    if (snapshot.exists()) {
-      const data = snapshot.data() as { role?: string; onboardingCompleted?: boolean };
-      const role = data.role || 'retailer';
-      const onboardingCompleted = Boolean(data.onboardingCompleted);
-
-      localStorage.setItem('vendai-user-role', role);
-      localStorage.setItem('vendai-first-login', onboardingCompleted ? 'false' : 'true');
-      router.push(onboardingCompleted ? '/modules' : '/onboarding/choose');
+      console.error('Firestore not initialized, redirecting anyway');
+      // Continue without Firestore - store user data locally
+      localStorage.setItem('vendai-user-role', 'retailer');
+      localStorage.setItem('vendai-first-login', 'true');
+      localStorage.setItem('vendai-electron-user', JSON.stringify(googleUser));
+      setIsRedirecting(true);
+      router.push('/onboarding/choose');
       return;
     }
 
-    await setDoc(userDocRef, {
-      uid: googleUser.id,
-      email: googleUser.email,
-      displayName: googleUser.name,
-      photoURL: googleUser.picture ?? null,
-      createdAt: new Date().toISOString(),
-      onboardingCompleted: false,
-      role: 'retailer',
-    });
+    try {
+      const userDocRef = doc(db, 'users', googleUser.id);
+      const snapshot = await getDoc(userDocRef);
 
-    localStorage.setItem('vendai-first-login', 'true');
-    setIsRedirecting(true);
-    router.push('/onboarding/choose');
+      if (snapshot.exists()) {
+        const data = snapshot.data() as { role?: string; onboardingCompleted?: boolean };
+        const role = data.role || 'retailer';
+        const onboardingCompleted = Boolean(data.onboardingCompleted);
+
+        console.log('✅ Existing user found, role:', role, 'onboarding completed:', onboardingCompleted);
+
+        localStorage.setItem('vendai-user-role', role);
+        localStorage.setItem('vendai-first-login', onboardingCompleted ? 'false' : 'true');
+        localStorage.setItem('vendai-electron-user', JSON.stringify(googleUser));
+        
+        setIsRedirecting(true);
+        router.push(onboardingCompleted ? '/modules' : '/onboarding/choose');
+        return;
+      }
+
+      console.log('🆕 Creating new user profile for:', googleUser.email);
+
+      await setDoc(userDocRef, {
+        uid: googleUser.id,
+        email: googleUser.email,
+        displayName: googleUser.name,
+        photoURL: googleUser.picture ?? null,
+        createdAt: new Date().toISOString(),
+        onboardingCompleted: false,
+        role: 'retailer',
+      });
+
+      localStorage.setItem('vendai-first-login', 'true');
+      localStorage.setItem('vendai-electron-user', JSON.stringify(googleUser));
+      setIsRedirecting(true);
+      router.push('/onboarding/choose');
+    } catch (firestoreError) {
+      console.error('Firestore operation failed, proceeding with local storage only:', firestoreError);
+      localStorage.setItem('vendai-user-role', 'retailer');
+      localStorage.setItem('vendai-first-login', 'true');
+      localStorage.setItem('vendai-electron-user', JSON.stringify(googleUser));
+      setIsRedirecting(true);
+      router.push('/onboarding/choose');
+    }
   };
 
   // Don't render until mounted to prevent hydration issues

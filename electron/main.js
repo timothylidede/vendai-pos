@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, shell, ipcMain, dialog, session } = require('electron');
 const path = require('path');
+const fs = require('fs');
 // Load environment variables for Electron main (development + production)
 try {
   const dotenv = require('dotenv');
@@ -159,10 +160,14 @@ async function createWindow() {
   const serverUrl = await startNextServer();
 
   // Create the browser window
-  const isWin = process.platform === 'win32'
+  const isWin = process.platform === 'win32';
+  // Prefer the new branding icon (logo-icon-remove). For Windows we attempt .ico first (if user generated one),
+  // otherwise fall back to the PNG (works for dev, though an .ico is recommended for production taskbar fidelity).
+  // Updated branding icon (blue variant)
+  const brandIconBase = path.join(__dirname, '../public/images/logo-icon-remove-blue');
   const windowIcon = isWin
-    ? path.join(__dirname, '../build/icons/icon.ico')
-    : path.join(__dirname, '../public/images/logo-icon-remove.png')
+    ? (fs.existsSync(brandIconBase + '.ico') ? brandIconBase + '.ico' : brandIconBase + '.png')
+    : brandIconBase + '.png';
 
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -596,8 +601,7 @@ ipcMain.handle('google-oauth', async () => {
           const userInfo = await userResponse.json();
           console.log('User info:', userInfo);
 
-          // Success page with deep link back to app
-          const deepLink = 'vendai-pos://oauth/success';
+          // Success page without deep link (avoids browser "Open Electron?" prompt)
           res.send(`
             <!DOCTYPE html>
             <html lang="en">
@@ -607,17 +611,16 @@ ipcMain.handle('google-oauth', async () => {
                 <title>Login Successful · VendAI</title>
                 <style>
                   :root { color-scheme: dark; }
-                  body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji; background: radial-gradient(100% 100% at 0% 0%, #0b1220 0%, #0a0f1c 50%, #0a0e19 100%); color: #e5e7eb; min-height: 100vh; display: grid; place-items: center; }
-                  .card { width: min(560px, 92vw); padding: 28px; border-radius: 16px; background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03)); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 10px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06); backdrop-filter: blur(8px); text-align: center; }
-                  .title { font-size: 22px; font-weight: 700; margin: 8px 0 4px; }
-                  .muted { color: #9ca3af; font-size: 14px; margin: 6px 0 18px; }
-                  .ok { display: inline-flex; width: 56px; height: 56px; border-radius: 50%; align-items: center; justify-content: center; background: linear-gradient(135deg,#22c55e33,#10b98122); border: 1px solid #10b98155; box-shadow: inset 0 0 20px #10b98111, 0 8px 24px rgba(16,185,129,0.15); }
-                  .ok svg { color: #34d399; }
-                  .btn { display: inline-flex; gap: 8px; align-items: center; justify-content: center; padding: 12px 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: #ffffff; color: #111827; font-weight: 600; text-decoration: none; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
-                  .btn:hover { filter: brightness(0.97); }
-                  .ghost { background: transparent; color: #e5e7eb; border-color: rgba(255,255,255,0.2); }
-                  .footer { margin-top: 18px; font-size: 12px; color: #94a3b8; }
-                  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+                  body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji; background: radial-gradient(100% 100% at 0% 0%, #0b1220 0%, #0a0f1c 50%, #0a0e19 100%); color:#e5e7eb; min-height:100vh; display:grid; place-items:center; }
+                  .card { width:min(560px,92vw); padding:28px; border-radius:16px; background:linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03)); border:1px solid rgba(255,255,255,0.1); box-shadow:0 10px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06); backdrop-filter:blur(8px); text-align:center; }
+                  .title { font-size:22px; font-weight:700; margin:8px 0 4px; }
+                  .muted { color:#9ca3af; font-size:14px; margin:6px 0 18px; }
+                  .ok { display:inline-flex; width:56px; height:56px; border-radius:50%; align-items:center; justify-content:center; background:linear-gradient(135deg,#22c55e33,#10b98122); border:1px solid #10b98155; box-shadow:inset 0 0 20px #10b98111, 0 8px 24px rgba(16,185,129,0.15); }
+                  .ok svg { color:#34d399; }
+                  .btn { display:inline-flex; gap:8px; align-items:center; justify-content:center; padding:12px 16px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background:#ffffff; color:#111827; font-weight:600; text-decoration:none; box-shadow:0 10px 20px rgba(0,0,0,0.2); cursor:pointer; }
+                  .btn:hover { filter:brightness(0.97); }
+                  .ghost { background:transparent; color:#e5e7eb; border-color:rgba(255,255,255,0.2); }
+                  .footer { margin-top:18px; font-size:12px; color:#94a3b8; line-height:1.4; }
                 </style>
               </head>
               <body>
@@ -626,36 +629,15 @@ ipcMain.handle('google-oauth', async () => {
                     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
                   </div>
                   <div class="title">Login successful</div>
-                  <div class="muted">Welcome, ${userInfo.name} — you’re signed in to VendAI.</div>
-                  <div class="row">
-                    <a class="btn" id="open-app" href="${deepLink}" rel="noopener">Return to the VendAI app</a>
-                    <button class="btn ghost" id="close-window" type="button">Close this window</button>
-                  </div>
-                  <div class="footer">If the app doesn’t open automatically, click “Return to the VendAI app”.</div>
+                  <div class="muted">Welcome, ${userInfo.name}. You are now signed in.</div>
+                  <p style="font-size:14px; margin:0 0 18px; color:#cbd5e1;">You can return to the VendAI application window. This tab is no longer needed.</p>
+                  <button class="btn ghost" id="close-window" type="button">Close this window</button>
+                  <div class="footer">(We removed the automatic app open to avoid the browser confirmation popup.)<br/>If the desktop app doesn’t show you as logged in yet, switch back to it—your session should already be active.</div>
                 </div>
                 <script>
-                  (function(){
-                    const deepLink = ${JSON.stringify('vendai-pos://oauth/success')};
-                    // Try to open the app automatically
-                    const tryOpen = () => {
-                      const a = document.createElement('a');
-                      a.href = deepLink;
-                      a.rel = 'noopener';
-                      document.body.appendChild(a);
-                      a.click();
-                      a.remove();
-                    };
-                    // Try immediately and again after a short delay
-                    tryOpen();
-                    setTimeout(tryOpen, 800);
-
-                    document.getElementById('close-window').addEventListener('click', () => {
-                      window.close();
-                    });
-
-                    // Attempt auto-close after a few seconds
-                    setTimeout(() => { window.close(); }, 4000);
-                  })();
+                  document.getElementById('close-window').addEventListener('click', () => window.close());
+                  // Optionally auto-close after a short delay
+                  setTimeout(() => { try { window.close(); } catch(e) {} }, 5000);
                 </script>
               </body>
             </html>
@@ -665,7 +647,7 @@ ipcMain.handle('google-oauth', async () => {
           
           if (currentOAuthProcess) {
             // Return user info to the renderer process
-            currentOAuthProcess.resolve({
+            const authResult = {
               success: true,
               user: {
                 id: userInfo.id,
@@ -677,8 +659,15 @@ ipcMain.handle('google-oauth', async () => {
                 accessToken: tokens.access_token,
                 idToken: tokens.id_token
               }
-            });
+            };
+            
+            currentOAuthProcess.resolve(authResult);
             currentOAuthProcess = null;
+            
+            // Also send notification to renderer in case the promise resolved but UI needs refreshing
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('oauth-completed', authResult);
+            }
           }
 
         } catch (error) {

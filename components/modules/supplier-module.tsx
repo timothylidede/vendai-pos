@@ -1,17 +1,8 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  type DocumentData,
-  type QueryDocumentSnapshot,
-} from "firebase/firestore"
 import {
   ArrowLeft,
   BadgeCheck,
@@ -25,12 +16,15 @@ import {
   Star as StarIcon,
   TrendingUp,
   Users,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
+import { doc, setDoc, deleteDoc, getDoc, collection, query, where, getDocs, getCountFromServer } from "firebase/firestore"
 
-import { db } from "@/lib/firebase"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/hooks/use-toast"
+import { db } from "@/lib/firebase"
 import { listPOSProducts } from "@/lib/pos-operations"
 import type { POSProduct } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -39,6 +33,7 @@ import { Input } from "../ui/input"
 import { LoadingSpinner } from "../loading-spinner"
 import { ScrollArea } from "../ui/scroll-area"
 import { Badge } from "../ui/badge"
+import { getAllDistributors, getDistributorProducts, type DistributorMetadata, type DistributorProduct } from "@/data/distributor-data"
 
 interface SupplierSummary {
   id: string
@@ -191,7 +186,7 @@ const formatCurrency = (value: number): string => {
   }).format(value)
 }
 
-const SupplierAvatar = ({ name }: { name: string }) => {
+const SupplierAvatar = ({ name, logoUrl }: { name: string; logoUrl?: string }) => {
   const initials = name
     .split(" ")
     .map((part) => part[0])
@@ -199,8 +194,16 @@ const SupplierAvatar = ({ name }: { name: string }) => {
     .slice(0, 2)
     .toUpperCase()
 
+  if (logoUrl) {
+    return (
+      <div className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-purple-500/30 bg-white p-3 shadow-[0_12px_32px_-20px_rgba(168,85,247,0.6)]">
+        <img src={logoUrl} alt={name} className="h-full w-full object-contain" />
+      </div>
+    )
+  }
+
   return (
-    <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-purple-500/20 bg-gradient-to-br from-purple-500/35 via-indigo-500/15 to-slate-900/70 text-lg font-semibold text-purple-50 shadow-[0_12px_32px_-20px_rgba(168,85,247,0.6)]">
+    <div className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-purple-500/30 bg-gradient-to-br from-purple-500/35 via-indigo-500/15 to-slate-900/70 text-2xl font-semibold text-purple-50 shadow-[0_12px_32px_-20px_rgba(168,85,247,0.6)]">
       {initials || "S"}
     </div>
   )
@@ -230,6 +233,7 @@ export function SupplierModule() {
   const { toast } = useToast()
   const { loading, userData } = useAuth()
 
+  const [activeTab, setActiveTab] = useState<'supplier' | 'credit'>('supplier')
   const [searchTerm, setSearchTerm] = useState("")
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([])
   const [inventoryTags, setInventoryTags] = useState<string[]>([])
@@ -237,9 +241,14 @@ export function SupplierModule() {
   const [suppliersError, setSuppliersError] = useState<string | null>(null)
 
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierSummary | null>(null)
-  const [products, setProducts] = useState<SupplierProduct[]>([])
+  const [products, setProducts] = useState<DistributorProduct[]>([])
   const [productsLoading, setProductsLoading] = useState(false)
   const [productsError, setProductsError] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalProducts, setTotalProducts] = useState(0)
+  const [hasMoreProducts, setHasMoreProducts] = useState(false)
+  const PAGE_SIZE = 40
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
   const inventoryTagSet = useMemo(
     () => new Set(inventoryTags.map((tag) => tag.toLowerCase())),
     [inventoryTags],
@@ -255,69 +264,68 @@ export function SupplierModule() {
     }
   }, [loading, router, toast, userData])
 
-  const mapSupplierSnapshot = useCallback(
-    (
-      snapshot: QueryDocumentSnapshot<DocumentData>,
-      retailerOrgId?: string,
-      retailerUserId?: string,
-    ): SupplierSummary => {
-      const raw = snapshot.data() as Record<string, unknown>
-      const base: SupplierSummary = {
-        id: snapshot.id,
-        name: parseString(raw.name) ?? snapshot.id,
-        description: parseString(raw.description),
-        logoUrl: parseString(raw.logoUrl),
-        paymentTerms: parseString(raw.paymentTerms) ?? "Net 30",
-        totalRetailers: parseNumber(raw.totalRetailers),
-        totalOrders: parseNumber(raw.totalOrders),
-        totalGMV: parseNumber(raw.totalGMV),
-        lastActivity: parseString(raw.lastActivity),
-        connected: inferConnected(raw, retailerOrgId, retailerUserId),
-        reputationScore: 0,
-        location:
-          parseString(raw.headquarters) ??
-          parseString(raw.location) ??
-          parseString(raw.address),
-        tags: toStringArray(raw.topCategories).slice(0, 4),
-      }
-
-      return { ...base, reputationScore: computeReputation(base) }
-    },
-    [],
-  )
-
   const loadSuppliers = useCallback(async () => {
     if (!userData || userData.role !== "retailer") return
+    if (!db) {
+      setSuppliersError("Database connection unavailable")
+      return
+    }
 
     setLoadingSuppliers(true)
     setSuppliersError(null)
 
     try {
-      const suppliersRef = collection(db, "distributors")
-      const suppliersQuery = query(suppliersRef, orderBy("name"), limit(100))
-      const snapshot = await getDocs(suppliersQuery)
+      // Load distributors from data folder
+      const distributorsData = getAllDistributors()
+      
+      // Check connection status and get retailer counts from Firebase
+      const mappedSuppliers: SupplierSummary[] = await Promise.all(
+        distributorsData.map(async (dist) => {
+          // Check if this retailer is connected to this distributor
+          const connectionRef = doc(db!, "distributorConnections", `${userData.organizationName}_${dist.id}`)
+          const connectionSnap = await getDoc(connectionRef)
+          const isConnected = connectionSnap.exists()
 
-      const mapped = snapshot.docs.map((docSnap) =>
-        mapSupplierSnapshot(docSnap, userData.organizationName, userData.uid),
+          // Get total number of retailers connected to this distributor
+          const connectionsQuery = query(
+            collection(db!, "distributorConnections"),
+            where("distributorId", "==", dist.id)
+          )
+          const countSnapshot = await getCountFromServer(connectionsQuery)
+          const totalRetailers = countSnapshot.data().count
+
+          return {
+            id: dist.id,
+            name: dist.displayName,
+            description: dist.description,
+            logoUrl: dist.logoUrl,
+            paymentTerms: dist.businessInfo.paymentTerms,
+            totalRetailers: totalRetailers,
+            totalOrders: dist.stats.totalOrders,
+            totalGMV: dist.stats.totalProducts,
+            lastActivity: dist.lastUpdated,
+            connected: isConnected,
+            reputationScore: 0,
+            location: dist.location.address,
+            tags: dist.categories
+          }
+        })
       )
-
-      const prioritized = mapped.sort((a, b) => {
-        if (a.connected && !b.connected) return -1
-        if (!a.connected && b.connected) return 1
-        return b.reputationScore - a.reputationScore
-      })
-
-      setSuppliers(prioritized)
-      if (!prioritized.length) {
-        setSuppliersError("No suppliers found yet. Request access from your preferred distributor.")
-      }
+      
+      // Compute reputation scores
+      const suppliersWithReputation = mappedSuppliers.map(supplier => ({ 
+        ...supplier, 
+        reputationScore: computeReputation(supplier) 
+      }))
+      
+      setSuppliers(suppliersWithReputation)
     } catch (error) {
       console.error("Failed to load suppliers", error)
       setSuppliersError("Unable to load suppliers right now. Try refreshing in a moment.")
     } finally {
       setLoadingSuppliers(false)
     }
-  }, [mapSupplierSnapshot, userData])
+  }, [userData])
 
   const loadInventoryProfile = useCallback(async () => {
     if (!userData || userData.role !== "retailer") return
@@ -331,33 +339,23 @@ export function SupplierModule() {
     }
   }, [userData])
 
-  const loadSupplierProducts = useCallback(async (supplierId: string) => {
+  const loadSupplierProducts = useCallback(async (supplierId: string, page: number = 1) => {
     setProductsLoading(true)
     setProductsError(null)
 
     try {
-      const productsRef = collection(db, "distributors", supplierId, "products")
-      const productsQuery = query(productsRef, orderBy("name"), limit(80))
-      const snapshot = await getDocs(productsQuery)
-
-      const mapped: SupplierProduct[] = snapshot.docs.map((docSnap) => {
-        const raw = docSnap.data() as Record<string, unknown>
-        return {
-          id: docSnap.id,
-          name: parseString(raw.name) ?? docSnap.id,
-          unitPrice: parseNumber(raw.unitPrice ?? raw.price ?? raw.piecePrice),
-          unit: parseString(raw.unit ?? raw.retailUom),
-          category: parseString(raw.category),
-          brand: parseString(raw.brand),
-          minOrderQuantity: parseNumber(raw.minOrderQuantity ?? raw.moq),
-          leadTime: parseString(raw.leadTime),
-          inStock: typeof raw.inStock === "boolean" ? raw.inStock : undefined,
-          imageUrl: parseString(raw.imageUrl ?? raw.image ?? raw.thumbnailUrl),
-        }
-      })
-
-      setProducts(mapped)
-      if (!mapped.length) {
+      // Load products from distributor data with pagination
+      const { products: loadedProducts, total, hasMore } = getDistributorProducts(supplierId, page, PAGE_SIZE)
+      
+      // Simulate network delay
+      await new Promise(resolve => setTimeout(resolve, 300))
+      
+      setProducts(loadedProducts)
+      setTotalProducts(total)
+      setHasMoreProducts(hasMore)
+      setCurrentPage(page)
+      
+      if (!loadedProducts.length && page === 1) {
         setProductsError("This supplier hasn't published a product catalogue yet.")
       }
     } catch (error) {
@@ -377,7 +375,7 @@ export function SupplierModule() {
   }, [loading, loadInventoryProfile, loadSuppliers, userData?.role])
 
   useEffect(() => {
-    if (selectedSupplier) {
+    if (selectedSupplier && selectedSupplier.connected) {
       loadSupplierProducts(selectedSupplier.id)
     } else {
       setProducts([])
@@ -393,6 +391,55 @@ export function SupplierModule() {
   const handleBackToList = useCallback(() => {
     setSelectedSupplier(null)
   }, [])
+
+  const handleConnectSupplier = useCallback(async (supplier: SupplierSummary) => {
+    if (!userData || !db) return
+
+    try {
+      const connectionRef = doc(db, "distributorConnections", `${userData.organizationName}_${supplier.id}`)
+      
+      if (supplier.connected) {
+        // Disconnect
+        await deleteDoc(connectionRef)
+        toast({
+          title: "Disconnected",
+          description: `You are no longer connected to ${supplier.name}`,
+        })
+      } else {
+        // Connect
+        await setDoc(connectionRef, {
+          retailerId: userData.organizationName,
+          retailerName: userData.organizationName,
+          distributorId: supplier.id,
+          distributorName: supplier.name,
+          connectedAt: new Date().toISOString(),
+          status: "active"
+        })
+        toast({
+          title: "Connected!",
+          description: `You can now access ${supplier.name}'s product catalogue`,
+        })
+      }
+
+      // Reload suppliers to reflect the change
+      await loadSuppliers()
+      
+      // If viewing this supplier's details, refresh the selected supplier state
+      if (selectedSupplier?.id === supplier.id) {
+        const updatedSupplier = suppliers.find(s => s.id === supplier.id)
+        if (updatedSupplier) {
+          setSelectedSupplier(updatedSupplier)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to update connection", error)
+      toast({
+        title: "Connection failed",
+        description: "Unable to update connection. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }, [userData, db, toast, loadSuppliers, selectedSupplier, suppliers])
 
   const visibleSuppliers = useMemo(() => {
     if (!searchTerm.trim()) return suppliers
@@ -487,38 +534,75 @@ export function SupplierModule() {
       animate={{ x: 0, y: 0, opacity: 1 }}
       transition={{ duration: 0.18, ease: [0.4, 0.0, 0.2, 1] }}
     >
-      <div className="border-b border-white/5 bg-slate-950/60 backdrop-blur">
-        <div className="flex items-center justify-between gap-4 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <button
+      {/* Header */}
+      <div className="bg-slate-900/40 backdrop-blur-sm">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center space-x-4">
+            {/* Back Button */}
+            <button 
               onClick={() => router.push("/modules")}
-              className="group flex h-10 w-10 items-center justify-center rounded-lg border border-purple-500/20 bg-purple-500/10 transition hover:border-purple-400/50 hover:bg-purple-500/20"
+              className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
             >
-              <ArrowLeft className="h-5 w-5 text-purple-100 group-hover:text-white" />
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.03] via-transparent to-purple-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+              <ArrowLeft className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
             </button>
-            <div>
-              <h1 className="text-xl font-semibold text-white">Suppliers</h1>
-              <p className="text-sm text-slate-300/80">{headerSubtitle}</p>
+            
+            {/* Tabs */}
+            <div className="flex items-center space-x-2 p-1 backdrop-blur-md bg-gradient-to-r from-white/[0.08] to-white/[0.04] border border-white/[0.08] rounded-xl shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)]">
+              <button
+                type="button"
+                className={`px-4 py-2 font-semibold text-base rounded-lg transition-all duration-300 relative
+                  ${activeTab === 'supplier' 
+                    ? 'text-purple-400 backdrop-blur-md bg-gradient-to-r from-purple-500/[0.15] to-purple-500/[0.08] border border-purple-500/30 shadow-[0_4px_16px_-8px_rgba(168,85,247,0.3)]' 
+                    : 'text-slate-200 hover:text-purple-400 hover:bg-white/[0.05] backdrop-blur-sm'}`}
+                onClick={() => setActiveTab('supplier')}
+              >
+                <span className="relative">
+                  Supplier
+                  {activeTab === 'supplier' && (
+                    <span className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-purple-400 via-purple-200 to-purple-400 rounded-full blur-sm animate-pulse"></span>
+                  )}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`px-4 py-2 font-semibold text-base rounded-lg transition-all duration-300 relative
+                  ${activeTab === 'credit' 
+                    ? 'text-purple-400 backdrop-blur-md bg-gradient-to-r from-purple-500/[0.15] to-purple-500/[0.08] border border-purple-500/30 shadow-[0_4px_16px_-8px_rgba(168,85,247,0.3)]' 
+                    : 'text-slate-200 hover:text-purple-400 hover:bg-white/[0.05] backdrop-blur-sm'}`}
+                onClick={() => setActiveTab('credit')}
+              >
+                <span className="relative">
+                  Credit
+                  {activeTab === 'credit' && (
+                    <span className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-purple-400 via-purple-200 to-purple-400 rounded-full blur-sm animate-pulse"></span>
+                  )}
+                </span>
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Input
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search suppliers"
-              className="w-64 border border-purple-500/15 bg-slate-950/70 text-sm text-white placeholder:text-slate-400"
-            />
-          </div>
+          {activeTab === 'supplier' && (
+            <div className="flex items-center gap-2">
+              <Input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search suppliers"
+                className="w-64 border border-purple-500/15 bg-slate-950/70 text-sm text-white placeholder:text-slate-400"
+              />
+            </div>
+          )}
         </div>
       </div>
 
       <div className="flex-1 overflow-hidden">
-        {selectedSupplier ? (
-          <ScrollArea className="h-full">
+        {activeTab === 'supplier' && (
+          <>
+            {selectedSupplier ? (
+              <ScrollArea className="h-full">
             <div className="space-y-6 p-6">
               <div className="flex flex-wrap items-start justify-between gap-4 rounded-3xl border border-purple-500/20 bg-slate-950/70 p-6 shadow-[0_24px_60px_-36px_rgba(129,140,248,0.45)]">
                 <div className="flex items-start gap-4">
-                  <SupplierAvatar name={selectedSupplier.name} />
+                  <SupplierAvatar name={selectedSupplier.name} logoUrl={selectedSupplier.logoUrl} />
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-2xl font-semibold text-white">{selectedSupplier.name}</h2>
@@ -575,21 +659,29 @@ export function SupplierModule() {
                   >
                     &larr; Back to suppliers
                   </Button>
-                  {!selectedSupplier.connected && (
+                  {selectedSupplier.connected ? (
+                    <Button
+                      variant="outline"
+                      className="border-rose-400/40 bg-rose-500/10 text-rose-100 hover:border-rose-300/60 hover:bg-rose-500/20"
+                      onClick={() => handleConnectSupplier(selectedSupplier)}
+                    >
+                      Disconnect
+                    </Button>
+                  ) : (
                     <Button
                       className="border border-purple-400/40 bg-purple-500/10 text-purple-100 hover:border-purple-300/60 hover:bg-purple-500/20"
-                      onClick={() => handleRequestAccess(selectedSupplier)}
+                      onClick={() => handleConnectSupplier(selectedSupplier)}
                     >
-                      Request access
+                      Connect
                     </Button>
                   )}
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-2xl border border-purple-500/15 bg-slate-950/70 p-4">
                   <div className="flex items-center justify-between text-sm text-slate-300/80">
-                    <span>Retailers served</span>
+                    <span>Retailers connected</span>
                     <Users className="h-4 w-4 text-purple-300" />
                   </div>
                   <p className="mt-2 text-2xl font-semibold text-white">
@@ -607,11 +699,11 @@ export function SupplierModule() {
                 </div>
                 <div className="rounded-2xl border border-purple-500/15 bg-slate-950/70 p-4">
                   <div className="flex items-center justify-between text-sm text-slate-300/80">
-                    <span>Total GMV</span>
-                    <TrendingUp className="h-4 w-4 text-sky-300" />
+                    <span>Products</span>
+                    <Package className="h-4 w-4 text-purple-300" />
                   </div>
                   <p className="mt-2 text-2xl font-semibold text-white">
-                    {formatCurrency(selectedSupplier.totalGMV)}
+                    {selectedSupplier.totalGMV.toLocaleString()}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-purple-500/15 bg-slate-950/70 p-4">
@@ -621,152 +713,135 @@ export function SupplierModule() {
                   </div>
                   <p className="mt-2 text-xl font-semibold text-white">{selectedSupplier.paymentTerms}</p>
                 </div>
-              </div>
-
-              <div className="rounded-3xl border border-purple-500/20 bg-slate-950/70 p-6">
+              </div>              <div className="rounded-3xl border border-purple-500/20 bg-slate-950/70 p-6">
                 <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-white">Product catalogue</h3>
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Product Catalogue</h3>
+                    {selectedSupplier.connected && totalProducts > 0 && (
+                      <p className="text-sm text-slate-400">
+                        Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, totalProducts)} of {totalProducts} products
+                      </p>
+                    )}
+                  </div>
                   {productsLoading && <LoadingSpinner size="sm" />}
                 </div>
-                {productsError && (
-                  <div className="rounded-xl border border-amber-400/40 bg-amber-500/15 px-4 py-3 text-sm text-amber-100">
-                    {productsError}
+                
+                {!selectedSupplier.connected ? (
+                  <div className="rounded-xl border border-purple-400/40 bg-purple-500/15 px-4 py-8 text-center">
+                    <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-purple-500/20">
+                      <Package className="h-6 w-6 text-purple-300" />
+                    </div>
+                    <p className="text-sm font-medium text-purple-100">Connect to view products</p>
+                    <p className="mt-1 text-xs text-purple-200/80">
+                      Click the Connect button above to access this distributor's catalogue
+                    </p>
                   </div>
-                )}
-                {!productsLoading && !productsError && products.length === 0 && (
-                  <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-slate-300/80">
-                    Catalogue not available yet. Check back later or contact the supplier for their price list.
-                  </div>
-                )}
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                ) : (
+                  <>
+                    {productsError && (
+                      <div className="rounded-xl border border-amber-400/40 bg-amber-500/15 px-4 py-3 text-sm text-amber-100">
+                        {productsError}
+                      </div>
+                    )}
+                    {!productsLoading && !productsError && products.length === 0 && (
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-slate-300/80">
+                        Catalogue not available yet. Check back later or contact the supplier for their price list.
+                      </div>
+                    )}
+                    {/* Product Grid - Inventory Style */}
+                    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {products.map((product) => (
                     <div
                       key={product.id}
-                      className="group rounded-2xl border border-purple-500/15 bg-gradient-to-br from-slate-950/80 via-slate-950/60 to-purple-950/40 p-4 shadow-[0_18px_40px_-28px_rgba(99,102,241,0.55)] transition hover:-translate-y-0.5 hover:border-purple-400/45 hover:shadow-[0_26px_60px_-28px_rgba(129,140,248,0.6)]"
+                      className="group relative rounded-xl border border-purple-500/10 bg-slate-900/60 p-3 transition hover:border-purple-400/30 hover:bg-slate-900/80"
                     >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-white line-clamp-2">{product.name}</p>
-                          {product.brand && (
-                            <p className="text-xs text-slate-300/80">{product.brand}</p>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">{product.name}</p>
+                            {product.code && (
+                              <p className="text-xs text-slate-400">Code: {product.code}</p>
+                            )}
+                          </div>
+                          <Package className="h-4 w-4 text-purple-300 flex-shrink-0" />
+                        </div>
+                        
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-lg font-semibold text-purple-300">
+                            {formatCurrency(product.unitPrice)}
+                          </span>
+                          {product.unit && (
+                            <span className="text-xs text-slate-400">/ {product.unit}</span>
                           )}
                         </div>
-                        <Package className="h-5 w-5 text-purple-300" />
-                      </div>
-                      <div className="mt-4 text-lg font-semibold text-white">
-                        {formatCurrency(product.unitPrice)}
-                        {product.unit && <span className="text-sm text-slate-300/80"> / {product.unit}</span>}
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-300/80">
-                        {product.category && (
-                          <span className="rounded-full border border-purple-400/30 bg-purple-500/15 px-2 py-1">
-                            {product.category}
-                          </span>
-                        )}
-                        {Number.isFinite(product.minOrderQuantity) && product.minOrderQuantity !== 0 && (
-                          <span className="rounded-full border border-sky-400/30 bg-sky-500/15 px-2 py-1">
-                            MOQ {product.minOrderQuantity}
-                          </span>
-                        )}
-                        {product.leadTime && (
-                          <span className="rounded-full border border-amber-400/30 bg-amber-500/15 px-2 py-1">
-                            Lead time {product.leadTime}
-                          </span>
-                        )}
-                        {product.inStock !== undefined && (
-                          <span
-                            className={cn(
-                              "rounded-full px-2 py-1",
+                        
+                        <div className="flex flex-wrap gap-1.5 text-xs">
+                          {product.category && (
+                            <span className="rounded-md border border-purple-400/20 bg-purple-500/10 px-1.5 py-0.5 text-purple-200">
+                              {product.category}
+                            </span>
+                          )}
+                          {product.inStock !== undefined && (
+                            <span className={cn(
+                              "rounded-md px-1.5 py-0.5",
                               product.inStock
-                                ? "border border-purple-400/30 bg-purple-500/15 text-purple-100"
-                                : "border border-rose-400/30 bg-rose-500/15 text-rose-100",
-                            )}
-                          >
-                            {product.inStock ? "In stock" : "Out of stock"}
-                          </span>
+                                ? "border border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
+                                : "border border-rose-400/20 bg-rose-500/10 text-rose-200"
+                            )}>
+                              {product.inStock ? "In Stock" : "Out"}
+                            </span>
+                          )}
+                        </div>
+                        
+                        {product.leadTime && (
+                          <p className="text-xs text-slate-400">Lead: {product.leadTime}</p>
                         )}
+                      </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Pagination Controls */}
+                  {totalProducts > PAGE_SIZE && (
+                    <div className="mt-6 flex items-center justify-between border-t border-purple-500/10 pt-4">
+                      <div className="text-sm text-slate-400">
+                        Page {currentPage} of {Math.ceil(totalProducts / PAGE_SIZE)}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => selectedSupplier && loadSupplierProducts(selectedSupplier.id, currentPage - 1)}
+                          disabled={currentPage === 1 || productsLoading}
+                          className="border-purple-500/20 bg-slate-900/60 text-slate-200 hover:border-purple-400/40 hover:bg-slate-900/80"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => selectedSupplier && loadSupplierProducts(selectedSupplier.id, currentPage + 1)}
+                          disabled={!hasMoreProducts || productsLoading}
+                          className="border-purple-500/20 bg-slate-900/60 text-slate-200 hover:border-purple-400/40 hover:bg-slate-900/80"
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )}
+                  </>
+                )}
               </div>
             </div>
           </ScrollArea>
         ) : (
           <ScrollArea className="h-full">
             <div className="space-y-6 p-6">
-              {connectedCount === 0 && !loadingSuppliers && !suppliersError && (
-                <EmptyState onRefresh={loadSuppliers} />
-              )}
-
               {suppliersError && (
                 <div className="rounded-2xl border border-rose-500/40 bg-rose-500/15 px-4 py-3 text-sm text-rose-100">
                   {suppliersError}
-                </div>
-              )}
-
-              {!loadingSuppliers && !suppliersError && suggestedSuppliers.length > 0 && (
-                <div className="rounded-3xl border border-purple-500/20 bg-slate-950/70 p-5 shadow-[0_28px_72px_-40px_rgba(129,140,248,0.55)]">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-sm text-purple-100">
-                      <Sparkles className="h-4 w-4 text-purple-300" /> Suggested distributors for you
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {hasInventoryProfile && (
-                        <Badge className="border border-purple-400/35 bg-purple-500/15 text-[0.7rem] text-purple-100">
-                          Based on your inventory
-                        </Badge>
-                      )}
-                      <Button
-                        variant="outline"
-                        className="h-8 border-purple-400/30 bg-purple-500/5 text-xs text-purple-100 hover:border-purple-300/60 hover:bg-purple-500/10"
-                        onClick={loadSuppliers}
-                      >
-                        Refresh list
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {suggestedSuppliers.map(({ supplier, reasons, score }) => (
-                      <button
-                        key={`suggested-${supplier.id}`}
-                        onClick={() => handleSupplierSelect(supplier)}
-                        className="group w-full rounded-2xl border border-purple-500/20 bg-slate-950/70 p-4 text-left transition hover:-translate-y-1 hover:border-purple-400/50 hover:shadow-[0_28px_70px_-38px_rgba(167,139,250,0.6)]"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <SupplierAvatar name={supplier.name} />
-                            <div>
-                              <h3 className="text-base font-semibold text-white">{supplier.name}</h3>
-                              {supplier.location && (
-                                <div className="mt-1 flex items-center gap-1 text-xs text-slate-300/75">
-                                  <MapPin className="h-3.5 w-3.5 text-purple-300" />
-                                  {supplier.location}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <Badge className="border border-purple-400/35 bg-purple-500/20 text-[0.7rem] text-purple-100">
-                            Top pick
-                          </Badge>
-                        </div>
-                        <div className="mt-3 space-y-2 text-xs text-slate-300/80">
-                          {reasons.map((reason, index) => (
-                            <div key={index} className="flex items-start gap-2">
-                              <Compass className="mt-0.5 h-3.5 w-3.5 text-purple-300" />
-                              <span className="leading-relaxed">{reason}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="mt-4 flex items-center justify-between text-xs text-purple-200/80">
-                          <span className="flex items-center gap-1">
-                            <TrendingUp className="h-3.5 w-3.5" /> Composite score {score.toFixed(1)}
-                          </span>
-                          <span className="font-medium">View profile →</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
                 </div>
               )}
 
@@ -775,41 +850,48 @@ export function SupplierModule() {
                   <LoadingSpinner size="md" />
                 </div>
               ) : (
-                <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-5 md:grid-cols-2">
                   {visibleSuppliers.map((supplier) => (
-                    <button
+                    <div
                       key={supplier.id}
                       onClick={() => handleSupplierSelect(supplier)}
-                      className="group w-full rounded-3xl border border-purple-500/15 bg-gradient-to-br from-slate-950/85 via-slate-950/60 to-purple-950/45 p-5 text-left shadow-[0_24px_60px_-36px_rgba(99,102,241,0.55)] transition hover:-translate-y-1 hover:border-purple-400/50 hover:shadow-[0_32px_76px_-34px_rgba(129,140,248,0.65)]"
+                      className="group w-full cursor-pointer rounded-3xl border border-purple-500/15 bg-gradient-to-br from-slate-950/85 via-slate-950/60 to-purple-950/45 p-5 text-left shadow-[0_8px_24px_-12px_rgba(99,102,241,0.2)] transition hover:-translate-y-1 hover:border-purple-400/40 hover:shadow-[0_12px_32px_-16px_rgba(129,140,248,0.3)]"
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <SupplierAvatar name={supplier.name} />
+                        <div className="flex items-center gap-4">
+                          <SupplierAvatar name={supplier.name} logoUrl={supplier.logoUrl} />
                           <div>
-                            <h3 className="text-lg font-semibold text-white">{supplier.name}</h3>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-xl font-semibold text-white">{supplier.name}</h3>
+                              <div className="group/badge relative">
+                                <BadgeCheck className="h-5 w-5 text-purple-400 transition-transform duration-500 group-hover/badge:rotate-[360deg]" />
+                                <span className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs text-slate-200 opacity-0 transition-opacity group-hover/badge:opacity-100">
+                                  Verified
+                                </span>
+                              </div>
+                            </div>
                             {supplier.location && (
                               <p className="text-xs text-slate-300/80">{supplier.location}</p>
                             )}
                           </div>
                         </div>
-                        <div>
-                          {supplier.connected ? (
-                            <Badge className="border border-purple-400/40 bg-purple-500/15 text-purple-100">
-                              Connected
-                            </Badge>
-                          ) : (
-                            <Badge className="border border-slate-400/30 bg-slate-500/10 text-slate-100">
-                              Prospect
-                            </Badge>
+                        <Button
+                          size="default"
+                          variant={supplier.connected ? "outline" : "default"}
+                          className={cn(
+                            "h-9 px-6 text-sm font-medium",
+                            supplier.connected 
+                              ? "border-slate-400/40 bg-slate-500/10 text-slate-200 hover:border-slate-300/60 hover:bg-slate-500/20"
+                              : "border-0 bg-white text-slate-900 hover:bg-white/90"
                           )}
-                        </div>
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleConnectSupplier(supplier)
+                          }}
+                        >
+                          {supplier.connected ? "Connected" : "Connect"}
+                        </Button>
                       </div>
-
-                      {supplier.description && (
-                        <p className="mt-3 line-clamp-2 text-sm text-slate-200/80">
-                          {supplier.description}
-                        </p>
-                      )}
 
                       <div className="mt-4 grid grid-cols-3 gap-3 text-xs text-slate-300/80">
                         <div className="rounded-xl border border-purple-500/15 bg-slate-950/70 p-3">
@@ -832,30 +914,48 @@ export function SupplierModule() {
                         </div>
                         <div className="rounded-xl border border-purple-500/15 bg-slate-950/70 p-3">
                           <div className="flex items-center gap-2">
-                            <TrendingUp className="h-3.5 w-3.5 text-sky-300" />
-                            GMV
+                            <Package className="h-3.5 w-3.5 text-purple-300" />
+                            Products
                           </div>
                           <p className="mt-2 text-base font-semibold text-white">
-                            {formatCurrency(supplier.totalGMV)}
+                            {supplier.totalGMV.toLocaleString()}
                           </p>
                         </div>
                       </div>
 
-                      <div className="mt-4 flex items-center justify-between">
+                      <div className="mt-4 flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 text-xs text-purple-200/90">
                           <StarIcon className="h-3.5 w-3.5" />
                           Reputation {supplier.reputationScore.toFixed(1)} / 10
                         </div>
-                        <div className="text-xs text-purple-200/80">
-                          View catalogue →
-                        </div>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
             </div>
           </ScrollArea>
+        )}
+        </>
+      )}
+
+        {activeTab === 'credit' && (
+          <div className="flex h-full items-center justify-center p-6">
+            <div className="max-w-md text-center">
+              <div className="mb-4 flex justify-center">
+                <div className="rounded-full bg-purple-500/10 p-4">
+                  <TrendingUp className="h-8 w-8 text-purple-400" />
+                </div>
+              </div>
+              <h3 className="text-xl font-semibold text-white">Credit Management</h3>
+              <p className="mt-2 text-sm text-slate-300/80">
+                View and manage your credit limits, payment terms, and outstanding balances with connected suppliers.
+              </p>
+              <Badge className="mt-4 border border-purple-400/40 bg-purple-500/15 text-purple-100">
+                Coming Soon
+              </Badge>
+            </div>
+          </div>
         )}
       </div>
     </motion.div>

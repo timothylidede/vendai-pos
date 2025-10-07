@@ -68,6 +68,8 @@ declare global {
         tokens?: { accessToken?: string; idToken?: string };
       }>;
       onOAuthCallback: (callback: (event: any, url: string) => void) => void;
+      onOAuthCompleted: (callback: (event: any, result: any) => void) => void;
+      removeOAuthListeners: () => void;
       removeAllListeners: (channel: string) => void;
       platform: string;
       versions: { node: string; chrome: string; electron: string };

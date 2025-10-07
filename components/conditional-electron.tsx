@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react'
 import { detectElectron } from '@/lib/is-electron'
 import { WindowControls } from './window-controls'
-import UpdateManager from './update-manager'
 
 export function ConditionalElectronComponents() {
   const [isElectron, setIsElectron] = useState(false)
@@ -21,7 +20,7 @@ export function ConditionalElectronComponents() {
   return (
     <div className="flex items-center space-x-2">
       <WindowControls />
-      <UpdateManager />
+      {/* UpdateManager removed as per request */}
     </div>
   )
 }

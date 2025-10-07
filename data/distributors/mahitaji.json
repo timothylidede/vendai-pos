@@ -1,0 +1,39 @@
+{
+  "id": "mahitaji",
+  "name": "Mahitaji",
+  "displayName": "Mahitaji Enterprises Ltd",
+  "description": "Your trusted distribution partner for essential goods. Specializing in fast-moving consumer goods with competitive pricing and flexible payment terms.",
+  "logoUrl": "/images/mahitaji-logo.png",
+  "contact": {
+    "email": "sales@mahitaji.co.ke",
+    "phone": "+254 722 987 654",
+    "address": "Baba Dogo Rd, Nairobi"
+  },
+  "businessInfo": {
+    "paymentTerms": "Net 45",
+    "creditLimit": 350000,
+    "taxRate": 16,
+    "minimumOrderValue": 3000
+  },
+  "location": {
+    "city": "Nairobi",
+    "country": "Kenya",
+    "address": "Baba Dogo Rd, Nairobi",
+    "coordinates": {
+      "lat": -1.2297,
+      "lng": 36.8831
+    }
+  },
+  "stats": {
+    "totalRetailers": 0,
+    "totalOrders": 2890,
+    "totalProducts": 20,
+    "averageOrderValue": 3391,
+    "onTimeDeliveryRate": 95
+  },
+  "status": "active",
+  "connected": false,
+  "categories": ["Food", "Beverages", "Dairy", "Grains", "Flour", "Cooking Oils"],
+  "pricelistSource": "data/mahitaji pricelist_extracted_text.txt",
+  "lastUpdated": "2025-07-23T00:00:00Z"
+}

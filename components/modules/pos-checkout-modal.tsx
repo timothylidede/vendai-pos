@@ -282,7 +282,7 @@ export function POSCheckoutModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] w-full max-w-4xl overflow-hidden border-white/10 bg-slate-900/70 backdrop-blur-xl text-slate-100 shadow-[0_28px_80px_-24px_rgba(15,118,110,0.45)]">
+            <DialogContent className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-4xl translate-x-[-50%] translate-y-[-50%] gap-4 border border-white/10 bg-slate-900/95 p-0 shadow-[0_32px_64px_-24px_rgba(12,74,110,0.4)] backdrop-blur-2xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-2xl max-h-[90vh] overflow-hidden" showCloseButton>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3 text-lg font-semibold text-emerald-200">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">
@@ -430,7 +430,7 @@ function MethodSelector({ primaryMethod, onChange }: { primaryMethod: POSPayment
     <div className="rounded-2xl border border-white/8 bg-slate-900/60 p-5 shadow-[0_18px_48px_-26px_rgba(15,118,110,0.42)]">
       <h3 className="text-sm font-semibold text-slate-200">Payment method</h3>
       <p className="mt-1 text-xs text-slate-400">Choose how the customer is paying. Mixed tender lets you combine multiple methods.</p>
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-2">
         {methods.map((method) => {
           const Icon = PAYMENT_ICONS[method]
           const active = primaryMethod === method
@@ -523,7 +523,7 @@ function CustomerCapture({ customer, onChange }: { customer: CustomerDraft; onCh
       </RadioGroup>
 
       {customer.type === 'identified' && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
             <Label className="text-xs text-slate-400">Name</Label>
             <Input

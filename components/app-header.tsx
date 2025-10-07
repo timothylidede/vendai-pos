@@ -30,7 +30,7 @@ export function AppHeader() {
       <div className="flex items-center space-x-3" style={interactiveRegionStyle}>
         <a href="/modules" aria-label="Go to Modules Dashboard">
           <Image
-            src="/images/logo-icon.png"
+            src="/images/logo-icon-remove.png"
             alt="vendai"
             width={24}
             height={24}

@@ -3,7 +3,7 @@
  * Part of Phase 1.1 Receiving Flow Completion
  */
 
-import { db } from '@/lib/firebase'
+import { getFirestore } from 'firebase/firestore'
 import {
   addDoc,
   collection,
@@ -39,6 +39,7 @@ export async function createPurchaseOrder(
   request: CreatePurchaseOrderRequest,
   userId: string
 ): Promise<string> {
+  const db = getFirestore()
   if (!db) throw new Error('Firestore not initialized')
 
   const lines: PurchaseOrderLine[] = request.lines.map(line => ({
@@ -77,6 +78,7 @@ export async function createPurchaseOrder(
  * Get a purchase order by ID
  */
 export async function getPurchaseOrder(poId: string): Promise<PurchaseOrder | null> {
+  const db = getFirestore()
   if (!db) throw new Error('Firestore not initialized')
   
   const docRef = doc(db, PURCHASE_ORDERS_COL, poId)
@@ -97,6 +99,7 @@ export async function listPurchaseOrders(
   orgId: string,
   limitCount = 50
 ): Promise<PurchaseOrder[]> {
+  const db = getFirestore()
   if (!db) throw new Error('Firestore not initialized')
 
   const q = query(
@@ -119,7 +122,11 @@ export async function listPurchaseOrders(
 export async function receiveDelivery(
   request: ReceiveDeliveryRequest
 ): Promise<ReceiveDeliveryResponse> {
+  const db = getFirestore()
   if (!db) throw new Error('Firestore not initialized')
+
+  // Store orgId for webhook trigger
+  let orgId: string = request.orgId
 
   const result = await runTransaction(db, async (transaction) => {
     // 1. Fetch the PO
@@ -264,6 +271,22 @@ export async function receiveDelivery(
     }
   })
 
+  // 7. Trigger webhooks for inventory updates (non-blocking)
+  if (result.success && result.inventoryUpdated.length > 0) {
+    try {
+      // Import dynamically to avoid circular dependencies
+      const { triggerStockUpdateWebhook } = await import('./pos-sync-triggers')
+      
+      // Trigger webhook for each updated product
+      for (const productId of result.inventoryUpdated) {
+        await triggerStockUpdateWebhook(orgId, productId, {} as any)
+      }
+    } catch (error) {
+      console.error('Failed to trigger stock update webhooks:', error)
+      // Non-blocking: Don't fail the operation if webhooks fail
+    }
+  }
+
   return result
 }
 
@@ -275,6 +298,7 @@ export async function cancelPurchaseOrder(
   orgId: string,
   reason?: string
 ): Promise<void> {
+  const db = getFirestore()
   if (!db) throw new Error('Firestore not initialized')
 
   const poRef = doc(db, PURCHASE_ORDERS_COL, poId)

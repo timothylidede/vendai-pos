@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Card } from './ui/card'
 import { 
   ShoppingCart, Package, HeartHandshake, Truck, Users,
-  ArrowRightCircle,
+  ArrowRightCircle, TrendingUp,
   Settings, UserCircle, ChevronDown, 
   User, Mail, MapPin, LogOut, X
 } from 'lucide-react'
@@ -259,7 +259,9 @@ export function ModulesDashboard() {
     setShowProfileDropdown(false);
     setIsSigningOut(true);
     try {
-  await signOut(auth);
+  if (auth) {
+    await signOut(auth);
+  }
   localStorage.removeItem('vendai-user-role');
   localStorage.removeItem('vendai-first-login');
   router.push('/login');

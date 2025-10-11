@@ -220,6 +220,11 @@ export interface POSProduct {
   cartonBarcode?: string
   piecePrice: number
   cartonPrice?: number // optional wholesale price for reference
+  reorderPoint?: number // trigger replenishment when stock falls below this
+  reorderQty?: number // suggested quantity to reorder
+  preferredSupplierId?: string // default supplier for auto-replenishment
+  barcodeType?: 'standard' | 'weight-embedded' // For barcode scale support
+  pricePerKg?: number // Price per kilogram for weight-based products
 }
 
 export interface InventoryRecord {
@@ -261,4 +266,7 @@ export interface POSOrderDoc {
   notes?: string
   paymentMethod?: string
   paymentRef?: string
+  // Multi-lane support
+  deviceId?: string
+  laneId?: string
 }

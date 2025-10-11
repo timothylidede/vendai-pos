@@ -1,6 +1,6 @@
 /**
  * VendAI Cloud Functions
- * Background jobs for credit scoring, reconciliation, and notifications
+ * Background jobs for credit scoring, reconciliation, auto-replenishment, and notifications
  */
 
 import * as functions from 'firebase-functions/v1';
@@ -989,3 +989,238 @@ async function buildCreditAssessmentInput(retailerId: string): Promise<CreditCom
           });
         }
       });
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * AUTO-REPLENISHMENT BACKGROUND JOB
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
+/**
+ * Daily scheduled job to generate replenishment suggestions for all organizations
+ * Runs at 2:00 AM IST (20:30 UTC previous day) every day
+ * 
+ * This automates the replenishment process by:
+ * 1. Fetching all organizations
+ * 2. For each org, checking inventory levels against reorder points
+ * 3. Generating suggestions for low-stock items
+ * 4. Selecting best suppliers based on lead time and cost
+ */
+export const dailyReplenishmentCheck = functions.pubsub
+  .schedule('30 20 * * *') // 2:00 AM IST = 20:30 UTC previous day
+  .timeZone('Asia/Kolkata')
+  .onRun(async (context) => {
+    functions.logger.info('Starting daily replenishment check job');
+
+    try {
+      // Track job execution
+      const jobStartTime = admin.firestore.Timestamp.now();
+      const jobRef = await db.collection('replenishment_jobs').add({
+        type: 'daily_check',
+        status: 'running',
+        startedAt: jobStartTime,
+        triggeredBy: 'cron',
+      });
+
+      let processedOrgs = 0;
+      let totalSuggestions = 0;
+      const errors: Array<{ orgId: string; error: string }> = [];
+
+      // Get all organizations
+      const orgsSnapshot = await db.collection('organizations').get();
+      functions.logger.info(`Found ${orgsSnapshot.size} organizations to process`);
+
+      // Process each organization
+      for (const orgDoc of orgsSnapshot.docs) {
+        const orgId = orgDoc.id;
+        const orgData = orgDoc.data();
+
+        try {
+          functions.logger.info(`Processing organization: ${orgId} (${orgData.name || 'Unknown'})`);
+
+          // Generate replenishment suggestions for this org
+          const suggestionsCount = await generateReplenishmentSuggestionsForOrg(orgId);
+          
+          totalSuggestions += suggestionsCount;
+          processedOrgs++;
+
+          functions.logger.info(`Generated ${suggestionsCount} suggestions for org: ${orgId}`);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          functions.logger.error(`Failed to process org ${orgId}:`, error);
+          errors.push({ orgId, error: errorMessage });
+        }
+      }
+
+      // Update job status
+      await jobRef.update({
+        status: 'completed',
+        completedAt: admin.firestore.Timestamp.now(),
+        processedOrgs,
+        totalSuggestions,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+
+      functions.logger.info('Daily replenishment check completed', {
+        processedOrgs,
+        totalSuggestions,
+        errorCount: errors.length,
+      });
+
+      return {
+        success: true,
+        processedOrgs,
+        totalSuggestions,
+        errorCount: errors.length,
+      };
+    } catch (error) {
+      functions.logger.error('Daily replenishment check failed:', error);
+      throw error;
+    }
+  });
+
+/**
+ * Generate replenishment suggestions for a single organization
+ * This is the core logic that checks inventory and creates suggestions
+ */
+async function generateReplenishmentSuggestionsForOrg(orgId: string): Promise<number> {
+  const REORDER_QTY_MULTIPLIER = 1.5; // Safety stock multiplier
+  let suggestionsCreated = 0;
+
+  // 1. Get all inventory items for this org
+  const inventorySnapshot = await db
+    .collection('inventory')
+    .where('orgId', '==', orgId)
+    .get();
+
+  functions.logger.info(`Found ${inventorySnapshot.size} inventory items for org: ${orgId}`);
+
+  // 2. Get all products to check reorder points
+  const productsSnapshot = await db
+    .collection('pos_products')
+    .where('orgId', '==', orgId)
+    .get();
+
+  const productsMap = new Map<string, any>();
+  productsSnapshot.docs.forEach(doc => {
+    productsMap.set(doc.id, { id: doc.id, ...doc.data() });
+  });
+
+  // 3. Check each inventory item
+  for (const invDoc of inventorySnapshot.docs) {
+    const inventory = invDoc.data();
+    const productId = inventory.productId;
+
+    if (!productId) continue;
+
+    const product = productsMap.get(productId);
+    if (!product) continue;
+
+    // Skip if no reorder point set
+    const reorderPoint = product.reorderPoint || 0;
+    if (reorderPoint <= 0) continue;
+
+    // Calculate total stock
+    const totalStock = 
+      (inventory.qtyBase || 0) * (inventory.unitsPerBase || 1) + 
+      (inventory.qtyLoose || 0);
+
+    // Check if below reorder point
+    if (totalStock >= reorderPoint) continue;
+
+    // 4. Find best supplier for this product
+    const supplierSkusSnapshot = await db
+      .collection('supplier_skus')
+      .where('orgId', '==', orgId)
+      .where('productId', '==', productId)
+      .orderBy('leadTimeDays', 'asc')
+      .orderBy('costPrice', 'asc')
+      .limit(1)
+      .get();
+
+    if (supplierSkusSnapshot.empty) {
+      functions.logger.warn(`No supplier found for product ${productId} in org ${orgId}`);
+      continue;
+    }
+
+    const supplierSku = supplierSkusSnapshot.docs[0].data();
+
+    // 5. Get supplier details
+    const supplierDoc = await db
+      .collection('suppliers')
+      .doc(supplierSku.supplierId)
+      .get();
+
+    if (!supplierDoc.exists) {
+      functions.logger.warn(`Supplier ${supplierSku.supplierId} not found`);
+      continue;
+    }
+
+    const supplier = supplierDoc.data();
+
+    // 6. Calculate suggested quantity
+    const reorderQty = product.reorderQty || reorderPoint;
+    const suggestedQty = Math.ceil(reorderQty * REORDER_QTY_MULTIPLIER);
+    const stockPercentage = (totalStock / reorderPoint) * 100;
+
+    // Determine priority
+    let priority: 'low' | 'medium' | 'high' | 'critical';
+    if (stockPercentage <= 0) priority = 'critical';
+    else if (stockPercentage <= 25) priority = 'critical';
+    else if (stockPercentage <= 50) priority = 'high';
+    else if (stockPercentage <= 75) priority = 'medium';
+    else priority = 'low';
+
+    // Determine reason
+    let reason: string;
+    if (totalStock <= 0) {
+      reason = 'Out of stock - urgent replenishment required';
+    } else if (stockPercentage <= 25) {
+      reason = `Critical: Only ${Math.round(stockPercentage)}% of reorder point remaining`;
+    } else {
+      reason = `Below reorder point (${Math.round(stockPercentage)}% remaining)`;
+    }
+
+    // 7. Check if suggestion already exists
+    const existingSuggestionSnapshot = await db
+      .collection('replenishment_suggestions')
+      .where('orgId', '==', orgId)
+      .where('productId', '==', productId)
+      .where('status', 'in', ['pending', 'approved'])
+      .limit(1)
+      .get();
+
+    if (!existingSuggestionSnapshot.empty) {
+      functions.logger.info(`Suggestion already exists for product ${productId}`);
+      continue;
+    }
+
+    // 8. Create suggestion
+    const suggestion = {
+      orgId,
+      productId,
+      productName: product.name || 'Unknown Product',
+      currentStock: totalStock,
+      reorderPoint,
+      suggestedQty,
+      preferredSupplierId: supplierSku.supplierId,
+      preferredSupplierName: supplier?.name || 'Unknown Supplier',
+      supplierLeadTime: supplierSku.leadTimeDays || 7,
+      unitCost: supplierSku.costPrice || 0,
+      totalCost: suggestedQty * (supplierSku.costPrice || 0),
+      status: 'pending',
+      createdAt: admin.firestore.Timestamp.now(),
+      reason,
+      priority,
+    };
+
+    await db.collection('replenishment_suggestions').add(suggestion);
+    suggestionsCreated++;
+
+    functions.logger.info(
+      `Created ${priority} priority suggestion for ${product.name} (${productId}) in org ${orgId}`
+    );
+  }
+
+  return suggestionsCreated;
+}

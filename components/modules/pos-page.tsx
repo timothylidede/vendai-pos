@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog'
 import { downloadPdf, type ReceiptPreviewBundle } from '@/lib/receipts'
 import { useScannerFocus } from '@/lib/scanner-focus'
 import { HardwareStatusStrip } from '@/components/hardware-status-strip'
+import { EnhancedSalesTab } from './enhanced-sales-tab'
 
 type LegacyImageField = 'imageUrl' | 'image_url' | 'imageURL'
 
@@ -1189,71 +1190,8 @@ export function POSPage() {
           </div>
         </div>
       ) : (
-        /* Sales View */
-        <div className="flex flex-1 overflow-hidden min-h-0">
-          {/* Sales List */}
-          <div className="flex-1 flex flex-col">
-            {/* Sales Header */}
-            <div className="bg-slate-900/40 backdrop-blur-sm px-6 py-4 border-b border-slate-500/30">
-              <div className="flex items-center justify-between">
-                <div className="relative flex-1 max-w-lg">
-                  <Input 
-                    placeholder="Search Sales..." 
-                    className="bg-slate-700 border-slate-600 text-white placeholder-slate-400 pl-10"
-                  />
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                </div>
-                <div className="flex items-center space-x-4">
-                  <Button variant="outline" size="sm" className="text-slate-300 border-slate-600">
-                    Active <ChevronDown className="w-4 h-4 ml-1" />
-                  </Button>
-                  <span className="text-slate-400">1-30 / 34</span>
-                  <div className="flex items-center space-x-1">
-                    <Button variant="ghost" size="sm" className="text-slate-400">◀</Button>
-                    <Button variant="ghost" size="sm" className="text-slate-400">▶</Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Sales Content */}
-            <div className="flex-1 overflow-y-auto thin-scroll">
-              {recentOrders.map((order) => (
-                <div key={order.id} className="flex items-center justify-between px-6 py-4 border-b border-slate-500/30 hover:bg-slate-800/50 cursor-pointer">
-                  <div className="flex items-center space-x-6">
-                    <div className="text-left">
-                      <div className="text-slate-300 text-sm">{new Date(order.createdAt).toLocaleDateString()}</div>
-                      <div className="text-slate-400 text-xs">{new Date(order.createdAt).toLocaleTimeString()}</div>
-                    </div>
-                    <div className="text-left">
-                      <div className="text-white font-medium">{order.id}</div>
-                      <div className="text-slate-400 text-sm">{order.lines?.length ?? 0} items</div>
-                    </div>
-                  </div>
-                  <div className="text-white font-medium">
-                    {formatMoney(order.total || 0)}
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <span className={`px-3 py-1 rounded text-sm ${order.status === 'paid' ? 'bg-green-600 text-white' : 'bg-slate-600 text-white'}`}>
-                      {order.status}
-                    </span>
-                    <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Right Side - Sale Selection */}
-          <div className="w-1/3 border-l border-slate-500/30 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center">
-            <div className="text-center text-slate-400">
-              <ShoppingCart className="w-16 h-16 mx-auto mb-4 text-slate-600" />
-              <p className="text-lg">Select a sale or scan QR code</p>
-            </div>
-          </div>
-        </div>
+        /* Enhanced Sales View with Dashboard Metrics */
+        <EnhancedSalesTab />
       )}
       
       {/* Glassmorphic Toast Container */}

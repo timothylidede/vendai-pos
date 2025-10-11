@@ -139,6 +139,7 @@ export async function addPosOrder(
   userId: string,
   lines: POSOrderLine[],
   options: CreatePOSOrderOptions = {},
+  retryCount = 0
 ): Promise<string> {
   const total = lines.reduce((s, l) => s + l.lineTotal, 0)
   const orderRef = collection(getDb(), POS_ORDERS_COL)
@@ -181,6 +182,14 @@ export async function addPosOrder(
     updatedAt: nowIso,
   }
 
+  // Multi-lane support: Add deviceId and laneId
+  if (options.deviceId) {
+    baseOrderDoc.deviceId = options.deviceId
+  }
+  if (options.laneId) {
+    baseOrderDoc.laneId = options.laneId
+  }
+
   if (paymentSummary) {
     baseOrderDoc.paymentSummary = paymentSummary
   }
@@ -203,6 +212,9 @@ export async function addPosOrder(
   if (primaryPayment?.referenceId) {
     baseOrderDoc.paymentRef = primaryPayment.referenceId
   }
+
+  const MAX_RETRIES = 3
+  const RETRY_DELAY_MS = 100
 
   try {
     const id = await runTransaction(getDb(), async (tx) => {
@@ -264,6 +276,19 @@ export async function addPosOrder(
     })
     return id as string
   } catch (error) {
+    // Implement exponential backoff retry for contention errors
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const isContentionError = errorMessage.includes('contention') || 
+                              errorMessage.includes('aborted') ||
+                              errorMessage.includes('concurrent')
+
+    if (isContentionError && retryCount < MAX_RETRIES) {
+      const delay = RETRY_DELAY_MS * Math.pow(2, retryCount)
+      console.log(`Transaction contention detected. Retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`)
+      await new Promise(resolve => setTimeout(resolve, delay))
+      return addPosOrder(orgId, userId, lines, options, retryCount + 1)
+    }
+
     console.error('Transaction failed:', error)
     // If transaction fails, create a simple order without inventory updates
     const fallbackOrder = await addDoc(orderRef, {

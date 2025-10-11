@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Plus,
   Check,
+  CheckCircle2,
   Minus,
   Trash2,
   X,
@@ -41,6 +42,9 @@ import { ScrollArea } from "../ui/scroll-area"
 import { Badge } from "../ui/badge"
 import { getAllDistributors, getDistributorProducts, type DistributorMetadata, type DistributorProduct } from "@/data/distributor-data"
 import { ReceivingModal } from "./receiving-modal"
+import ReplenishmentDashboard from "./replenishment-dashboard"
+import PriceAlertReview from "./price-alert-review"
+import ReconciliationDashboard from "./reconciliation-dashboard"
 
 interface CartItem {
   productId: string
@@ -251,7 +255,7 @@ export function SupplierModule() {
   const { toast } = useToast()
   const { loading, userData } = useAuth()
 
-  const [activeTab, setActiveTab] = useState<'supplier' | 'credit'>('supplier')
+  const [activeTab, setActiveTab] = useState<'supplier' | 'replenishment' | 'price-alerts' | 'reconciliation'>('supplier')
   const [searchTerm, setSearchTerm] = useState("")
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([])
   const [inventoryTags, setInventoryTags] = useState<string[]>([])
@@ -610,7 +614,7 @@ export function SupplierModule() {
     } finally {
       setPlacingOrder(false)
     }
-  }, [cart, userData, cartTotal, toast, clearCart])
+  }, [cart, userData, toast, clearCart]) // Removed cartTotal from dependencies
 
   const cartTotal = useMemo(() => {
     return cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0)
@@ -729,15 +733,45 @@ export function SupplierModule() {
               <button
                 type="button"
                 className={`px-4 py-2 font-semibold text-base rounded-lg transition-all duration-300 relative
-                  ${activeTab === 'credit' 
+                  ${activeTab === 'replenishment' 
                     ? 'text-purple-400 backdrop-blur-md bg-gradient-to-r from-purple-500/[0.15] to-purple-500/[0.08] border border-purple-500/30 shadow-[0_4px_16px_-8px_rgba(168,85,247,0.3)]' 
                     : 'text-slate-200 hover:text-purple-400 hover:bg-white/[0.05] backdrop-blur-sm'}`}
-                onClick={() => setActiveTab('credit')}
+                onClick={() => setActiveTab('replenishment')}
               >
                 <span className="relative">
-                  Credit
-                  {activeTab === 'credit' && (
+                  Auto-Replenishment
+                  {activeTab === 'replenishment' && (
                     <span className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-purple-400 via-purple-200 to-purple-400 rounded-full blur-sm animate-pulse"></span>
+                  )}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`px-4 py-2 font-semibold text-base rounded-lg transition-all duration-300 relative
+                  ${activeTab === 'price-alerts' 
+                    ? 'text-orange-400 backdrop-blur-md bg-gradient-to-r from-orange-500/[0.15] to-orange-500/[0.08] border border-orange-500/30 shadow-[0_4px_16px_-8px_rgba(251,146,60,0.3)]' 
+                    : 'text-slate-200 hover:text-orange-400 hover:bg-white/[0.05] backdrop-blur-sm'}`}
+                onClick={() => setActiveTab('price-alerts')}
+              >
+                <span className="relative">
+                  Price Alerts
+                  {activeTab === 'price-alerts' && (
+                    <span className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-orange-400 via-orange-200 to-orange-400 rounded-full blur-sm animate-pulse"></span>
+                  )}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`px-4 py-2 font-semibold text-base rounded-lg transition-all duration-300 relative
+                  ${activeTab === 'reconciliation' 
+                    ? 'text-teal-400 backdrop-blur-md bg-gradient-to-r from-teal-500/[0.15] to-teal-500/[0.08] border border-teal-500/30 shadow-[0_4px_16px_-8px_rgba(20,184,166,0.3)]' 
+                    : 'text-slate-200 hover:text-teal-400 hover:bg-white/[0.05] backdrop-blur-sm'}`}
+                onClick={() => setActiveTab('reconciliation')}
+              >
+                <span className="relative">
+                  Reconciliation
+                  {activeTab === 'reconciliation' && (
+                    <span className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-teal-400 via-teal-200 to-teal-400 rounded-full blur-sm animate-pulse"></span>
                   )}
                 </span>
               </button>
@@ -1108,22 +1142,69 @@ export function SupplierModule() {
         </>
       )}
 
-        {activeTab === 'credit' && (
-          <div className="flex h-full items-center justify-center p-6">
-            <div className="max-w-md text-center">
-              <div className="mb-4 flex justify-center">
-                <div className="rounded-full bg-purple-500/10 p-4">
-                  <TrendingUp className="h-8 w-8 text-purple-400" />
+        {activeTab === 'replenishment' && (
+          <div className="h-full overflow-auto">
+            {userData?.organizationName ? (
+              <ReplenishmentDashboard orgId={userData.organizationName} />
+            ) : (
+              <div className="flex h-full items-center justify-center p-6">
+                <div className="max-w-md text-center">
+                  <div className="mb-4 flex justify-center">
+                    <div className="rounded-full bg-purple-500/10 p-4">
+                      <TrendingUp className="h-8 w-8 text-purple-400" />
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-semibold text-white">Organization Required</h3>
+                  <p className="mt-2 text-sm text-slate-300/80">
+                    Please set up your organization to use auto-replenishment.
+                  </p>
                 </div>
               </div>
-              <h3 className="text-xl font-semibold text-white">Credit Management</h3>
-              <p className="mt-2 text-sm text-slate-300/80">
-                View and manage your credit limits, payment terms, and outstanding balances with connected suppliers.
-              </p>
-              <Badge className="mt-4 border border-purple-400/40 bg-purple-500/15 text-purple-100">
-                Coming Soon
-              </Badge>
-            </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'price-alerts' && (
+          <div className="h-full overflow-auto">
+            {userData?.organizationName ? (
+              <PriceAlertReview orgId={userData.organizationName} />
+            ) : (
+              <div className="flex h-full items-center justify-center p-6">
+                <div className="max-w-md text-center">
+                  <div className="mb-4 flex justify-center">
+                    <div className="rounded-full bg-orange-500/10 p-4">
+                      <TrendingUp className="h-8 w-8 text-orange-400" />
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-semibold text-white">Organization Required</h3>
+                  <p className="mt-2 text-sm text-slate-300/80">
+                    Please set up your organization to use price alerts.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'reconciliation' && (
+          <div className="h-full overflow-auto">
+            {userData?.organizationName ? (
+              <ReconciliationDashboard orgId={userData.organizationName} />
+            ) : (
+              <div className="flex h-full items-center justify-center p-6">
+                <div className="max-w-md text-center">
+                  <div className="mb-4 flex justify-center">
+                    <div className="rounded-full bg-teal-500/10 p-4">
+                      <CheckCircle2 className="h-8 w-8 text-teal-400" />
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-semibold text-white">Organization Required</h3>
+                  <p className="mt-2 text-sm text-slate-300/80">
+                    Please set up your organization to use reconciliation.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

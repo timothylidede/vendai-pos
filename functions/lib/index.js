@@ -1,7 +1,7 @@
 "use strict";
 /**
  * VendAI Cloud Functions
- * Background jobs for credit scoring, reconciliation, and notifications
+ * Background jobs for credit scoring, reconciliation, auto-replenishment, and notifications
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -37,7 +37,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onDisputeResolved = exports.onDisputeCreated = exports.overdueInvoiceReminders = exports.reconciliationWorker = exports.onPaymentReceived = exports.recalculateCreditScores = void 0;
+exports.dailyReplenishmentCheck = exports.onDisputeResolved = exports.onDisputeCreated = exports.overdueInvoiceReminders = exports.reconciliationWorker = exports.onPaymentReceived = exports.recalculateCreditScores = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const credit_engine_1 = require("./credit-engine");
@@ -520,7 +520,7 @@ exports.reconciliationWorker = functions
     .pubsub.schedule('every day 02:00')
     .timeZone('Africa/Nairobi')
     .onRun(async () => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y;
     const startTime = Date.now();
     let processed = 0;
     let mismatches = 0;
@@ -610,23 +610,26 @@ exports.reconciliationWorker = functions
                 .limit(1)
                 .get();
             if (ledgerSnapshot.empty && invoice.paymentStatus === 'paid') {
+                const amountData = (_g = invoice.amount) !== null && _g !== void 0 ? _g : undefined;
+                const taxAmount = typeof (amountData === null || amountData === void 0 ? void 0 : amountData.tax) === 'number' ? amountData.tax : 0;
                 const netPayoutAmount = Math.max(invoiceTotal - totalCommission - totalProcessorFees, 0);
                 const ledgerRef = db.collection('ledger_entries').doc();
                 await ledgerRef.set({
-                    retailerOrgId: (_h = (_g = invoice.retailerOrgId) !== null && _g !== void 0 ? _g : po.retailerOrgId) !== null && _h !== void 0 ? _h : null,
-                    supplierOrgId: (_k = (_j = invoice.supplierOrgId) !== null && _j !== void 0 ? _j : po.supplierOrgId) !== null && _k !== void 0 ? _k : null,
+                    retailerOrgId: (_j = (_h = invoice.retailerOrgId) !== null && _h !== void 0 ? _h : po.retailerOrgId) !== null && _j !== void 0 ? _j : null,
+                    supplierOrgId: (_l = (_k = invoice.supplierOrgId) !== null && _k !== void 0 ? _k : po.supplierOrgId) !== null && _l !== void 0 ? _l : null,
                     purchaseOrderId,
                     invoiceId,
-                    paymentId: (_m = (_l = paymentsSnapshot.docs[0]) === null || _l === void 0 ? void 0 : _l.id) !== null && _m !== void 0 ? _m : null,
-                    supplierId: (_p = (_o = invoice.supplierId) !== null && _o !== void 0 ? _o : po.supplierId) !== null && _p !== void 0 ? _p : null,
-                    supplierName: (_r = (_q = invoice.supplierName) !== null && _q !== void 0 ? _q : po.supplierName) !== null && _r !== void 0 ? _r : null,
-                    retailerId: (_t = (_s = invoice.retailerId) !== null && _s !== void 0 ? _s : po.retailerId) !== null && _t !== void 0 ? _t : null,
-                    retailerName: (_v = (_u = invoice.retailerName) !== null && _u !== void 0 ? _u : po.retailerName) !== null && _v !== void 0 ? _v : null,
+                    paymentId: (_o = (_m = paymentsSnapshot.docs[0]) === null || _m === void 0 ? void 0 : _m.id) !== null && _o !== void 0 ? _o : null,
+                    supplierId: (_q = (_p = invoice.supplierId) !== null && _p !== void 0 ? _p : po.supplierId) !== null && _q !== void 0 ? _q : null,
+                    supplierName: (_s = (_r = invoice.supplierName) !== null && _r !== void 0 ? _r : po.supplierName) !== null && _s !== void 0 ? _s : null,
+                    retailerId: (_u = (_t = invoice.retailerId) !== null && _t !== void 0 ? _t : po.retailerId) !== null && _u !== void 0 ? _u : null,
+                    retailerName: (_w = (_v = invoice.retailerName) !== null && _v !== void 0 ? _v : po.retailerName) !== null && _w !== void 0 ? _w : null,
                     grossAmount: invoiceTotal,
                     vendaiCommissionAmount: totalCommission,
                     processorFeeAmount: totalProcessorFees,
+                    taxAmount,
                     netPayoutAmount,
-                    currency: (_x = (_w = invoice.amount) === null || _w === void 0 ? void 0 : _w.currency) !== null && _x !== void 0 ? _x : 'KES',
+                    currency: (_y = (_x = invoice.amount) === null || _x === void 0 ? void 0 : _x.currency) !== null && _y !== void 0 ? _y : 'KES',
                     reconciliationStatus: paymentDiff <= 1 ? 'matched' : 'partial',
                     payoutStatus: 'pending',
                     notes: 'Auto-generated by reconciliation worker',
@@ -828,4 +831,210 @@ exports.onDisputeResolved = functions.firestore
         });
     }
 });
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * AUTO-REPLENISHMENT BACKGROUND JOB
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+/**
+ * Daily scheduled job to generate replenishment suggestions for all organizations
+ * Runs at 2:00 AM IST (20:30 UTC previous day) every day
+ *
+ * This automates the replenishment process by:
+ * 1. Fetching all organizations
+ * 2. For each org, checking inventory levels against reorder points
+ * 3. Generating suggestions for low-stock items
+ * 4. Selecting best suppliers based on lead time and cost
+ */
+exports.dailyReplenishmentCheck = functions.pubsub
+    .schedule('30 20 * * *') // 2:00 AM IST = 20:30 UTC previous day
+    .timeZone('Asia/Kolkata')
+    .onRun(async (context) => {
+    functions.logger.info('Starting daily replenishment check job');
+    try {
+        // Track job execution
+        const jobStartTime = admin.firestore.Timestamp.now();
+        const jobRef = await db.collection('replenishment_jobs').add({
+            type: 'daily_check',
+            status: 'running',
+            startedAt: jobStartTime,
+            triggeredBy: 'cron',
+        });
+        let processedOrgs = 0;
+        let totalSuggestions = 0;
+        const errors = [];
+        // Get all organizations
+        const orgsSnapshot = await db.collection('organizations').get();
+        functions.logger.info(`Found ${orgsSnapshot.size} organizations to process`);
+        // Process each organization
+        for (const orgDoc of orgsSnapshot.docs) {
+            const orgId = orgDoc.id;
+            const orgData = orgDoc.data();
+            try {
+                functions.logger.info(`Processing organization: ${orgId} (${orgData.name || 'Unknown'})`);
+                // Generate replenishment suggestions for this org
+                const suggestionsCount = await generateReplenishmentSuggestionsForOrg(orgId);
+                totalSuggestions += suggestionsCount;
+                processedOrgs++;
+                functions.logger.info(`Generated ${suggestionsCount} suggestions for org: ${orgId}`);
+            }
+            catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                functions.logger.error(`Failed to process org ${orgId}:`, error);
+                errors.push({ orgId, error: errorMessage });
+            }
+        }
+        // Update job status
+        await jobRef.update({
+            status: 'completed',
+            completedAt: admin.firestore.Timestamp.now(),
+            processedOrgs,
+            totalSuggestions,
+            errors: errors.length > 0 ? errors : undefined,
+        });
+        functions.logger.info('Daily replenishment check completed', {
+            processedOrgs,
+            totalSuggestions,
+            errorCount: errors.length,
+        });
+        return {
+            success: true,
+            processedOrgs,
+            totalSuggestions,
+            errorCount: errors.length,
+        };
+    }
+    catch (error) {
+        functions.logger.error('Daily replenishment check failed:', error);
+        throw error;
+    }
+});
+/**
+ * Generate replenishment suggestions for a single organization
+ * This is the core logic that checks inventory and creates suggestions
+ */
+async function generateReplenishmentSuggestionsForOrg(orgId) {
+    const REORDER_QTY_MULTIPLIER = 1.5; // Safety stock multiplier
+    let suggestionsCreated = 0;
+    // 1. Get all inventory items for this org
+    const inventorySnapshot = await db
+        .collection('inventory')
+        .where('orgId', '==', orgId)
+        .get();
+    functions.logger.info(`Found ${inventorySnapshot.size} inventory items for org: ${orgId}`);
+    // 2. Get all products to check reorder points
+    const productsSnapshot = await db
+        .collection('pos_products')
+        .where('orgId', '==', orgId)
+        .get();
+    const productsMap = new Map();
+    productsSnapshot.docs.forEach(doc => {
+        productsMap.set(doc.id, Object.assign({ id: doc.id }, doc.data()));
+    });
+    // 3. Check each inventory item
+    for (const invDoc of inventorySnapshot.docs) {
+        const inventory = invDoc.data();
+        const productId = inventory.productId;
+        if (!productId)
+            continue;
+        const product = productsMap.get(productId);
+        if (!product)
+            continue;
+        // Skip if no reorder point set
+        const reorderPoint = product.reorderPoint || 0;
+        if (reorderPoint <= 0)
+            continue;
+        // Calculate total stock
+        const totalStock = (inventory.qtyBase || 0) * (inventory.unitsPerBase || 1) +
+            (inventory.qtyLoose || 0);
+        // Check if below reorder point
+        if (totalStock >= reorderPoint)
+            continue;
+        // 4. Find best supplier for this product
+        const supplierSkusSnapshot = await db
+            .collection('supplier_skus')
+            .where('orgId', '==', orgId)
+            .where('productId', '==', productId)
+            .orderBy('leadTimeDays', 'asc')
+            .orderBy('costPrice', 'asc')
+            .limit(1)
+            .get();
+        if (supplierSkusSnapshot.empty) {
+            functions.logger.warn(`No supplier found for product ${productId} in org ${orgId}`);
+            continue;
+        }
+        const supplierSku = supplierSkusSnapshot.docs[0].data();
+        // 5. Get supplier details
+        const supplierDoc = await db
+            .collection('suppliers')
+            .doc(supplierSku.supplierId)
+            .get();
+        if (!supplierDoc.exists) {
+            functions.logger.warn(`Supplier ${supplierSku.supplierId} not found`);
+            continue;
+        }
+        const supplier = supplierDoc.data();
+        // 6. Calculate suggested quantity
+        const reorderQty = product.reorderQty || reorderPoint;
+        const suggestedQty = Math.ceil(reorderQty * REORDER_QTY_MULTIPLIER);
+        const stockPercentage = (totalStock / reorderPoint) * 100;
+        // Determine priority
+        let priority;
+        if (stockPercentage <= 0)
+            priority = 'critical';
+        else if (stockPercentage <= 25)
+            priority = 'critical';
+        else if (stockPercentage <= 50)
+            priority = 'high';
+        else if (stockPercentage <= 75)
+            priority = 'medium';
+        else
+            priority = 'low';
+        // Determine reason
+        let reason;
+        if (totalStock <= 0) {
+            reason = 'Out of stock - urgent replenishment required';
+        }
+        else if (stockPercentage <= 25) {
+            reason = `Critical: Only ${Math.round(stockPercentage)}% of reorder point remaining`;
+        }
+        else {
+            reason = `Below reorder point (${Math.round(stockPercentage)}% remaining)`;
+        }
+        // 7. Check if suggestion already exists
+        const existingSuggestionSnapshot = await db
+            .collection('replenishment_suggestions')
+            .where('orgId', '==', orgId)
+            .where('productId', '==', productId)
+            .where('status', 'in', ['pending', 'approved'])
+            .limit(1)
+            .get();
+        if (!existingSuggestionSnapshot.empty) {
+            functions.logger.info(`Suggestion already exists for product ${productId}`);
+            continue;
+        }
+        // 8. Create suggestion
+        const suggestion = {
+            orgId,
+            productId,
+            productName: product.name || 'Unknown Product',
+            currentStock: totalStock,
+            reorderPoint,
+            suggestedQty,
+            preferredSupplierId: supplierSku.supplierId,
+            preferredSupplierName: (supplier === null || supplier === void 0 ? void 0 : supplier.name) || 'Unknown Supplier',
+            supplierLeadTime: supplierSku.leadTimeDays || 7,
+            unitCost: supplierSku.costPrice || 0,
+            totalCost: suggestedQty * (supplierSku.costPrice || 0),
+            status: 'pending',
+            createdAt: admin.firestore.Timestamp.now(),
+            reason,
+            priority,
+        };
+        await db.collection('replenishment_suggestions').add(suggestion);
+        suggestionsCreated++;
+        functions.logger.info(`Created ${priority} priority suggestion for ${product.name} (${productId}) in org ${orgId}`);
+    }
+    return suggestionsCreated;
+}
 //# sourceMappingURL=index.js.map

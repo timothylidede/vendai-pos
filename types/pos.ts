@@ -111,4 +111,53 @@ export interface CreatePOSOrderOptions {
 	receipt?: POSReceipt
 	balanceDue?: number
 	notes?: string
+	deviceId?: string
+	laneId?: string
+}
+
+// Multi-lane checkout types
+export interface POSLane {
+	id: string
+	name: string
+	deviceId: string
+	status: 'active' | 'inactive' | 'maintenance'
+	currentCashier?: string
+	lastActivity?: string
+}
+
+export interface CashierPerformance {
+	cashierId: string
+	cashierName?: string
+	laneId?: string
+	totalSales: number
+	transactionCount: number
+	averageTransactionTime: number
+	averageOrderValue: number
+	startTime: string
+	endTime: string
+}
+
+// Offline queue types
+export interface QueuedPOSTransaction {
+	id: string
+	orgId: string
+	userId: string
+	lines: any[]
+	options: CreatePOSOrderOptions
+	queuedAt: string
+	attemptCount: number
+	lastAttemptAt?: string
+	status: 'pending' | 'syncing' | 'synced' | 'failed' | 'conflict'
+	error?: string
+	conflictResolution?: 'skip' | 'force' | 'manual'
+}
+
+export interface OfflineQueueStats {
+	totalQueued: number
+	pending: number
+	syncing: number
+	synced: number
+	failed: number
+	conflicts: number
+	oldestQueuedAt?: string
 }

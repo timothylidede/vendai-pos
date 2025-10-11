@@ -1,0 +1,55 @@
+{
+  "timestamp": "2025-10-11T10:53:27.360Z",
+  "distributors": [
+    {
+      "distributor": "Sam West Supermarket",
+      "file": "SAM WEST SUPERMARKET PRICELIST_20250726_094811 (2)_extracted_text.txt",
+      "lineCount": 6092,
+      "estimatedProducts": 5173
+    },
+    {
+      "distributor": "Mahitaji",
+      "file": "mahitaji pricelist_extracted_text.txt",
+      "lineCount": 1187,
+      "estimatedProducts": 1108
+    }
+  ],
+  "totalProducts": 6281,
+  "costAnalysis": [
+    {
+      "name": "Cloudflare Workers AI (SDXL)",
+      "cost": 0.0001,
+      "totalCost": 0.6281
+    },
+    {
+      "name": "Replicate SDXL",
+      "cost": 0.003,
+      "totalCost": 18.843
+    },
+    {
+      "name": "FAL.ai FLUX schnell",
+      "cost": 0.003,
+      "totalCost": 18.843
+    },
+    {
+      "name": "Together.ai FLUX schnell",
+      "cost": 0.003,
+      "totalCost": 18.843
+    },
+    {
+      "name": "Replicate FLUX dev",
+      "cost": 0.03,
+      "totalCost": 188.43
+    },
+    {
+      "name": "OpenAI DALL-E 3 (standard)",
+      "cost": 0.04,
+      "totalCost": 251.24
+    },
+    {
+      "name": "OpenAI DALL-E 3 (HD)",
+      "cost": 0.08,
+      "totalCost": 502.48
+    }
+  ]
+}

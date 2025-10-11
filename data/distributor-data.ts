@@ -2,6 +2,7 @@
 
 import samWestMetadata from './distributors/sam-west.json'
 import mahitajiMetadata from './distributors/mahitaji.json'
+import { getProductImageMap, matchProductImage } from '@/lib/firebase-product-images'
 
 export interface DistributorContact {
   email: string
@@ -176,7 +177,7 @@ export const distributorProducts: Record<string, DistributorProduct[]> = {
   ]
 }
 
-// Get products for a distributor with pagination
+// Get products for a distributor with pagination (synchronous, uses mock data)
 export function getDistributorProducts(
   distributorId: string,
   page: number = 1,
@@ -191,5 +192,49 @@ export function getDistributorProducts(
     products,
     total: allProducts.length,
     hasMore: endIndex < allProducts.length
+  }
+}
+
+// Get products enriched with Firebase-generated images (async)
+export async function getDistributorProductsWithImages(
+  distributorId: string,
+  page: number = 1,
+  pageSize: number = 40
+): Promise<{ products: DistributorProduct[]; total: number; hasMore: boolean }> {
+  // Get base products
+  const allProducts = distributorProducts[distributorId] || []
+  
+  try {
+    // Fetch product images from Firebase
+    const imageMap = await getProductImageMap(distributorId)
+    
+    // Enrich products with images
+    const enrichedProducts = allProducts.map(product => {
+      const imageUrl = matchProductImage(product.name, product.id, imageMap)
+      return imageUrl ? { ...product, imageUrl } : product
+    })
+    
+    // Apply pagination
+    const startIndex = (page - 1) * pageSize
+    const endIndex = startIndex + pageSize
+    const products = enrichedProducts.slice(startIndex, endIndex)
+    
+    return {
+      products,
+      total: enrichedProducts.length,
+      hasMore: endIndex < enrichedProducts.length
+    }
+  } catch (error) {
+    console.error('Error enriching products with images:', error)
+    // Fallback to original products without images
+    const startIndex = (page - 1) * pageSize
+    const endIndex = startIndex + pageSize
+    const products = allProducts.slice(startIndex, endIndex)
+    
+    return {
+      products,
+      total: allProducts.length,
+      hasMore: endIndex < allProducts.length
+    }
   }
 }

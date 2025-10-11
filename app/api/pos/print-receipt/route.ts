@@ -121,8 +121,9 @@ export async function POST(request: NextRequest) {
 
     // Return requested format
     if (format === 'escpos' && formatted.escpos) {
-      // Return binary ESC/POS data
-      return new NextResponse(formatted.escpos, {
+      // Return binary ESC/POS data - convert Buffer to Uint8Array
+      const uint8Array = new Uint8Array(formatted.escpos)
+      return new NextResponse(uint8Array, {
         headers: {
           'Content-Type': 'application/octet-stream',
           'Content-Disposition': `attachment; filename="receipt-${orderId}.bin"`,

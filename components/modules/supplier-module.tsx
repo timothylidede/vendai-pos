@@ -40,7 +40,7 @@ import { Input } from "../ui/input"
 import { LoadingSpinner } from "../loading-spinner"
 import { ScrollArea } from "../ui/scroll-area"
 import { Badge } from "../ui/badge"
-import { getAllDistributors, getDistributorProducts, type DistributorMetadata, type DistributorProduct } from "@/data/distributor-data"
+import { getAllDistributors, getDistributorProducts, getDistributorProductsWithImages, type DistributorMetadata, type DistributorProduct } from "@/data/distributor-data"
 import { ReceivingModal } from "./receiving-modal"
 import ReplenishmentDashboard from "./replenishment-dashboard"
 import PriceAlertReview from "./price-alert-review"
@@ -372,11 +372,8 @@ export function SupplierModule() {
     setProductsError(null)
 
     try {
-      // Load products from distributor data with pagination
-      const { products: loadedProducts, total, hasMore } = getDistributorProducts(supplierId, page, PAGE_SIZE)
-      
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 300))
+      // Load products from distributor data with Firebase images
+      const { products: loadedProducts, total, hasMore } = await getDistributorProductsWithImages(supplierId, page, PAGE_SIZE)
       
       setProducts(loadedProducts)
       setTotalProducts(total)

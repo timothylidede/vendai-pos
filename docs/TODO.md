@@ -217,12 +217,83 @@ _Last updated: 11 Oct 2025_
 ### 👥 2.1 Onboarding & Data Setup
 
 #### Smart Import Assistant
-- [ ] Enhance `/api/inventory/upload` with auto-detection:
-  - Parse common CSV/XLSX formats from external POS/ERP exports
-  - Auto-map columns using fuzzy matching (name, barcode, price, stock)
-  - Provide confidence scores and suggestions for ambiguous mappings
+- [x] Create CSV/XLSX parser with fuzzy matching (`lib/csv-parser.ts`) ✅ COMPLETED
+  - Levenshtein distance algorithm for column name matching
+  - Confidence scoring (0-1 scale)
+  - Support for 10 standard product fields
+  - Sample data preview (first 5 rows)
+- [ ] Enhance `/api/inventory/upload` with dual-mode import:
+  - **Mode 1: "Quick Import"** - Use deterministic CSV parser (free, fast, for clean spreadsheets)
+  - **Mode 2: "Smart Import"** - Use AI processing chain (costs money, for messy/complex data)
+  - Allow user to choose mode in UI
 - [ ] Build import preview UI before final commit
 - [ ] Support rollback of last import batch
+
+#### Distributor Image Library & Smart Recycling System 🎨 NEW
+**See `docs/DISTRIBUTOR_IMAGE_LIBRARY_SYSTEM.md` for complete documentation**
+
+**Phase 1: Generate Distributor Catalog (Week 1)**
+- [ ] Set up FAL.ai account and API key
+  - **Model:** FLUX schnell (https://fal.ai/models/fal-ai/flux/schnell)
+  - **Cost:** $0.003 per image (~$21 for 7,000 products)
+  - **Quality:** Excellent (same as Replicate FLUX but 90% cheaper)
+- [ ] Parse distributor pricelists
+  - [ ] Create `scripts/parse-distributor-pricelists.ts`
+  - [ ] Extract products from Sam West (~5,900 products) and Mahitaji (~1,100 products)
+  - [ ] Normalize product names, brands, categories, pack sizes
+  - [ ] Store in Firestore `distributor_products` collection
+- [ ] Generate distributor image library
+  - [ ] Create `lib/fal-image-generator.ts` (replace Replicate with FAL.ai)
+  - [ ] Create `scripts/generate-distributor-images.ts` for batch processing
+  - [ ] Generate ~7,000 product images with rich metadata
+  - [ ] Upload to Firebase Storage: `distributor-images/{distributor}/{category}/{product-hash}.jpg`
+  - [ ] Store metadata in Firestore `distributor_images` collection with:
+    - Product details (name, brand, category, pack size)
+    - OpenAI embeddings for semantic search ($0.0001/product = $0.70 total)
+    - Usage tracking (timesReused, reusedByRetailers)
+    - Storage path, generation details
+- [ ] Deploy Firestore indexes for `distributor_images` collection
+  - Composite index: `distributorId + category + generatedAt`
+  - Composite index: `brandName + timesReused`
+- [ ] Optional: Create admin UI for manual QA (`app/admin/image-library/page.tsx`)
+
+**Phase 2: Smart Matching Engine (Week 2)**
+- [ ] Implement 3-tier image matching service (`lib/image-matching-service.ts`)
+  - **Tier 1:** Exact brand + pack size match (98% confidence) → Auto-apply
+  - **Tier 2:** Semantic similarity with OpenAI embeddings (85%+ confidence) → Auto-apply with note
+  - **Tier 3:** Fuzzy string matching (75-84% confidence) → Suggest + manual review
+  - **Fallback:** Generate new image with FAL.ai if no match found
+- [ ] Create image matching API endpoint
+  - [ ] `POST /api/inventory/match-images` - Find matching images for retailer products
+  - [ ] `GET /api/admin/image-library/analytics` - Reuse statistics dashboard
+- [ ] Integrate into inventory upload flow
+  - [ ] Auto-match images during CSV import
+  - [ ] Show confidence scores in preview UI
+  - [ ] Increment `timesReused` counter when image is reused
+  - [ ] Track `reusedByRetailers` array
+- [ ] Build review UI for low-confidence matches
+  - [ ] `components/modules/image-match-review.tsx`
+  - [ ] Show side-by-side: suggested image vs product details
+  - [ ] Accept/Reject/Generate New buttons
+  - [ ] Batch approval by category
+
+**Phase 3: Analytics & Optimization (Week 3)**
+- [ ] Create image reuse dashboard (`app/admin/image-library/analytics/page.tsx`)
+  - [ ] Top 100 most-reused images
+  - [ ] Reuse rate by category
+  - [ ] ROI calculation (images reused vs generated)
+  - [ ] Cost savings tracking
+- [ ] Implement feedback loop for continuous learning
+  - [ ] Store approval/rejection decisions
+  - [ ] Adjust confidence thresholds based on user feedback
+  - [ ] Improve semantic search weights
+
+**Expected Outcomes:**
+- ✅ 80-90% image reuse rate (based on 60-70% product overlap between distributors)
+- ✅ 95% cost reduction vs generating all images ($21 investment saves $255 per 100 retailers)
+- ✅ Instant image availability for 85% of products (no waiting for generation)
+- ✅ Consistent branding across retailers (same products look identical)
+- ✅ Faster onboarding (10 minutes vs 2 hours for image generation)
 
 #### Bulk Mapping UI
 - [ ] Create `/app/mappings` route for exception resolution
@@ -339,7 +410,205 @@ _Last updated: 11 Oct 2025_
 
 ## Phase 5: Integrations & Ecosystem
 
-### 🌐 5.1 Payment & Financial Integrations
+### � 5.0 Free Distribution Model & Commission System (NEW)
+
+#### Offline-First Free Distribution Strategy
+- [ ] **Flash Drive Installation Package**
+  - [ ] Create standalone installer (.exe) with embedded Electron app
+  - [ ] Include offline database (SQLite/IndexedDB) with pre-seeded sample data
+  - [ ] Add auto-updater for future releases (checks for updates on reconnect)
+  - [ ] Bundle installation wizard with org setup flow
+  - [ ] Support USB installation without internet connection
+  - [ ] Create installation guide for field agents
+
+- [ ] **Offline-First Architecture Enhancements**
+  - [ ] Implement persistent offline queue (IndexedDB) for all transactions
+  - [ ] Add background sync when internet is available
+  - [ ] Cache all product data, pricing, and inventory locally
+  - [ ] Support offline POS transactions with deferred sync
+  - [ ] Add visual indicators for sync status (online/offline/syncing)
+  - [ ] Handle conflict resolution for concurrent offline edits
+  - [ ] Implement data compression for efficient sync
+
+- [ ] **Organization Analytics Dashboard (Platform Admin)**
+  - [ ] **Overview Metrics**
+    - [ ] Total organizations/retailers count
+    - [ ] Total distributors count
+    - [ ] Active vs inactive organizations
+    - [ ] Total GMV across all organizations (daily/weekly/monthly)
+    - [ ] Commission revenue (5% of distributor orders)
+  
+  - [ ] **Retailer Analytics**
+    - [ ] List all retailers with profiles (name, location, contact)
+    - [ ] Order frequency per retailer
+    - [ ] Average order value per retailer
+    - [ ] Top performing retailers by GMV
+    - [ ] Retailer growth trends (new sign-ups, churn rate)
+    - [ ] Retailer engagement metrics (last active, transaction count)
+  
+  - [ ] **Distributor Analytics**
+    - [ ] List all distributors with profiles
+    - [ ] Total sales per distributor
+    - [ ] Commission owed per distributor (5% of their orders)
+    - [ ] Payment status (pending/paid commission reconciliation)
+    - [ ] Top distributors by order volume
+    - [ ] Distributor-retailer relationship mapping
+  
+  - [ ] **Sales & Order Analytics**
+    - [ ] Total orders across all organizations
+    - [ ] Order value distribution (histogram)
+    - [ ] Payment method breakdown (M-Pesa, cash, credit)
+    - [ ] Order fulfillment rates (pending/completed/cancelled)
+    - [ ] Geographic distribution of orders (map view)
+    - [ ] Product category performance
+  
+  - [ ] **Revenue & Commission Tracking**
+    - [ ] Daily/weekly/monthly commission revenue
+    - [ ] Commission reconciliation dashboard (see 5.0.2 below)
+    - [ ] Revenue forecasting based on trends
+    - [ ] Commission payment schedule and history
+    - [ ] Outstanding commission amounts per distributor
+  
+  - [ ] **Health & Performance Metrics**
+    - [ ] System uptime and reliability
+    - [ ] API response times and error rates
+    - [ ] Database query performance
+    - [ ] Offline sync success rates
+    - [ ] User session analytics (DAU/MAU)
+    - [ ] Feature adoption rates
+
+- [ ] **Platform Admin Portal** (`/app/admin`)
+  - [ ] Create protected admin route with super-admin authentication
+    - **CRITICAL**: Only allow access to `tim@vendai.digital` (Pass: `MayaMulei25*`)
+    - Store super-admin email in environment variable: `SUPER_ADMIN_EMAIL=tim@vendai.digital`
+    - Check user email on route access: redirect to /login if not super-admin
+    - Add middleware to `/app/admin/layout.tsx` to enforce super-admin check
+    - Store super-admin credentials securely in Firebase Auth custom claims
+    - Add `isSuperAdmin: true` custom claim to tim@vendai.digital user
+  - [ ] Dashboard with all analytics visualizations
+  - [ ] Organization management (view, suspend, delete)
+  - [ ] Distributor commission reconciliation interface
+  - [ ] Export reports (CSV/PDF) for all metrics
+  - [ ] Real-time monitoring dashboard
+  - [ ] Alert system for anomalies (failed syncs, payment issues)
+
+#### Commission Reconciliation System (5% Model)
+- [ ] **Payment Flow Architecture**
+  - [ ] **Direct Payment (Retailer → Distributor)**
+    - [ ] Retailer pays distributor 100% of order value directly
+    - [ ] Payment methods: M-Pesa, bank transfer, cash on delivery
+    - [ ] Payment confirmation triggers commission calculation
+    - [ ] Store payment proof (M-Pesa code, receipt, bank reference)
+  
+  - [ ] **Commission Tracking**
+    - [ ] Calculate 5% commission on every confirmed distributor order
+    - [ ] Create `commission_transactions` collection:
+      ```typescript
+      {
+        id: string
+        orderId: string
+        distributorId: string
+        retailerId: string
+        orderAmount: number
+        commissionRate: 0.05
+        commissionAmount: number  // orderAmount * 0.05
+        status: 'pending' | 'reconciled' | 'paid'
+        periodStart: timestamp
+        periodEnd: timestamp
+        reconciledAt?: timestamp
+        paidAt?: timestamp
+      }
+      ```
+    - [ ] Real-time commission accumulation per distributor
+    - [ ] Bi-weekly reconciliation period tracking
+
+- [ ] **Bi-weekly Reconciliation Workflow**
+  - [ ] **Period Management**
+    - [ ] Auto-generate reconciliation periods (every 2 weeks)
+    - [ ] Create `reconciliation_periods` collection:
+      ```typescript
+      {
+        id: string
+        periodNumber: number
+        startDate: timestamp
+        endDate: timestamp
+        status: 'active' | 'closed' | 'reconciled'
+        totalOrders: number
+        totalGMV: number
+        totalCommission: number
+        distributorBreakdown: {
+          [distributorId]: {
+            orderCount: number
+            gmv: number
+            commissionOwed: number
+            status: 'pending' | 'invoiced' | 'paid'
+          }
+        }
+      }
+      ```
+  
+  - [ ] **Reconciliation Process**
+    - [ ] Close period automatically at end of 2-week cycle
+    - [ ] Generate reconciliation reports per distributor
+    - [ ] Send itemized commission invoices to distributors
+    - [ ] Include order breakdown with references
+    - [ ] Support dispute resolution workflow
+  
+  - [ ] **Commission Collection**
+    - [ ] Generate payment requests (M-Pesa, bank transfer)
+    - [ ] Send automated reminders (3 days, 7 days, 14 days overdue)
+    - [ ] Track payment status per distributor
+    - [ ] Handle partial payments and payment plans
+    - [ ] Late payment penalties (configurable %)
+    - [ ] Auto-suspend distributors with >30 days overdue
+
+- [ ] **Distributor Commission Dashboard**
+  - [ ] Current period commission accumulation (live counter)
+  - [ ] Historical commission payments
+  - [ ] Upcoming payment due date
+  - [ ] Itemized order list with commission per order
+  - [ ] Payment history and receipts
+  - [ ] Dispute submission form
+
+- [ ] **Platform Admin Reconciliation Tools**
+  - [ ] Reconciliation period management
+  - [ ] Bulk invoice generation
+  - [ ] Payment tracking dashboard
+  - [ ] Overdue commission alerts
+  - [ ] Manual payment recording
+  - [ ] Dispute resolution workflow
+  - [ ] Commission rate adjustment tools
+
+- [ ] **API Endpoints**
+  - [ ] `POST /api/commissions/calculate` - Calculate commission on order completion
+  - [ ] `GET /api/commissions/distributor/:id` - Get distributor commission summary
+  - [ ] `POST /api/reconciliation/close-period` - Close current reconciliation period
+  - [ ] `GET /api/reconciliation/periods` - List all reconciliation periods
+  - [ ] `POST /api/reconciliation/invoice` - Generate distributor invoice
+  - [ ] `POST /api/reconciliation/record-payment` - Record commission payment
+  - [ ] `GET /api/admin/commissions/overview` - Platform-wide commission metrics
+
+- [ ] **Automated Workflows**
+  - [ ] Cloud Function: Calculate commission on order payment confirmation
+  - [ ] Cloud Function: Close reconciliation period every 2 weeks (cron)
+  - [ ] Cloud Function: Generate invoices at period close
+  - [ ] Cloud Function: Send payment reminders (daily check)
+  - [ ] Cloud Function: Suspend distributors with overdue payments (weekly)
+  - [ ] Cloud Function: Send weekly commission summary to distributors
+
+- [ ] **Compliance & Auditing**
+  - [ ] Full audit trail for all commission transactions
+  - [ ] Immutable ledger for commission calculations
+  - [ ] Tax compliance (VAT on commission if applicable)
+  - [ ] Generate tax reports for commission income
+  - [ ] Support for invoicing and receipts
+  - [ ] Dispute resolution logs
+
+**See `docs/FREE_DISTRIBUTION_MODEL.md` and `docs/COMMISSION_RECONCILIATION_SYSTEM.md` for complete documentation**
+
+---
+
+### �🌐 5.1 Payment & Financial Integrations
 
 #### M-Pesa Integration
 - [ ] Implement Daraja API for STK Push (customer payments)

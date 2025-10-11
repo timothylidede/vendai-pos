@@ -41,6 +41,7 @@
     "build:desktop": "npm run build && electron-builder --publish=never"
   },
   "dependencies": {
+    "@fal-ai/serverless-client": "^0.15.0",
     "@googlemaps/js-api-loader": "^1.16.10",
     "@googlemaps/react-wrapper": "^1.2.0",
     "@hookform/resolvers": "^3.10.0",

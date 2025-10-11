@@ -3,20 +3,13 @@ import { adminDb, adminStorage } from '@/lib/firebase-admin'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
 import Replicate from 'replicate'
 
-// Optional: lightweight Google CSE fetch for reference images
-async function googleRefImages(query: string, topN = 3): Promise<string[]> {
+// Smart Google CSE with e-commerce priority for better reference images
+async function googleRefImages(query: string, topN = 8): Promise<string[]> {
   console.log('🔍 Searching for reference images:', query)
   
   // Support multiple env var names
   const apiKey = process.env.GOOGLE_CSE_API_KEY || process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_CSE_API_KEY
   const cx = process.env.GOOGLE_CSE_CX || process.env.GOOGLE_CSE_ID || process.env.NEXT_PUBLIC_GOOGLE_CSE_CX || process.env.NEXT_PUBLIC_CX
-  
-  console.log('🔧 Google CSE Configuration:', {
-    hasApiKey: !!apiKey,
-    hasCx: !!cx,
-    apiKey: apiKey ? `${apiKey.substring(0, 10)}...` : 'none',
-    cx: cx || 'none'
-  })
   
   if (!apiKey || !cx) {
     console.log('⚠️ Missing Google CSE API key or CX, skipping reference images')
@@ -24,41 +17,79 @@ async function googleRefImages(query: string, topN = 3): Promise<string[]> {
   }
   
   try {
+    // Try e-commerce sites first for professional product photos
+    const ecommerceSites = ['jumia.co.ke', 'kilimall.co.ke', 'amazon.com', 'ebay.com', 'walmart.com']
+    const siteQuery = ecommerceSites.map(s => `site:${s}`).join(' OR ')
+    const ecommerceQuery = `(${siteQuery}) ${query}`
+    
     const url = new URL('https://www.googleapis.com/customsearch/v1')
     url.searchParams.set('key', apiKey)
     url.searchParams.set('cx', cx)
     url.searchParams.set('searchType', 'image')
-    url.searchParams.set('q', query)
-    url.searchParams.set('num', String(Math.min(topN, 5)))
-    
-    console.log('🌐 Making Google CSE request:', url.toString().replace(apiKey, '[API_KEY]'))
+    url.searchParams.set('q', ecommerceQuery)
+    url.searchParams.set('num', String(Math.min(topN, 10)))
+    url.searchParams.set('safe', 'active')
+    url.searchParams.set('imgSize', 'large')
+    url.searchParams.set('imgType', 'photo')
     
     const res = await fetch(url)
-    if (!res.ok) {
-      console.error('❌ Google CSE API error:', res.status, res.statusText)
-      const errorText = await res.text()
-      console.error('Error response:', errorText)
-      return []
+    let items: any[] = []
+    
+    if (res.ok) {
+      const json = await res.json()
+      items = Array.isArray(json.items) ? json.items : []
+      if (items.length > 0) {
+        console.log(`📸 Found ${items.length} e-commerce reference images`)
+      }
     }
     
-    const json = await res.json()
-    const items = Array.isArray(json.items) ? json.items : []
+    // Fallback to general search if e-commerce fails
+    if (items.length === 0) {
+      console.log('⚠️ No e-commerce results, trying general search...')
+      const generalUrl = new URL('https://www.googleapis.com/customsearch/v1')
+      generalUrl.searchParams.set('key', apiKey)
+      generalUrl.searchParams.set('cx', cx)
+      generalUrl.searchParams.set('searchType', 'image')
+      generalUrl.searchParams.set('q', query)
+      generalUrl.searchParams.set('num', String(Math.min(topN, 10)))
+      generalUrl.searchParams.set('safe', 'active')
+      generalUrl.searchParams.set('imgSize', 'large')
+      
+      const generalRes = await fetch(generalUrl)
+      if (!generalRes.ok) {
+        console.error('❌ Google CSE error:', generalRes.status)
+        return []
+      }
+      
+      const generalJson = await generalRes.json()
+      items = Array.isArray(generalJson.items) ? generalJson.items : []
+      console.log(`📸 Found ${items.length} general reference images`)
+    }
     
-    console.log('📸 Found', items.length, 'reference images from Google CSE')
+    // Score and filter images
+    type Scored = { link: string; w: number; h: number; score: number }
+    const scored: Scored[] = items.map((i: any) => {
+      const w = Number(i.image?.width || 0)
+      const h = Number(i.image?.height || 0)
+      let score = 70
+      
+      // Boost high resolution
+      if (w * h >= 1000000) score += 15
+      else if (w * h >= 640000) score += 10
+      
+      // Penalize bad patterns
+      const urlLower = (i.link || '').toLowerCase()
+      if (urlLower.includes('tiktok')) score -= 30
+      if (urlLower.includes('x-raw-image')) score -= 30
+      if (urlLower.includes('thumbnail')) score -= 10
+      
+      return { link: i.link as string, w, h, score }
+    }).filter((x: Scored) => Boolean(x.link) && x.score > 40)
     
-    // Prefer >=800x800, sort by area desc
-    type Scored = { link: string; w: number; h: number }
-    const scored: Scored[] = items.map((i: any) => ({
-      link: i.link as string,
-      w: Number(i.image?.width || 0),
-      h: Number(i.image?.height || 0)
-    })).filter((x: Scored) => Boolean(x.link))
-    const filtered: Scored[] = scored.filter((x: Scored) => x.w >= 800 && x.h >= 800)
-    const chosen: Scored[] = (filtered.length ? filtered : scored).sort((a: Scored, b: Scored) => (b.w * b.h) - (a.w * a.h))
+    const sorted = scored.sort((a, b) => b.score - a.score)
+    const imageUrls = sorted.map((x: Scored) => x.link)
     
-    const imageUrls = chosen.map((x: Scored) => x.link)
-    console.log('🖼️ Selected reference images:', imageUrls)
-    
+    console.log('🖼️ Selected reference images:', imageUrls.slice(0, 3))
     return imageUrls
   } catch (error) {
     console.error('❌ Google CSE search failed:', error)
@@ -66,26 +97,52 @@ async function googleRefImages(query: string, topN = 3): Promise<string[]> {
   }
 }
 
-async function fetchImageAsDataUrl(url: string): Promise<{ dataUrl: string; contentType: string; originalUrl: string } | null> {
-  try {
-    const res = await fetch(url)
-    if (!res.ok) {
-      console.error('❌ Failed to download reference image:', url, res.status)
-      return null
+async function fetchImageAsDataUrl(url: string, retries = 3): Promise<{ dataUrl: string; contentType: string; originalUrl: string } | null> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`📥 Fetching reference image (attempt ${attempt}/${retries}):`, url)
+      
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://www.google.com/',
+        },
+        signal: AbortSignal.timeout(15000)
+      })
+      
+      if (!res.ok) {
+        console.warn(`⚠️ Failed to download reference image (attempt ${attempt}/${retries}):`, url, res.status)
+        if (attempt < retries) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+          continue
+        }
+        return null
+      }
+      
+      const contentType = res.headers.get('content-type') || 'image/jpeg'
+      if (!contentType.startsWith('image/')) {
+        console.warn('⚠️ Skipping non-image reference response', { url, contentType })
+        return null
+      }
+      
+      const arrayBuffer = await res.arrayBuffer()
+      const base64 = Buffer.from(arrayBuffer).toString('base64')
+      const dataUrl = `data:${contentType};base64,${base64}`
+      
+      console.log(`✅ Successfully fetched reference image: ${url.substring(0, 80)}...`)
+      return { dataUrl, contentType, originalUrl: url }
+    } catch (error: any) {
+      console.error(`❌ Reference image fetch error (attempt ${attempt}/${retries}):`, url, error.message)
+      if (attempt < retries) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+      }
     }
-    const contentType = res.headers.get('content-type') || 'image/png'
-    if (!contentType.startsWith('image/')) {
-      console.warn('⚠️ Skipping non-image reference response', { url, contentType })
-      return null
-    }
-    const arrayBuffer = await res.arrayBuffer()
-    const base64 = Buffer.from(arrayBuffer).toString('base64')
-    const dataUrl = `data:${contentType};base64,${base64}`
-    return { dataUrl, contentType, originalUrl: url }
-  } catch (error) {
-    console.error('❌ Reference image fetch error:', url, error)
-    return null
   }
+  
+  console.error(`❌ Failed to fetch reference image after ${retries} attempts:`, url)
+  return null
 }
 
 export async function generateProductImageWithOpenAI(params: {
@@ -119,7 +176,7 @@ export async function generateProductImageWithOpenAI(params: {
   let brand = params.brand
   let category = params.category
   let supplier = params.supplier
-  if (!name) {
+  if (!name && db) {
     console.log('📦 Fetching product details from database...')
     try {
       const snap = await getDoc(doc(db, 'pos_products', params.productId))
@@ -172,19 +229,44 @@ export async function generateProductImageWithOpenAI(params: {
     let referenceImageSources: string[] = []
     if (params.useGoogleRefs) {
       console.log('🔍 Attempting to find reference images...')
-      const refs = await googleRefImages(`${title} ${category ? category + ' ' : ''}product image`, 5)
+      const refs = await googleRefImages(`${title} ${category ? category + ' ' : ''}product image`, 8)
       if (refs.length) {
-        console.log('✅ Reference URLs found, fetching data...')
+        console.log(`✅ Reference URLs found: ${refs.length} URLs, fetching data...`)
         const fetchedRefs: { source: string; dataUrl?: string }[] = []
-        for (const url of refs.slice(0, 4)) {
-          const data = await fetchImageAsDataUrl(url)
+        
+        // Try to fetch at least 3 reference images, fetch up to 8 URLs with retries
+        for (const url of refs) {
+          const data = await fetchImageAsDataUrl(url, 3)
           if (data?.dataUrl) {
             fetchedRefs.push({ source: data.originalUrl, dataUrl: data.dataUrl })
+            console.log(`✅ Successfully loaded reference image ${fetchedRefs.length}`)
+            
+            // Stop once we have 4 good references
+            if (fetchedRefs.length >= 4) {
+              break
+            }
           }
         }
+        
+        if (fetchedRefs.length === 0) {
+          console.error('❌ CRITICAL: Failed to load ANY reference images! This will result in poor quality.')
+          console.log('🔄 Retrying with different search query...')
+          
+          // Retry with simpler query
+          const simpleRefs = await googleRefImages(`${brand || title} product`, 8)
+          for (const url of simpleRefs) {
+            const data = await fetchImageAsDataUrl(url, 3)
+            if (data?.dataUrl) {
+              fetchedRefs.push({ source: data.originalUrl, dataUrl: data.dataUrl })
+              console.log(`✅ Successfully loaded reference image ${fetchedRefs.length} (retry)`)
+              if (fetchedRefs.length >= 4) break
+            }
+          }
+        }
+        
         referenceImageInputs = fetchedRefs.map(item => item.dataUrl ?? item.source)
         referenceImageSources = fetchedRefs.map(item => item.source)
-        console.log('🖼️ Using', referenceImageSources.length, 'reference images for guidance')
+        console.log(`🖼️ Using ${referenceImageSources.length} reference images for guidance`)
         if (referenceImageSources.length) {
           console.log('🖼️ Reference sources:', referenceImageSources)
         }
@@ -196,7 +278,7 @@ export async function generateProductImageWithOpenAI(params: {
     }
 
     if (!referenceImageInputs.length) {
-      console.log('ℹ️ Proceeding without reference images (none passed validation)')
+      console.warn('⚠️ WARNING: Proceeding without reference images - quality may be poor!')
     }
 
     const replicateModel = process.env.REPLICATE_MODEL_ID || 'google/nano-banana'
@@ -383,15 +465,17 @@ export async function generateProductImageWithOpenAI(params: {
     console.log('🔗 Public URL:', url)
 
     // Update product doc
-    console.log('💾 Updating product document with image URL...')
-    const updatedAt = new Date().toISOString()
-    await setDoc(doc(db, 'pos_products', params.productId), {
-      image: url,
-      image_url: url,
-      imageUrl: url,
-      updatedAt
-    }, { merge: true })
-    console.log('✅ Product document updated')
+    if (db) {
+      console.log('💾 Updating product document with image URL...')
+      const updatedAt = new Date().toISOString()
+      await setDoc(doc(db, 'pos_products', params.productId), {
+        image: url,
+        image_url: url,
+        imageUrl: url,
+        updatedAt
+      }, { merge: true })
+      console.log('✅ Product document updated')
+    }
 
     console.log('🎉 Image generation completed successfully!')
     return { ok: true, url, revisedPrompt }

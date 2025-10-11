@@ -1,50 +1,352 @@
-# VendAI POS - Development TODO
+# VendAI POS — Development Roadmap & TODO
 
-_Last updated: 5 Oct 2025_
+_Last updated: 11 Oct 2025_
 
-## 🔧 Recent Fixes (5 Oct 2025)
+**Context**: This roadmap reflects the integrated architecture of POS, Inventory, and Supplier modules documented in `docs/MODULES_OVERVIEW_POS_INVENTORY_SUPPLIER.md`. Priorities are organized into phases for supermarket/minimart readiness.
 
-- ✅ Retailer supplier module restyled with cool-toned visuals, inventory-aware distributor suggestions, and a minimal empty state (`components/modules/supplier-module.tsx`).
+---
 
-### Fixed Issues in Suppli## 🎨 U### Reconciliation & Reporting
+## 📘 Reference Documents
+- `docs/MODULES_OVERVIEW_POS_INVENTORY_SUPPLIER.md` — Core module interactions and data models
+- `docs/POS_MODULE.md` — POS ingestion, idempotency, and mapping details
+- `docs/INVENTORY_SUPPLIER_POS.md` — Unified onboarding + AI image pipeline
 
-- [x] Build reconciliation service (PO ↔ Invoice ↔ Payment matching) ✅ Cloud Function `reconciliationWorker` matches PO, invoice, and payment documents nightly.
-- [x] Generate ledger entries (commission, supplier payout, tax breakdown) ✅ Ledger records now capture tax amounts and supplier payout metadata during payment release and webhook ingestion.
-- [x] Flag mismatches for operations review
-- [ ] `GET /api/reports/settlements` - Monthly settlement statements
-- [ ] `GET /api/reports/reconciliation` - Reconciliation status dashboard
+---
 
-## 🎨 UX & Polish
+## Phase 1: Core Workflow Completion (MVP+)
 
-- [x] Swap `alert()` calls for toast notifications (`components/ui/use-toast`) ✅ `useToast` is wired across distributor and retailer modules; no `alert()` usage remains.
-- [x] Provide loading/empty/error states for supplier, invoice, retailer, logistics tables ✅ VERIFIED
-- [x] Standardise search/filter UI across distributor dashboards ✅ Shared dashboard search controls rolled out across logistics, retailers, and supplier views.
-- [x] Add animated pagination/skeleton loaders consistent with VendAI design ✅ VERIFIED
-- [x] Add dashboard widget summarising supplier to-dos (pending POs, invoices due, today's deliveries) ✅ VERIFIED
-- [x] Swap `alert()` calls for toast notifications (`components/ui/use-toast`).
-- [x] Build reconciliation service (PO ↔ Invoice ↔ Payment matching)
-- [x] Provide loading/empty/error states for supplier, invoice, retailer, logistics tables.
-- [x] Standardise search/filter UI across distributor dashboards. ✅ Unified dashboard search component adopted by logistics, retailers, and supplier modules.
-- [x] Generate ledger entries (commission, supplier payout, tax breakdown) ✅ Ledger entries now include explicit tax amounts alongside commission and payout data.
-- [x] Add animated pagination/skeleton loaders consistent with VendAI design.
-- [x] Add dashboard widget summarising supplier to-dos (pending POs, invoices due, today's deliveries). ✅ VERIFIED
-- [x] Flag mismatches for operations review
-- ✅ **Supplier Module** (`components/modules/supplier-module.tsx`)
-  - Fixed Image component errors (removed `fill` prop, added explicit width/height)
-  - Fixed variable declaration order (moved useMemo hooks before callbacks that depend on them)
-  - Fixed RetailerData status type to properly enforce union type
-  - Fixed SettlementRecord status and dueDate type mismatches
-  - Added missing InvoicePayment.id field
-  - Added missing `loading` state variable
+### 🔄 1.1 Unified Workflow & Data Loops
 
-- ✅ **Inventory Module** (`components/modules/inventory-module.tsx`)
-  - Fixed `limitQuery` error by replacing with correct `limit` function from firebase/firestore
+#### Receiving Flow Completion
+- [x] Implement `/api/supplier/receiving` endpoint ✅
+  - Accept delivery confirmation payload (PO reference, delivered quantities)
+  - Validate against supplier purchase order
+  - Atomically increment `inventory` (qtyBase/qtyLoose) in Firestore transaction
+  - Mark PO as received; create ledger entry for COGS
+- [x] Build receiving UI in supplier module ✅
+  - Scan/enter PO number
+  - Confirm delivered quantities per line item
+  - Handle partial receipts (qty delivered < qty ordered)
+  - Toast + redirect to updated inventory view
+- [x] Add `purchase_orders` collection schema ✅
+  - Fields: `orgId`, `supplierId`, `lines[]`, `status`, `expectedDate`, `receivedAt`
+- [x] Wire supplier cart checkout to create PO documents ✅
+- [x] Add Firestore indexes for purchase_orders ✅
+- [x] Create receiving modal component ✅
+- [x] Add "Receive Delivery" button to supplier module header ✅
 
-### Verification Status
-- ✅ **Logistics Module** - Verified to use real Firestore data (sales_orders, drivers, routes)
-- ✅ **Retailers Module** - Verified to use real Firestore data (users where role = retailer)
-- ✅ **Credit API** - `/api/credit/assess`, `/api/credit/history`, and `/api/credit/limits` implemented
-- ✅ **Invoice PATCH** - `/api/invoices/[id]` supports status and payment updates
+**Implementation complete**. See `docs/RECEIVING_FLOW_IMPLEMENTATION.md` for details.
+
+#### Two-way Sync with External POS
+- [ ] Add `/api/pos/sync-out` webhook endpoint
+  - Push live stock levels to external POS systems
+  - Push price updates when `pos_products.retailPrice` changes
+  - Support configurable webhook URLs per org in `org_settings`
+- [ ] Implement retry logic with exponential backoff for webhook failures
+- [ ] Add webhook delivery logs collection: `pos_sync_logs`
+
+#### Real-time Dashboards
+- [ ] Create `/app/dashboard` route with cards:
+  - Low-stock alerts (products below reorder point)
+  - Top 10 sellers (last 7/30 days)
+  - Gross margin by category/product
+  - Exception count (unmapped items, failed transactions)
+- [ ] Add real-time Firestore listeners for dashboard metrics
+- [ ] Implement dashboard refresh controls and date range filters
+
+---
+
+### 🔗 1.2 Supplier Integration Depth
+
+#### Auto-replenishment Logic
+- [ ] Add `reorderPoint` and `reorderQty` fields to `pos_products`
+- [ ] Create background job (Cloud Function or API route cron):
+  - Check inventory where `qtyBase * unitsPerBase + qtyLoose < reorderPoint`
+  - Look up fastest supplier from `supplier_skus` (lowest `leadTimeDays`)
+  - Auto-populate supplier cart or send notification to buyer
+- [ ] Build UI to approve/edit suggested replenishment orders
+
+#### Price Synchronization
+- [ ] Add `/api/supplier/pricelist-update` endpoint
+  - Accept bulk price changes from suppliers
+  - Compare against current `supplier_skus.cost`
+  - Flag products where cost increase > X% (configurable threshold)
+  - Create alerts in `price_change_alerts` collection
+- [ ] Build price alert review UI
+  - Show old vs new cost, current retail price, margin impact
+  - Approve/reject or adjust retail price in bulk
+
+#### Delivery + Invoice Reconciliation
+- [ ] Extend `/api/supplier/receiving` to accept invoice attachments
+- [ ] Add three-way match logic: PO ↔ Delivery ↔ Invoice
+  - Compare quantities, prices, and totals
+  - Flag discrepancies for review
+- [ ] Create `delivery_reconciliations` collection with match status
+- [ ] Build reconciliation dashboard for ops review
+
+---
+
+### 🛍️ 1.3 Supermarket-grade POS Enhancements
+
+#### Multi-lane Checkout Support
+- [ ] Test concurrent `addPosOrder` calls from multiple cashiers
+- [ ] Add `deviceId` and `laneId` to POS order metadata
+- [ ] Implement optimistic locking or retry logic for inventory contention
+- [ ] Add cashier performance dashboard (sales per lane, avg transaction time)
+
+#### Offline Queue Mode
+- [ ] Implement offline detection in Electron/web app
+- [ ] Queue POS transactions in local IndexedDB when offline
+- [ ] Auto-sync queued transactions when connection restored
+- [ ] Add visual indicator for offline mode + queue depth
+- [ ] Handle conflict resolution (e.g., insufficient stock after reconnect)
+
+#### Receipt Printing API Layer
+- [ ] Create `/api/pos/print-receipt` endpoint
+  - Accept order ID and return formatted receipt data
+  - Support ESC/POS command generation for thermal printers
+  - Return HTML receipt for browser print fallback
+- [ ] Add printer configuration in `org_settings`: IP, model, paper width
+- [ ] Test with Epson TM-T88 series and Star TSP100 printers
+
+#### Barcode Scale Support
+- [ ] Implement weight-based barcode parsing (EAN-13 with price/weight encoding)
+- [ ] Add `barcodeType` field to `pos_products`: 'standard' | 'weight-embedded'
+- [ ] Parse weight from barcode and calculate price dynamically
+- [ ] Add UI for configuring weight barcode format per org
+
+---
+
+## Phase 2: Onboarding & Usability
+
+### 👥 2.1 Onboarding & Data Setup
+
+#### Smart Import Assistant
+- [ ] Enhance `/api/inventory/upload` with auto-detection:
+  - Parse common CSV/XLSX formats from external POS/ERP exports
+  - Auto-map columns using fuzzy matching (name, barcode, price, stock)
+  - Provide confidence scores and suggestions for ambiguous mappings
+- [ ] Build import preview UI before final commit
+- [ ] Support rollback of last import batch
+
+#### Bulk Mapping UI
+- [ ] Create `/app/mappings` route for exception resolution
+  - List all unmapped items from `pos_exceptions`
+  - Drag-drop or search-select to map to existing `pos_products`
+  - Bulk create new products from unmapped items
+  - Mark exceptions as resolved
+- [ ] Add mapping history and audit log
+
+#### Inventory Wizard
+- [ ] Create guided `/app/onboarding/inventory` flow:
+  - Step 1: Upload products (CSV/manual entry)
+  - Step 2: Set units per base for each product
+  - Step 3: Enter initial stock counts
+  - Step 4: Review summary + "Go Live" button
+  - On completion: set `org_settings.inventory_status = 'ready'`
+- [ ] Add progress indicator and ability to save draft
+
+---
+
+### 📲 2.2 Retailer Experience & Automation
+
+#### Predictive Restock Recommendations
+- [ ] Analyze POS order history to calculate:
+  - Average daily sales velocity per product
+  - Seasonal trends (day-of-week, monthly patterns)
+  - Stockout frequency
+- [ ] Generate recommended order quantities based on:
+  - Forecasted demand over lead time
+  - Safety stock levels
+  - Supplier MOQ constraints
+- [ ] Surface recommendations in supplier cart UI
+
+#### Credit & Cashflow Insights
+- [ ] Add lightweight credit tracking:
+  - Track supplier payment terms (net 30, net 60, etc.)
+  - Show aging report: invoices due this week, overdue
+  - Calculate available credit headroom per supplier
+- [ ] Create `/app/cashflow` dashboard with:
+  - Upcoming payment obligations
+  - Cash position forecast (sales - COGS - expenses)
+  - Alerts for low cash / credit limit breaches
+
+#### WhatsApp/USSD Companion
+- [ ] Design low-bandwidth query API:
+  - Check stock levels by SKU
+  - Get top 5 low-stock items
+  - Place simple reorders (SKU + quantity)
+- [ ] Integrate with Twilio/Africa's Talking for WhatsApp/USSD
+- [ ] Support USSD menu navigation for feature phones
+- [ ] Add SMS receipts for completed orders
+
+---
+
+## Phase 3: Security, Compliance & Multi-tenancy
+
+### 🔒 3.1 Ops & Multi-Tenant Safety
+
+#### Role-based Access Control (RBAC)
+- [ ] Define roles in `users` collection: manager, cashier, stock_clerk, supplier_rep
+- [ ] Add permission matrix:
+  - Cashier: POS transactions only
+  - Stock clerk: inventory adjustments, receiving
+  - Manager: all operations + reports
+  - Supplier rep: view own orders, upload pricelists
+- [ ] Implement middleware to enforce role checks on API routes
+- [ ] Add role selection UI in user management
+
+#### Org Audit Trails
+- [ ] Create `audit_logs` collection:
+  - Log all writes: inventory changes, orders, mappings, price updates
+  - Fields: `timestamp`, `userId`, `action`, `resource`, `before`, `after`
+- [ ] Add audit log viewer in admin dashboard
+- [ ] Support filtering by user, date range, and action type
+
+#### Inventory Lockout
+- [ ] Add `allow_negative_stock` flag to `org_settings`
+- [ ] When disabled, reject POS transactions if insufficient stock
+- [ ] Add optional warning threshold (e.g., pause POS when < 5% of products in stock)
+- [ ] Show lockout banner in POS UI with override capability for managers
+
+---
+
+## Phase 4: Advanced Features & AI
+
+### 🧠 4.1 Optional AI Layer
+
+#### Product Image Auto-cleanup
+- [ ] Extend AI image pipeline (`image-gen/`) to:
+  - Remove backgrounds automatically using Replicate or Remove.bg
+  - Standardize aspect ratios and padding
+  - Enhance low-resolution supplier images
+- [ ] Add batch processing UI for re-generating images
+- [ ] Support manual review/approval before publishing
+
+#### Anomaly Detection
+- [ ] Implement anomaly detection job (daily Cloud Function):
+  - Detect sudden sales spikes (> 3 standard deviations)
+  - Identify negative stock entries (bad barcode mappings)
+  - Flag unusual price changes
+- [ ] Create `anomalies` collection with severity and auto-resolution suggestions
+- [ ] Add anomaly dashboard with acknowledge/investigate actions
+
+#### Dynamic Reorder Point
+- [ ] Train simple ML model (linear regression or moving average) on:
+  - Historical sales velocity
+  - Seasonality factors
+  - Lead time variance
+- [ ] Auto-adjust `reorderPoint` weekly based on predictions
+- [ ] Show confidence intervals in supplier reorder UI
+- [ ] Allow manual override and feedback loop
+
+---
+
+## Phase 5: Integrations & Ecosystem
+
+### 🌐 5.1 Payment & Financial Integrations
+
+#### M-Pesa Integration
+- [ ] Implement Daraja API for STK Push (customer payments)
+- [ ] Add B2B/B2C endpoints for supplier payouts
+- [ ] Match M-Pesa callbacks to `pos_orders` and `purchase_orders`
+- [ ] Add payment reconciliation dashboard
+
+#### Card Payment Gateways
+- [ ] Integrate with Stripe/Flutterwave for card acceptance
+- [ ] Store payment intents and match to orders
+- [ ] Support split payments (cash + card)
+
+#### Accounting Software Export
+- [ ] Export sales/COGS to QuickBooks/Xero format (CSV or API)
+- [ ] Map VendAI transactions to chart of accounts
+- [ ] Schedule automated daily/weekly exports
+
+---
+
+### 🔌 5.2 External POS/ERP Connectors
+
+#### Common POS System Adapters
+- [ ] Build connectors for:
+  - Quickbooks POS
+  - Square POS
+  - Lightspeed Retail
+  - SambaPOS (Kenya-popular)
+- [ ] Each adapter: fetch sales, sync stock, update prices
+- [ ] Standardize to canonical transaction format before ingestion
+
+#### ERP Sync (Odoo, SAP B1)
+- [ ] Implement two-way sync for products and inventory
+- [ ] Map VendAI product IDs to ERP SKUs
+- [ ] Sync purchase orders and receivings
+
+---
+
+## Recently Completed ✅
+
+### Supplier Module
+- ✅ Circular supplier logos with inventory-aware suggestions
+- ✅ Shopping cart and checkout modal
+- ✅ AI image generation pipeline (Replicate + Google Search)
+- ✅ Pagination (20 products/page)
+- ✅ Product cards with hover effects and glassmorphism
+
+### Inventory Module
+- ✅ Fixed `limitQuery` → `limit` import
+- ✅ Product catalog with search and filtering
+- ✅ Stock tracking with qtyBase/qtyLoose model
+
+### POS Module
+- ✅ Idempotent transaction ingestion (`/api/pos/transactions`)
+- ✅ Atomic inventory decrements via `lib/pos-operations.ts`
+- ✅ Exception tracking for unmapped items
+
+### Infrastructure
+- ✅ Reconciliation service (PO ↔ Invoice ↔ Payment matching)
+- ✅ Ledger entries with tax breakdown
+- ✅ Toast notifications (replaced all `alert()` calls)
+- ✅ Loading/empty/error states across modules
+- ✅ Unified dashboard search controls
+
+---
+
+## Engineering Notes
+
+### Priority Scoring
+- **P0 (Blocker)**: Required for production launch
+- **P1 (High)**: Core value prop, needed within 1-2 sprints
+- **P2 (Medium)**: Improves UX/ops efficiency
+- **P3 (Nice-to-have)**: Future enhancement, defer if resource-constrained
+
+### Suggested Phase Priorities
+- **Phase 1** (MVP+): P0/P1 — Focus on receiving flow, multi-lane POS, offline mode
+- **Phase 2** (Usability): P1/P2 — Onboarding wizard, bulk mapping, restock recommendations
+- **Phase 3** (Security): P0 — RBAC, audit logs (required for multi-tenant SaaS)
+- **Phase 4** (AI): P2/P3 — Image cleanup, anomaly detection (value-add features)
+- **Phase 5** (Integrations): P1/P2 — M-Pesa (critical for Kenya), POS connectors (expands TAM)
+
+### Testing Checklist Template
+For each feature:
+- [ ] Unit tests for core logic (Jest/Vitest)
+- [ ] Integration tests for API routes (supertest)
+- [ ] Firestore transaction tests (emulator)
+- [ ] E2E tests for critical flows (Playwright)
+- [ ] Manual QA on Windows + Electron shell
+- [ ] Load testing for concurrent POS transactions
+
+---
+
+## Questions / Decisions Needed
+
+- **Offline mode**: Use IndexedDB or LocalStorage? How long to retain queued transactions?
+- **RBAC**: Firebase Auth custom claims or Firestore-based permissions?
+- **Image pipeline**: Continue with Replicate or switch to OpenAI DALL-E?
+- **Webhooks**: Retry policy — max 3 attempts or exponential backoff up to 24 hours?
+- **Barcode scales**: Support only EAN-13 price-embedded or also custom formats?
+
+---
+
+_This roadmap is a living document. Update as features are completed or priorities shift._
 
 
 

@@ -88,7 +88,7 @@ export function POSPage() {
   const [recentOrders, setRecentOrders] = useState<POSOrderDoc[]>([])
   const [receiptPreviewBundle, setReceiptPreviewBundle] = useState<ReceiptPreviewBundle | null>(null)
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false)
-  const [hardwareStatusCollapsed, setHardwareStatusCollapsed] = useState(false)
+  const [hardwareStatusCollapsed, setHardwareStatusCollapsed] = useState(true)
   
   // Enhanced persistent order tabs
   const [orderTabs, setOrderTabs] = useState<Map<string, OrderTab>>(new Map())

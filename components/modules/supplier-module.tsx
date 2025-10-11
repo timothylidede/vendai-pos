@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import {
   ArrowLeft,
   BadgeCheck,
@@ -18,6 +18,12 @@ import {
   Users,
   ChevronLeft,
   ChevronRight,
+  Plus,
+  Check,
+  Minus,
+  Trash2,
+  X,
+  Loader2,
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { doc, setDoc, deleteDoc, getDoc, collection, query, where, getDocs, getCountFromServer } from "firebase/firestore"
@@ -34,6 +40,18 @@ import { LoadingSpinner } from "../loading-spinner"
 import { ScrollArea } from "../ui/scroll-area"
 import { Badge } from "../ui/badge"
 import { getAllDistributors, getDistributorProducts, type DistributorMetadata, type DistributorProduct } from "@/data/distributor-data"
+import { ReceivingModal } from "./receiving-modal"
+
+interface CartItem {
+  productId: string
+  productName: string
+  distributorId: string
+  distributorName: string
+  unitPrice: number
+  quantity: number
+  unit?: string
+  imageUrl?: string
+}
 
 interface SupplierSummary {
   id: string
@@ -247,8 +265,14 @@ export function SupplierModule() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalProducts, setTotalProducts] = useState(0)
   const [hasMoreProducts, setHasMoreProducts] = useState(false)
-  const PAGE_SIZE = 40
+  const PAGE_SIZE = 20
   const sentinelRef = useRef<HTMLDivElement | null>(null)
+  
+  // Cart state
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [checkoutOpen, setCheckoutOpen] = useState(false)
+  const [receivingOpen, setReceivingOpen] = useState(false)
+  const [placingOrder, setPlacingOrder] = useState(false)
   const inventoryTagSet = useMemo(
     () => new Set(inventoryTags.map((tag) => tag.toLowerCase())),
     [inventoryTags],
@@ -395,15 +419,28 @@ export function SupplierModule() {
   const handleConnectSupplier = useCallback(async (supplier: SupplierSummary) => {
     if (!userData || !db) return
 
+    const wasConnected = supplier.connected
+    
+    // Optimistically update UI immediately
+    const updatedSuppliers = suppliers.map(s => 
+      s.id === supplier.id ? { ...s, connected: !s.connected } : s
+    )
+    setSuppliers(updatedSuppliers)
+    
+    if (selectedSupplier?.id === supplier.id) {
+      setSelectedSupplier({ ...selectedSupplier, connected: !selectedSupplier.connected })
+    }
+
     try {
       const connectionRef = doc(db, "distributorConnections", `${userData.organizationName}_${supplier.id}`)
       
-      if (supplier.connected) {
+      if (wasConnected) {
         // Disconnect
         await deleteDoc(connectionRef)
         toast({
           title: "Disconnected",
           description: `You are no longer connected to ${supplier.name}`,
+          className: "border-purple-500/20 bg-purple-950/90 backdrop-blur-xl text-white shadow-[0_8px_32px_-8px_rgba(168,85,247,0.4)]",
         })
       } else {
         // Connect
@@ -418,28 +455,24 @@ export function SupplierModule() {
         toast({
           title: "Connected!",
           description: `You can now access ${supplier.name}'s product catalogue`,
+          className: "border-purple-500/20 bg-purple-950/90 backdrop-blur-xl text-white shadow-[0_8px_32px_-8px_rgba(168,85,247,0.4)]",
         })
-      }
-
-      // Reload suppliers to reflect the change
-      await loadSuppliers()
-      
-      // If viewing this supplier's details, refresh the selected supplier state
-      if (selectedSupplier?.id === supplier.id) {
-        const updatedSupplier = suppliers.find(s => s.id === supplier.id)
-        if (updatedSupplier) {
-          setSelectedSupplier(updatedSupplier)
-        }
       }
     } catch (error) {
       console.error("Failed to update connection", error)
+      // Revert on error
+      setSuppliers(suppliers)
+      if (selectedSupplier?.id === supplier.id) {
+        setSelectedSupplier(supplier)
+      }
       toast({
         title: "Connection failed",
         description: "Unable to update connection. Please try again.",
         variant: "destructive",
+        className: "border-rose-500/20 bg-rose-950/90 backdrop-blur-xl text-white shadow-[0_8px_32px_-8px_rgba(244,63,94,0.4)]",
       })
     }
-  }, [userData, db, toast, loadSuppliers, selectedSupplier, suppliers])
+  }, [userData, db, toast, suppliers, selectedSupplier])
 
   const visibleSuppliers = useMemo(() => {
     if (!searchTerm.trim()) return suppliers
@@ -457,6 +490,135 @@ export function SupplierModule() {
     () => suppliers.filter((supplier) => supplier.connected).length,
     [suppliers],
   )
+
+  // Cart functions
+  const addToCart = useCallback((product: DistributorProduct) => {
+    if (!selectedSupplier) return
+    
+    setCart(prev => {
+      const existing = prev.find(item => item.productId === product.id && item.distributorId === selectedSupplier.id)
+      if (existing) {
+        return prev.map(item => 
+          item.productId === product.id && item.distributorId === selectedSupplier.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        )
+      }
+      return [...prev, {
+        productId: product.id,
+        productName: product.name,
+        distributorId: selectedSupplier.id,
+        distributorName: selectedSupplier.name,
+        unitPrice: product.unitPrice,
+        quantity: 1,
+        unit: product.unit,
+        imageUrl: product.imageUrl,
+      }]
+    })
+    
+    toast({
+      title: "Added to cart",
+      description: product.name,
+      className: "border-purple-500/20 bg-purple-950/90 backdrop-blur-xl text-white shadow-[0_8px_32px_-8px_rgba(168,85,247,0.4)]",
+    })
+  }, [selectedSupplier, toast])
+
+  const removeFromCart = useCallback((productId: string, distributorId: string) => {
+    setCart(prev => prev.filter(item => !(item.productId === productId && item.distributorId === distributorId)))
+  }, [])
+
+  const updateCartQuantity = useCallback((productId: string, distributorId: string, quantity: number) => {
+    if (quantity <= 0) {
+      removeFromCart(productId, distributorId)
+      return
+    }
+    setCart(prev => prev.map(item => 
+      item.productId === productId && item.distributorId === distributorId
+        ? { ...item, quantity }
+        : item
+    ))
+  }, [removeFromCart])
+
+  const clearCart = useCallback(() => {
+    setCart([])
+  }, [])
+
+  const handlePlaceOrder = useCallback(async () => {
+    if (!userData?.uid || cart.length === 0) return
+
+    setPlacingOrder(true)
+    try {
+      // Group cart items by distributor
+      const ordersByDistributor = cart.reduce((acc, item) => {
+        if (!acc[item.distributorId]) {
+          acc[item.distributorId] = {
+            supplierId: item.distributorId,
+            supplierName: item.distributorName,
+            items: [],
+          }
+        }
+        acc[item.distributorId].items.push(item)
+        return acc
+      }, {} as Record<string, { supplierId: string; supplierName: string; items: CartItem[] }>)
+
+      // Create a PO for each distributor
+      const poPromises = Object.values(ordersByDistributor).map(async (order) => {
+        const response = await fetch('/api/supplier/purchase-orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orgId: userData.uid, // Using uid as orgId for now
+            supplierId: order.supplierId,
+            supplierName: order.supplierName,
+            lines: order.items.map(item => ({
+              productId: item.productId,
+              productName: item.productName,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              unit: item.unit || 'PCS',
+            })),
+            notes: `Order placed from cart by ${userData.displayName || userData.email}`,
+          }),
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || 'Failed to create purchase order')
+        }
+
+        return response.json()
+      })
+
+      const results = await Promise.all(poPromises)
+      
+      toast({
+        title: "Order(s) Submitted",
+        description: `${results.length} purchase order(s) created totaling ${formatCurrency(cartTotal)}`,
+        className: "border-purple-500/20 bg-purple-950/90 backdrop-blur-xl text-white shadow-[0_8px_32px_-8px_rgba(168,85,247,0.4)]",
+      })
+
+      clearCart()
+      setCheckoutOpen(false)
+
+    } catch (error: any) {
+      console.error('Error placing order:', error)
+      toast({
+        title: "Order Failed",
+        description: error.message || 'Failed to create purchase order',
+        variant: 'destructive',
+      })
+    } finally {
+      setPlacingOrder(false)
+    }
+  }, [cart, userData, cartTotal, toast, clearCart])
+
+  const cartTotal = useMemo(() => {
+    return cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0)
+  }, [cart])
+
+  const cartItemCount = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.quantity, 0)
+  }, [cart])
 
   const suggestedSuppliers = useMemo<SuggestedSupplierRecommendation[]>(() => {
     if (!suppliers.length) return []
@@ -540,7 +702,7 @@ export function SupplierModule() {
           <div className="flex items-center space-x-4">
             {/* Back Button */}
             <button 
-              onClick={() => router.push("/modules")}
+              onClick={() => selectedSupplier ? handleBackToList() : router.push("/modules")}
               className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
             >
               <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.03] via-transparent to-purple-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
@@ -581,16 +743,40 @@ export function SupplierModule() {
               </button>
             </div>
           </div>
-          {activeTab === 'supplier' && (
-            <div className="flex items-center gap-2">
-              <Input
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search suppliers"
-                className="w-64 border border-purple-500/15 bg-slate-950/70 text-sm text-white placeholder:text-slate-400"
-              />
+          
+          {/* Actions: Receive Delivery + Cart */}
+          <div className="flex items-center gap-2">
+            {/* Receive Delivery Button */}
+            <button 
+              onClick={() => setReceivingOpen(true)}
+              className="group relative px-4 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-blue-500/[0.15] to-blue-500/[0.08] border border-blue-500/30 hover:border-blue-400/50 flex items-center gap-2 transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(59,130,246,0.3)] hover:shadow-[0_8px_24px_-8px_rgba(59,130,246,0.4)] hover:scale-105"
+            >
+              <Package className="relative w-4 h-4 text-blue-300 group-hover:text-blue-200 transition-colors duration-300" />
+              <span className="text-sm font-medium text-blue-200 group-hover:text-white transition-colors duration-300">
+                Receive
+              </span>
+            </button>
+
+            {/* Cart Icon with Badge */}
+            <div className="relative">
+              <button 
+                onClick={() => setCheckoutOpen(true)}
+                className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.03] via-transparent to-purple-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+                <ShoppingCart className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
+              </button>
+              {cartItemCount > 0 && (
+                <motion.div 
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-purple-500 border-2 border-slate-900 flex items-center justify-center text-xs font-bold text-white"
+                >
+                  {cartItemCount}
+                </motion.div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 
@@ -653,28 +839,28 @@ export function SupplierModule() {
                 </div>
                 <div className="flex flex-col gap-3">
                   <Button
-                    variant="ghost"
-                    className="justify-start text-sm text-slate-300 hover:text-white"
-                    onClick={handleBackToList}
+                    size="default"
+                    variant={selectedSupplier.connected ? "outline" : "default"}
+                    className={cn(
+                      "h-9 px-6 text-sm font-medium gap-2",
+                      selectedSupplier.connected 
+                        ? "border-slate-400/40 bg-slate-500/10 text-slate-200 hover:border-slate-300/60 hover:bg-slate-500/20"
+                        : "border-0 bg-white text-slate-900 hover:bg-white/90"
+                    )}
+                    onClick={() => handleConnectSupplier(selectedSupplier)}
                   >
-                    &larr; Back to suppliers
+                    {selectedSupplier.connected ? (
+                      <>
+                        <Check className="h-4 w-4" />
+                        Connected
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4" />
+                        Connect
+                      </>
+                    )}
                   </Button>
-                  {selectedSupplier.connected ? (
-                    <Button
-                      variant="outline"
-                      className="border-rose-400/40 bg-rose-500/10 text-rose-100 hover:border-rose-300/60 hover:bg-rose-500/20"
-                      onClick={() => handleConnectSupplier(selectedSupplier)}
-                    >
-                      Disconnect
-                    </Button>
-                  ) : (
-                    <Button
-                      className="border border-purple-400/40 bg-purple-500/10 text-purple-100 hover:border-purple-300/60 hover:bg-purple-500/20"
-                      onClick={() => handleConnectSupplier(selectedSupplier)}
-                    >
-                      Connect
-                    </Button>
-                  )}
                 </div>
               </div>
 
@@ -748,58 +934,38 @@ export function SupplierModule() {
                         Catalogue not available yet. Check back later or contact the supplier for their price list.
                       </div>
                     )}
-                    {/* Product Grid - Inventory Style */}
-                    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {products.map((product) => (
-                    <div
-                      key={product.id}
-                      className="group relative rounded-xl border border-purple-500/10 bg-slate-900/60 p-3 transition hover:border-purple-400/30 hover:bg-slate-900/80"
-                    >
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white truncate">{product.name}</p>
-                            {product.code && (
-                              <p className="text-xs text-slate-400">Code: {product.code}</p>
+                    {/* Product Grid - Exact Inventory Style with Purple Theme */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                      {products.map((product) => (
+                        <div
+                          key={product.id}
+                          onClick={() => addToCart(product)}
+                          className="group relative rounded-2xl overflow-hidden backdrop-blur-xl bg-gradient-to-br from-white/[0.08] via-white/[0.05] to-transparent border border-white/[0.08] hover:border-white/[0.15] transition-all duration-500 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.3)] hover:shadow-[0_20px_48px_-12px_rgba(168,85,247,0.15)] cursor-pointer hover:scale-105 hover:-translate-y-2"
+                        >
+                          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.03] via-transparent to-purple-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                          <div className="aspect-square w-full bg-gradient-to-br from-slate-800/60 to-slate-700/40 flex items-center justify-center relative overflow-hidden">
+                            {product.imageUrl ? (
+                              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-500" />
+                            ) : (
+                              <Package className="w-16 h-16 text-slate-400 group-hover:scale-125 group-hover:text-purple-300 group-hover:rotate-12 transition-all duration-500 relative z-10" />
                             )}
+                            {/* Add to Cart Button on Hover */}
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 bg-gradient-to-t from-purple-900/90 via-purple-900/60 to-transparent">
+                              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500 border border-purple-400/50 shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
+                                <Plus className="w-4 h-4 text-white" />
+                                <span className="text-sm font-medium text-white">Add to Cart</span>
+                              </div>
+                            </div>
                           </div>
-                          <Package className="h-4 w-4 text-purple-300 flex-shrink-0" />
+                          <div className="p-4 relative">
+                            <h4 className="text-slate-200 font-medium text-sm truncate group-hover:text-white transition-colors duration-300">{product.name}</h4>
+                            <div className="mt-2 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-2 group-hover:translate-y-0">
+                              <span className="text-xs text-slate-400 group-hover:text-slate-300">{product.brand || product.category || 'N/A'}</span>
+                              <span className="text-xs px-2 py-1 rounded-full border text-purple-400 bg-purple-500/20 border-purple-500/30">{formatCurrency(product.unitPrice)}</span>
+                            </div>
+                          </div>
                         </div>
-                        
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-lg font-semibold text-purple-300">
-                            {formatCurrency(product.unitPrice)}
-                          </span>
-                          {product.unit && (
-                            <span className="text-xs text-slate-400">/ {product.unit}</span>
-                          )}
-                        </div>
-                        
-                        <div className="flex flex-wrap gap-1.5 text-xs">
-                          {product.category && (
-                            <span className="rounded-md border border-purple-400/20 bg-purple-500/10 px-1.5 py-0.5 text-purple-200">
-                              {product.category}
-                            </span>
-                          )}
-                          {product.inStock !== undefined && (
-                            <span className={cn(
-                              "rounded-md px-1.5 py-0.5",
-                              product.inStock
-                                ? "border border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
-                                : "border border-rose-400/20 bg-rose-500/10 text-rose-200"
-                            )}>
-                              {product.inStock ? "In Stock" : "Out"}
-                            </span>
-                          )}
-                        </div>
-                        
-                        {product.leadTime && (
-                          <p className="text-xs text-slate-400">Lead: {product.leadTime}</p>
-                        )}
-                      </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}\n                    </div>
                   
                   {/* Pagination Controls */}
                   {totalProducts > PAGE_SIZE && (
@@ -879,7 +1045,7 @@ export function SupplierModule() {
                           size="default"
                           variant={supplier.connected ? "outline" : "default"}
                           className={cn(
-                            "h-9 px-6 text-sm font-medium",
+                            "h-9 px-6 text-sm font-medium gap-2",
                             supplier.connected 
                               ? "border-slate-400/40 bg-slate-500/10 text-slate-200 hover:border-slate-300/60 hover:bg-slate-500/20"
                               : "border-0 bg-white text-slate-900 hover:bg-white/90"
@@ -889,7 +1055,17 @@ export function SupplierModule() {
                             handleConnectSupplier(supplier)
                           }}
                         >
-                          {supplier.connected ? "Connected" : "Connect"}
+                          {supplier.connected ? (
+                            <>
+                              <Check className="h-4 w-4" />
+                              Connected
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="h-4 w-4" />
+                              Connect
+                            </>
+                          )}
                         </Button>
                       </div>
 
@@ -922,13 +1098,6 @@ export function SupplierModule() {
                           </p>
                         </div>
                       </div>
-
-                      <div className="mt-4 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 text-xs text-purple-200/90">
-                          <StarIcon className="h-3.5 w-3.5" />
-                          Reputation {supplier.reputationScore.toFixed(1)} / 10
-                        </div>
-                      </div>
                     </div>
                   ))}
                 </div>
@@ -958,6 +1127,169 @@ export function SupplierModule() {
           </div>
         )}
       </div>
+
+      {/* Checkout Modal */}
+      <AnimatePresence>
+        {checkoutOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setCheckoutOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative w-full max-w-2xl max-h-[90vh] rounded-2xl border border-purple-500/20 bg-slate-900/95 backdrop-blur-xl shadow-[0_24px_60px_-12px_rgba(168,85,247,0.4)] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-purple-500/20 bg-gradient-to-r from-purple-500/10 to-transparent px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-purple-500/20 p-2">
+                    <ShoppingCart className="h-5 w-5 text-purple-300" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-white">Shopping Cart</h2>
+                    <p className="text-sm text-slate-400">{cartItemCount} {cartItemCount === 1 ? 'item' : 'items'}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCheckoutOpen(false)}
+                  className="rounded-lg p-2 hover:bg-white/10 transition-colors"
+                >
+                  <X className="h-5 w-5 text-slate-400" />
+                </button>
+              </div>
+
+              {/* Cart Items */}
+              <ScrollArea className="max-h-[50vh] p-6">
+                {cart.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <ShoppingCart className="h-16 w-16 text-slate-600 mb-4" />
+                    <p className="text-slate-400">Your cart is empty</p>
+                    <Button
+                      variant="outline"
+                      className="mt-4 border-purple-400/30 text-purple-300 hover:bg-purple-500/10"
+                      onClick={() => setCheckoutOpen(false)}
+                    >
+                      Continue Shopping
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {cart.map((item) => (
+                      <div
+                        key={`${item.distributorId}-${item.productId}`}
+                        className="flex items-center gap-4 rounded-xl border border-purple-500/10 bg-slate-900/40 p-4"
+                      >
+                        {/* Product Image */}
+                        <div className="h-16 w-16 flex-shrink-0 rounded-lg bg-gradient-to-br from-slate-800/60 to-slate-700/40 flex items-center justify-center overflow-hidden">
+                          {item.imageUrl ? (
+                            <img src={item.imageUrl} alt={item.productName} className="h-full w-full object-cover" />
+                          ) : (
+                            <Package className="h-8 w-8 text-slate-500" />
+                          )}
+                        </div>
+
+                        {/* Product Info */}
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-medium text-white truncate">{item.productName}</h4>
+                          <p className="text-xs text-slate-400">{item.distributorName}</p>
+                          <p className="text-sm text-purple-300 mt-1">{formatCurrency(item.unitPrice)}</p>
+                        </div>
+
+                        {/* Quantity Controls */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => updateCartQuantity(item.productId, item.distributorId, item.quantity - 1)}
+                            className="rounded-lg p-1.5 hover:bg-white/10 transition-colors"
+                          >
+                            <Minus className="h-4 w-4 text-slate-400" />
+                          </button>
+                          <span className="w-8 text-center text-sm font-medium text-white">{item.quantity}</span>
+                          <button
+                            onClick={() => updateCartQuantity(item.productId, item.distributorId, item.quantity + 1)}
+                            className="rounded-lg p-1.5 hover:bg-white/10 transition-colors"
+                          >
+                            <Plus className="h-4 w-4 text-slate-400" />
+                          </button>
+                        </div>
+
+                        {/* Line Total & Remove */}
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-semibold text-white min-w-[80px] text-right">
+                            {formatCurrency(item.unitPrice * item.quantity)}
+                          </span>
+                          <button
+                            onClick={() => removeFromCart(item.productId, item.distributorId)}
+                            className="rounded-lg p-1.5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+
+              {/* Footer */}
+              {cart.length > 0 && (
+                <div className="border-t border-purple-500/20 bg-gradient-to-r from-purple-500/5 to-transparent px-6 py-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-lg font-semibold text-white">Total</span>
+                    <span className="text-2xl font-bold text-purple-300">{formatCurrency(cartTotal)}</span>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      className="flex-1 border-purple-400/30 text-purple-300 hover:bg-purple-500/10"
+                      onClick={clearCart}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Clear Cart
+                    </Button>
+                    <Button
+                      className="flex-1 bg-purple-500 hover:bg-purple-600 text-white"
+                      onClick={handlePlaceOrder}
+                      disabled={placingOrder}
+                    >
+                      {placingOrder ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Creating PO...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-4 w-4 mr-2" />
+                          Place Order
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Receiving Modal */}
+      <ReceivingModal
+        open={receivingOpen}
+        onClose={() => setReceivingOpen(false)}
+        orgId={userData?.uid || ''}
+        onSuccess={() => {
+          toast({
+            title: 'Inventory Updated',
+            description: 'Stock levels have been updated successfully',
+            className: 'border-green-500/20 bg-green-950/90 backdrop-blur-xl text-white',
+          })
+        }}
+      />
     </motion.div>
   )
 }

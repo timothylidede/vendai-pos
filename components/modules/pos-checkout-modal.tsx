@@ -282,20 +282,20 @@ export function POSCheckoutModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-4xl translate-x-[-50%] translate-y-[-50%] gap-4 border border-white/10 bg-slate-900/95 p-0 shadow-[0_32px_64px_-24px_rgba(12,74,110,0.4)] backdrop-blur-2xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-2xl max-h-[90vh] overflow-hidden" showCloseButton>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3 text-lg font-semibold text-emerald-200">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">
+            <DialogContent className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-5xl translate-x-[-50%] translate-y-[-50%] gap-0 border border-white/10 bg-slate-900/95 p-0 shadow-[0_32px_64px_-24px_rgba(12,74,110,0.4)] backdrop-blur-2xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-2xl max-h-[90vh] overflow-hidden" showCloseButton>
+        <DialogHeader className="px-8 pt-6 pb-4 border-b border-white/5">
+          <DialogTitle className="flex items-center gap-3 text-xl font-semibold text-emerald-200">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 text-base">
               {step + 1}
             </span>
             {STEP_TITLES[step]}
           </DialogTitle>
-          <DialogDescription className="text-slate-400">
+          <DialogDescription className="text-slate-400 mt-2">
             Guide the customer through a polished checkout flow.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex h-full flex-col gap-6 overflow-y-auto pr-2">
+        <div className="flex h-full flex-col gap-8 overflow-y-auto px-8 py-6">
           <StepIndicators current={step} />
 
           {validationMessage && (
@@ -364,17 +364,17 @@ export function POSCheckoutModal({
           </AnimatePresence>
         </div>
 
-        <div className="mt-2 flex items-center justify-between border-t border-white/5 pt-4">
-          <div className="text-sm text-slate-400">
-            Total due: <span className="font-semibold text-emerald-300">KSh {total.toFixed(2)}</span>
+        <div className="flex items-center justify-between border-t border-white/5 px-8 py-5 bg-slate-900/50">
+          <div className="text-base text-slate-300">
+            Total due: <span className="font-semibold text-emerald-300 text-lg ml-2">KSh {total.toFixed(2)}</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             {step > 0 ? (
-              <Button variant="ghost" onClick={handleBack} className="text-slate-300 hover:text-white">
+              <Button variant="ghost" onClick={handleBack} className="text-slate-300 hover:text-white h-11 px-6">
                 <ArrowLeft className="mr-2 h-4 w-4" /> Back
               </Button>
             ) : (
-              <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-slate-300 hover:text-white">
+              <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-slate-300 hover:text-white h-11 px-6">
                 Cancel
               </Button>
             )}
@@ -382,7 +382,7 @@ export function POSCheckoutModal({
               <Button
                 onClick={handleNext}
                 disabled={disableNext}
-                className="flex items-center gap-2 rounded-full bg-emerald-500/80 px-5 py-2 text-white shadow-[0_12px_28px_-18px_rgba(5,150,105,0.6)] transition hover:bg-emerald-500"
+                className="flex items-center gap-2 rounded-full bg-emerald-500/80 px-7 h-11 text-white shadow-[0_12px_28px_-18px_rgba(5,150,105,0.6)] transition hover:bg-emerald-500"
               >
                 Next <ArrowRight className="h-4 w-4" />
               </Button>
@@ -390,7 +390,7 @@ export function POSCheckoutModal({
               <Button
                 onClick={handleSubmit}
                 disabled={disableSubmit}
-                className="flex items-center gap-2 rounded-full bg-emerald-500/90 px-5 py-2 text-white shadow-[0_14px_32px_-18px_rgba(4,120,87,0.6)] transition hover:bg-emerald-500"
+                className="flex items-center gap-2 rounded-full bg-emerald-500/90 px-7 h-11 text-white shadow-[0_14px_32px_-18px_rgba(4,120,87,0.6)] transition hover:bg-emerald-500"
               >
                 {disableSubmit ? 'Completing...' : 'Complete Sale'} <Check className="h-4 w-4" />
               </Button>
@@ -427,10 +427,10 @@ function MethodSelector({ primaryMethod, onChange }: { primaryMethod: POSPayment
   const methods: POSPaymentMethod[] = ['cash', 'card', 'mobile_money', 'mixed', 'voucher', 'store_credit', 'bank_transfer', 'other']
 
   return (
-    <div className="rounded-2xl border border-white/8 bg-slate-900/60 p-5 shadow-[0_18px_48px_-26px_rgba(15,118,110,0.42)]">
-      <h3 className="text-sm font-semibold text-slate-200">Payment method</h3>
-      <p className="mt-1 text-xs text-slate-400">Choose how the customer is paying. Mixed tender lets you combine multiple methods.</p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-2">
+    <div className="rounded-2xl border border-white/8 bg-slate-900/60 p-6 shadow-[0_18px_48px_-26px_rgba(15,118,110,0.42)]">
+      <h3 className="text-base font-semibold text-slate-200">Payment method</h3>
+      <p className="mt-2 text-sm text-slate-400">Choose how the customer is paying. Mixed tender lets you combine multiple methods.</p>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
         {methods.map((method) => {
           const Icon = PAYMENT_ICONS[method]
           const active = primaryMethod === method
@@ -440,16 +440,16 @@ function MethodSelector({ primaryMethod, onChange }: { primaryMethod: POSPayment
               type="button"
               onClick={() => onChange(method)}
               className={cn(
-                'group relative flex items-center gap-3 rounded-xl border border-white/6 bg-slate-900/55 px-4 py-3 text-left transition-all duration-200 hover:border-emerald-400/40 hover:bg-emerald-500/10',
+                'group relative flex items-center gap-4 rounded-xl border border-white/6 bg-slate-900/55 px-5 py-4 text-left transition-all duration-200 hover:border-emerald-400/40 hover:bg-emerald-500/10',
                 active && 'border-emerald-400/50 bg-emerald-500/12 shadow-[0_16px_36px_-24px_rgba(16,185,129,0.5)]',
               )}
             >
-              <span className={cn('flex h-10 w-10 items-center justify-center rounded-2xl border border-white/6 bg-slate-800/60 text-emerald-200', active && 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100')}>
-                <Icon className="h-4 w-4" />
+              <span className={cn('flex h-12 w-12 items-center justify-center rounded-2xl border border-white/6 bg-slate-800/60 text-emerald-200', active && 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100')}>
+                <Icon className="h-5 w-5" />
               </span>
-              <div>
+              <div className="flex-1">
                 <div className="text-sm font-semibold text-slate-200">{PAYMENT_METHOD_LABELS[method]}</div>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-400 mt-1">
                   {method === 'mixed'
                     ? 'Split across cash, card and more.'
                     : method === 'cash'

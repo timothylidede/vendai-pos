@@ -19,8 +19,8 @@ fal.config({
   credentials: process.env.FAL_API_KEY
 });
 
-// Smart Google Image Search with e-commerce priority
-async function googleRefImages(query: string, topN = 8): Promise<string[]> {
+// Smart Google Image Search with e-commerce priority - gets multiple reference images
+async function googleRefImages(query: string, topN = 15): Promise<string[]> {
   const apiKey = process.env.GOOGLE_CSE_API_KEY || process.env.GOOGLE_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_CSE_API_KEY;
   const cx = process.env.GOOGLE_CSE_CX || process.env.GOOGLE_CSE_ID || process.env.NEXT_PUBLIC_GOOGLE_CSE_CX || process.env.NEXT_PUBLIC_CX;
   
@@ -30,8 +30,8 @@ async function googleRefImages(query: string, topN = 8): Promise<string[]> {
   }
   
   try {
-    // Try e-commerce sites first
-    const ecommerceSites = ['jumia.co.ke', 'kilimall.co.ke', 'amazon.com', 'ebay.com', 'walmart.com'];
+    // Try e-commerce sites first for real product photos
+    const ecommerceSites = ['jumia.co.ke', 'kilimall.co.ke', 'amazon.com', 'ebay.com', 'walmart.com', 'carrefour.com'];
     const siteQuery = ecommerceSites.map(s => `site:${s}`).join(' OR ');
     const ecommerceQuery = `(${siteQuery}) ${query}`;
     
@@ -88,6 +88,11 @@ async function googleRefImages(query: string, topN = 8): Promise<string[]> {
       if (urlLower.includes('tiktok')) score -= 30;
       if (urlLower.includes('x-raw-image')) score -= 30;
       if (urlLower.includes('thumbnail')) score -= 10;
+      if (urlLower.includes('icon')) score -= 10;
+      if (urlLower.includes('logo')) score -= 15;
+      
+      // Boost product packaging keywords
+      if (urlLower.includes('package') || urlLower.includes('bottle') || urlLower.includes('bag') || urlLower.includes('box')) score += 10;
       
       return { link: i.link as string, w, h, score };
     }).filter((x: Scored) => Boolean(x.link) && x.score > 40);
@@ -223,84 +228,126 @@ export async function generateProductImageWithFAL(
     return { ok: false, error: 'Product has no name' };
   }
 
-  // Standardized prompt for consistent e-commerce product photos
-  const basePrompt = params.promptStyle || 
-    `Professional studio product photography, single centered product on floating glass shelf, 
-     uniform slate gray background (#1f2937), tight crop with product filling 75% of frame, 
-     sharp focus with gentle depth of field, cool teal-accent lighting, high detail, 
-     rich color saturation, subtle film grain, no text or props, modern e-commerce style, 
-     clean and minimalist aesthetic.`;
+  // Category-specific prompts for better results
+  const getCategoryPrompt = (cat: string | undefined): string => {
+    const categoryPrompts: Record<string, string> = {
+      'beverages': 'Professional product photo of a beverage container (bottle, can, or carton). Show the entire product label clearly with all text and branding visible. Position the product upright and centered. Use clean white studio background with soft, even lighting. Capture accurate colors and reflections on glass or plastic. Show the product packaging exactly as it appears on retail shelves.',
+      'food': 'Professional product photo of packaged food item. Display the complete package with all nutritional labels, brand logos, and product information clearly visible. Center the product with proper orientation. Use neutral white background with balanced lighting. Show authentic package colors, textures, and any windows showing the food inside. Maintain realistic packaging proportions.',
+      'grains': 'Professional product photo of grain or rice packaging (bag, sack, or box). Show the full package with brand name, weight, and variety clearly visible. Position upright and centered. Use clean white background with even studio lighting. Capture the actual bag texture, colors, and any transparent windows showing the grain. Display as seen in stores.',
+      'oils': 'Professional product photo of cooking oil container (bottle or tin). Show complete label with brand, volume, and oil type clearly readable. Position upright and centered with proper lighting to show liquid clarity if visible. Use white studio background. Capture accurate colors and any transparency or reflection. Show as it appears on retail shelves.',
+      'dairy': 'Professional product photo of dairy product packaging (carton, bottle, tub, or box). Display all branding, nutritional info, and expiration dates clearly. Center the product in upright position. Use clean white background with soft lighting. Show authentic package colors and any moisture or condensation naturally. Maintain realistic scale.',
+      'personal-care': 'Professional product photo of personal care item (bottle, tube, jar, or box). Show complete packaging with brand name, product type, and size clearly visible. Position product centered and upright. Use white studio background with even lighting. Capture accurate colors, textures, and any transparency in containers. Display as found in store aisles.',
+      'cleaning': 'Professional product photo of cleaning product (bottle, spray, box, or bag). Show full packaging with brand, product name, and usage instructions visible. Center the product upright. Use clean white background with bright, even lighting. Capture true colors of labels and containers. Show warning labels and spray mechanisms if present. Display as it appears in retail.',
+      'general': 'Professional product photo of consumer packaged good. Show complete product packaging with all labels, branding, and information clearly visible. Position product centered and in natural orientation. Use clean white studio background with balanced lighting. Capture accurate colors, textures, and proportions. Display exactly as it appears on store shelves.'
+    };
+    
+    return categoryPrompts[cat || 'general'] || categoryPrompts['general'];
+  };
 
+  const categoryPrompt = getCategoryPrompt(category);
   const title = `${brand ? brand + ' ' : ''}${name}`.trim();
-  const enhancedPrompt = `${basePrompt} Product: ${title}${category ? '. Category: ' + category : ''}. 
-    Maintain consistent slate gray backdrop with subtle glass reflection. No alternative backgrounds.`;
+  
+  // Enhanced prompt focuses on producing sensible packaged product images
+  const enhancedPrompt = `${categoryPrompt}
 
-  console.log('📝 Enhanced prompt:', enhancedPrompt.substring(0, 150) + '...');
+PRODUCT DETAILS: ${title}
+${brand ? `BRAND: ${brand}` : ''}
+${category ? `CATEGORY: ${category}` : ''}
 
-  // Try to get reference images if enabled
-  let referenceImageUrl: string | undefined;
+CRITICAL REQUIREMENTS:
+- Reproduce the exact product packaging from the reference images
+- Ensure all text, logos, and labels are sharp and legible
+- Maintain accurate brand colors and packaging design
+- Show the complete product without cropping important details
+- Use professional studio photography style with white background
+- Position product centered and properly oriented
+- Apply even, bright lighting without harsh shadows
+- Preserve realistic proportions and scale
+- No additional props, decorations, or text overlays`;
+
+  console.log('📝 Enhanced prompt:', enhancedPrompt.substring(0, 200) + '...');
+
+  // Try to get MULTIPLE reference images for better results
+  let referenceImageUrls: string[] = [];
   let referenceImageSources: string[] = [];
   
   if (params.useGoogleRefs !== false) { // Default to true
     console.log('🔍 Searching for reference images...');
-    const refs = await googleRefImages(`${title} ${category ? category + ' ' : ''}product image`, 8);
+    const refs = await googleRefImages(`${title} ${category ? category + ' ' : ''}product package`, 15);
     
     if (refs.length) {
-      console.log(`✅ Found ${refs.length} reference URLs, downloading...`);
+      console.log(`✅ Found ${refs.length} reference URLs, downloading multiple...`);
       
-      // Try to fetch at least one good reference
+      // Try to fetch MULTIPLE good references (up to 5 for better guidance)
+      const maxRefs = 5;
       for (const url of refs) {
-        const data = await fetchImageAsDataUrl(url, 3);
+        if (referenceImageUrls.length >= maxRefs) break;
+        
+        const data = await fetchImageAsDataUrl(url, 2);
         if (data?.dataUrl) {
-          referenceImageUrl = data.dataUrl;
+          referenceImageUrls.push(data.dataUrl);
           referenceImageSources.push(data.originalUrl);
-          console.log('✅ Loaded reference image for guidance');
-          break; // FAL.ai uses single reference
+          console.log(`✅ Loaded reference image ${referenceImageUrls.length}/${maxRefs}`);
         }
       }
       
-      // Retry with simpler query if no references loaded
-      if (!referenceImageUrl && brand) {
-        console.log('🔄 Retrying with brand name...');
-        const simpleRefs = await googleRefImages(`${brand} product`, 8);
+      // Retry with simpler queries if we don't have enough references
+      if (referenceImageUrls.length < 3 && brand) {
+        console.log('🔄 Retrying with brand name for more references...');
+        const simpleRefs = await googleRefImages(`${brand} ${category || 'product'} package`, 10);
         for (const url of simpleRefs) {
-          const data = await fetchImageAsDataUrl(url, 3);
+          if (referenceImageUrls.length >= maxRefs) break;
+          
+          const data = await fetchImageAsDataUrl(url, 2);
           if (data?.dataUrl) {
-            referenceImageUrl = data.dataUrl;
+            referenceImageUrls.push(data.dataUrl);
             referenceImageSources.push(data.originalUrl);
-            console.log('✅ Loaded reference image (retry)');
-            break;
+            console.log(`✅ Loaded reference image ${referenceImageUrls.length}/${maxRefs} (retry)`);
           }
         }
       }
     }
     
-    if (!referenceImageUrl) {
+    if (referenceImageUrls.length === 0) {
       console.warn('⚠️ No reference images loaded - quality may be reduced');
+    } else {
+      console.log(`✅ Total reference images loaded: ${referenceImageUrls.length}`);
     }
   }
 
   try {
+    // Use image-to-image model if we have reference images
+    const useImg2Img = referenceImageUrls.length > 0;
+    const modelEndpoint = useImg2Img ? 'fal-ai/flux-pro/v1.1-ultra' : 'fal-ai/flux/schnell';
+    
+    console.log(`🎨 Using ${useImg2Img ? 'image-to-image' : 'text-to-image'} model: ${modelEndpoint}`);
+    
     // Build FAL.ai input
     const input: any = {
       prompt: enhancedPrompt,
-      image_size: params.imageSize || 'square_hd', // 1024x1024 for square_hd
-      num_inference_steps: 4, // FLUX schnell optimized for 4 steps
       num_images: 1,
       enable_safety_checker: true,
       output_format: 'jpeg', // Smaller file size than PNG
-      guidance_scale: 3.5 // Lower for FLUX schnell (recommended 3-4)
     };
     
-    // Add reference image if available
-    if (referenceImageUrl) {
-      input.image_url = referenceImageUrl;
-      input.strength = 0.6; // How much to follow the reference (0-1)
-      console.log('🖼️ Using reference image for guidance (strength: 0.6)');
+    if (useImg2Img) {
+      // Image-to-image mode with reference
+      // Use the best quality reference image (first one)
+      input.image_url = referenceImageUrls[0];
+      input.strength = 0.65; // How much to transform from reference (0.6-0.75 is good for products)
+      input.guidance_scale = 3.5; // Guidance for staying close to prompt
+      input.num_inference_steps = 28; // More steps for better quality in img2img
+      console.log(`🖼️ Using image-to-image with ${referenceImageUrls.length} reference(s) (strength: 0.65)`);
+    } else {
+      // Text-to-image mode (fallback)
+      input.image_size = params.imageSize || 'square_hd'; // 1024x1024 for square_hd
+      input.num_inference_steps = 4; // FLUX schnell optimized for 4 steps
+      input.guidance_scale = 3.5; // Lower for FLUX schnell
+      console.log('📝 Using text-to-image (no references)');
     }
     
-    // Call FAL.ai FLUX schnell model
-    const result = await fal.subscribe('fal-ai/flux/schnell', {
+    // Call FAL.ai model
+    const result = await fal.subscribe(modelEndpoint, {
       input,
       logs: true,
       onQueueUpdate: (update) => {

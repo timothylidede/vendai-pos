@@ -4,7 +4,19 @@ import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } fro
 import { useRouter } from 'next/navigation'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
-import { ScanBarcode, ShoppingCart, Trash2, Plus, ChevronDown, X, Search, Package, ArrowLeft } from 'lucide-react'
+import {
+  ScanBarcode,
+  ShoppingCart,
+  Trash2,
+  Plus,
+  ChevronDown,
+  X,
+  Search,
+  Package,
+  ArrowLeft,
+  Settings2,
+  SlidersHorizontal,
+} from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { POSProduct, POSOrderLine, POSOrderDoc } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -24,6 +36,12 @@ import { downloadPdf, type ReceiptPreviewBundle } from '@/lib/receipts'
 import { useScannerFocus } from '@/lib/scanner-focus'
 import { HardwareStatusStrip } from '@/components/hardware-status-strip'
 import { EnhancedSalesTab } from './enhanced-sales-tab'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useOfflineMode } from '@/hooks/use-offline-mode'
+import { OfflineStatus, OfflineIndicatorMini } from '@/components/offline-status'
+import { ConflictResolutionDialog, type ConflictOrder } from '@/components/conflict-resolution-dialog'
+import { getOfflineQueueManager } from '@/lib/offline-queue'
+import { addPosOrder } from '@/lib/pos-operations-optimized'
 
 type LegacyImageField = 'imageUrl' | 'image_url' | 'imageURL'
 
@@ -62,6 +80,8 @@ interface OrderTab {
 
 type StoredOrderTab = Omit<OrderTab, 'createdAt'> & { createdAt: string }
 
+const DEFAULT_LANES = ['Lane 1', 'Lane 2', 'Lane 3', 'Lane 4']
+
 export function POSPage() {
   const [headerCollapsed, setHeaderCollapsed] = useState(true)
   const [cart, setCart] = useState<CartLine[]>([])
@@ -84,7 +104,7 @@ export function POSPage() {
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [checkoutSubmitting, setCheckoutSubmitting] = useState(false)
   const { processCheckout } = useProcessPayment()
-  const { openCashDrawer } = useHardware()
+  const { openCashDrawer, status: hardwareStatus, hardwareAvailable } = useHardware()
 
   const [recentOrders, setRecentOrders] = useState<POSOrderDoc[]>([])
   const [receiptPreviewBundle, setReceiptPreviewBundle] = useState<ReceiptPreviewBundle | null>(null)
@@ -94,6 +114,109 @@ export function POSPage() {
   // Enhanced persistent order tabs
   const [orderTabs, setOrderTabs] = useState<Map<string, OrderTab>>(new Map())
   const [activeOrderId, setActiveOrderId] = useState<string>('001')
+
+  const [laneId, setLaneId] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'Lane 1'
+    return localStorage.getItem('pos-active-lane') ?? 'Lane 1'
+  })
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return localStorage.getItem('pos-active-device') ?? null
+  })
+  const [laneOptions, setLaneOptions] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return DEFAULT_LANES
+    try {
+      const stored = localStorage.getItem('pos-lanes')
+      if (!stored) return DEFAULT_LANES
+      const parsed = JSON.parse(stored)
+      if (Array.isArray(parsed) && parsed.every((lane) => typeof lane === 'string' && lane.trim().length > 0)) {
+        return parsed as string[]
+      }
+      return DEFAULT_LANES
+    } catch (error) {
+      console.warn('Failed to parse stored lanes. Falling back to defaults.', error)
+      return DEFAULT_LANES
+    }
+  })
+  const [laneManagerOpen, setLaneManagerOpen] = useState(false)
+  const [laneDrafts, setLaneDrafts] = useState<string[]>(DEFAULT_LANES)
+  const [mobileLaneDeviceOpen, setMobileLaneDeviceOpen] = useState(false)
+
+  // Offline mode
+  const {
+    isOffline,
+    queueStats,
+    queueOrder,
+    syncQueue,
+    isSyncing,
+    lastSyncAt,
+    autoSyncEnabled,
+    toggleAutoSync
+  } = useOfflineMode()
+
+  // Conflict resolution
+  const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
+  const [conflicts, setConflicts] = useState<ConflictOrder[]>([])
+
+  // Load conflicts when queue stats change
+  useEffect(() => {
+    const loadConflicts = async () => {
+      if (queueStats && queueStats.conflicts > 0) {
+        try {
+          const queueManager = getOfflineQueueManager()
+          const conflictTransactions = await queueManager.getQueuedTransactions('conflict')
+          const mapped: ConflictOrder[] = conflictTransactions.map(tx => ({
+            id: tx.id,
+            orderNumber: tx.options?.receiptNumber,
+            lines: tx.lines,
+            metadata: {
+              orgId: tx.orgId,
+              cashierName: userData?.displayName || 'Unknown',
+              laneId: tx.options?.laneId,
+              queuedAt: tx.queuedAt
+            },
+            error: tx.error || null,
+            retryCount: tx.attemptCount
+          }))
+          setConflicts(mapped)
+        } catch (error) {
+          console.error('Failed to load conflicts:', error)
+        }
+      } else {
+        setConflicts([])
+      }
+    }
+    loadConflicts()
+  }, [queueStats, userData])
+
+  // Handle conflict resolution
+  const handleResolveConflict = useCallback(async (id: string, resolution: 'skip' | 'force') => {
+    const queueManager = getOfflineQueueManager()
+    
+    if (resolution === 'skip') {
+      await queueManager.resolveConflict(id, 'skip')
+      toast({
+        title: 'Conflict skipped',
+        description: 'The order has been removed from the sync queue.'
+      })
+    } else if (resolution === 'force') {
+      const orgId = userData?.organizationName || 'default'
+      await queueManager.resolveConflict(id, 'force', async (orgId, userId, lines, options) => {
+        return await addPosOrder(orgId, userId, lines, options)
+      })
+      toast({
+        title: 'Order synced',
+        description: 'The order was forced to sync successfully.'
+      })
+    }
+  }, [userData, toast])
+
+  // Show conflict dialog when conflicts are detected
+  useEffect(() => {
+    if (conflicts.length > 0 && !conflictDialogOpen) {
+      setConflictDialogOpen(true)
+    }
+  }, [conflicts.length, conflictDialogOpen])
 
   // Generate next available order number
   const getNextOrderNumber = () => {
@@ -114,6 +237,57 @@ export function POSPage() {
     setOrderTabs(new Map([['001', firstTab]]))
     setActiveOrderId('001')
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('pos-active-lane', laneId)
+  }, [laneId])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (selectedDeviceId) {
+      localStorage.setItem('pos-active-device', selectedDeviceId)
+    } else {
+      localStorage.removeItem('pos-active-device')
+    }
+  }, [selectedDeviceId])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!laneOptions.length) return
+    localStorage.setItem('pos-lanes', JSON.stringify(laneOptions))
+  }, [laneOptions])
+
+  useEffect(() => {
+    if (!laneOptions.length) {
+      setLaneOptions(DEFAULT_LANES)
+      return
+    }
+    if (!laneOptions.includes(laneId)) {
+      setLaneId(laneOptions[0])
+    }
+  }, [laneOptions, laneId])
+
+  useEffect(() => {
+    if (laneManagerOpen) {
+      setLaneDrafts(laneOptions)
+    }
+  }, [laneManagerOpen, laneOptions])
+
+  useEffect(() => {
+    const devices = [...(hardwareStatus?.scanners ?? []), ...(hardwareStatus?.cardReaders ?? [])]
+    if (devices.length === 0) {
+      setSelectedDeviceId((prev) => prev ?? null)
+      return
+    }
+    const firstAvailable = devices.find((device) => device.connected) ?? devices[0]
+    setSelectedDeviceId((prev) => {
+      if (prev && devices.some((device) => device.id === prev)) {
+        return prev
+      }
+      return firstAvailable?.id ?? prev ?? null
+    })
+  }, [hardwareStatus])
 
   // Load persistent order tabs from localStorage
   useEffect(() => {
@@ -182,6 +356,30 @@ export function POSPage() {
     setSelectedOrder(nextNumber)
   }
 
+  const deviceOptions = useMemo(() => {
+    const devices = [...(hardwareStatus?.scanners ?? []), ...(hardwareStatus?.cardReaders ?? [])]
+    return devices.map((device) => ({
+      id: device.id,
+      label: device.label || device.id,
+      connected: device.connected,
+      simulated: device.simulated,
+      type: device.type,
+    }))
+  }, [hardwareStatus])
+
+  const activeDevice = useMemo(() => {
+    if (!selectedDeviceId) return null
+    return deviceOptions.find((device) => device.id === selectedDeviceId) ?? null
+  }, [deviceOptions, selectedDeviceId])
+
+  const deviceSelectValue = selectedDeviceId ?? 'no-device'
+  const deviceStatusLabel = activeDevice
+    ? `${activeDevice.connected ? 'Online' : 'Offline'}${activeDevice.simulated ? ' • Simulated' : ''}`
+    : hardwareAvailable
+      ? 'No device selected'
+      : 'Simulated device mode'
+
+
   const switchToOrder = (orderId: string) => {
     if (orderTabs.has(orderId)) {
       setActiveOrderId(orderId)
@@ -189,6 +387,39 @@ export function POSPage() {
       setCart(orderTabs.get(orderId)?.cart || [])
     }
   }
+
+  const handleLaneDraftChange = useCallback((index: number, value: string) => {
+    setLaneDrafts((prev) => {
+      const next = [...prev]
+      next[index] = value
+      return next
+    })
+  }, [])
+
+  const handleLaneDraftAdd = useCallback(() => {
+    setLaneDrafts((prev) => [...prev, `Lane ${prev.length + 1}`])
+  }, [])
+
+  const handleLaneDraftRemove = useCallback((index: number) => {
+    setLaneDrafts((prev) => {
+      if (prev.length <= 1) return prev
+      return prev.filter((_, idx) => idx !== index)
+    })
+  }, [])
+
+  const handleLaneManagerSave = useCallback(() => {
+    const normalized = laneDrafts
+      .map((lane, idx) => lane.trim() || `Lane ${idx + 1}`)
+      .filter((lane, idx, arr) => arr.findIndex((candidate) => candidate.toLowerCase() === lane.toLowerCase()) === idx)
+
+    const nextLanes = normalized.length > 0 ? normalized : [...DEFAULT_LANES]
+    setLaneOptions(nextLanes)
+    if (!nextLanes.includes(laneId)) {
+      setLaneId(nextLanes[0])
+    }
+    setLaneManagerOpen(false)
+    showGlassToast('Lane presets updated', `Now tracking ${nextLanes.length} checkout lane${nextLanes.length === 1 ? '' : 's'}.`)
+  }, [laneDrafts, laneId, showGlassToast])
 
   // Load recent sales for Sales tab
   useEffect(() => {
@@ -507,6 +738,7 @@ export function POSPage() {
     const checkoutContext = {
       ...result.checkoutContext,
       registerId: result.checkoutContext.registerId ?? activeOrderId,
+      deviceId: result.checkoutContext.deviceId ?? selectedDeviceId ?? undefined,
       subtotal: cartTotal,
       grandTotal: cartTotal,
       payments: result.checkoutContext.payments ?? result.payments,
@@ -514,6 +746,8 @@ export function POSPage() {
         ...(result.checkoutContext.metadata ?? {}),
         orderNumber,
         customerType: result.customerType,
+        laneId,
+        deviceId: selectedDeviceId ?? undefined,
       },
     }
 
@@ -565,6 +799,36 @@ export function POSPage() {
     }
 
     try {
+      // If offline, queue the order instead of processing immediately
+      if (isOffline) {
+        const queuedId = await queueOrder(orgId, userId, orderLines, {
+          cashierId: userId,
+          laneId,
+          deviceId: selectedDeviceId ?? undefined,
+          receiptNumber,
+          status: result.status,
+          paymentMethods: result.payments.map(p => p.method),
+        })
+
+        toast({
+          title: 'Order queued (Offline)',
+          description: `Order #${orderNumber} saved locally and will sync when connection is restored.`,
+          variant: 'default'
+        })
+
+        // Simulate a successful offline checkout
+        const offlineResponse: ProcessCheckoutSuccess = {
+          success: true,
+          orderId: queuedId,
+          status: result.status,
+          receiptBundle: null,
+          receiptArtifacts: []
+        }
+
+        await finalizeSuccess(offlineResponse)
+        return
+      }
+
       const response = await processCheckout({
         orgId,
         userId,
@@ -578,6 +842,8 @@ export function POSPage() {
         notes: result.notes,
         receiptNumber,
         cashierId: userId,
+        laneId,
+        deviceId: selectedDeviceId ?? undefined,
         events: {
           onInfo: (message) => showGlassToast('Payment update', message),
           onStatus: (status) => console.debug('[payments] status', status),
@@ -710,6 +976,8 @@ export function POSPage() {
     setRecentOrders,
     toast,
     openCashDrawer,
+    laneId,
+    selectedDeviceId,
   ])
 
   return (
@@ -722,6 +990,9 @@ export function POSPage() {
       }
       transition={{ duration: 0.15, ease: [0.4, 0.0, 0.2, 1] }}
     >
+      {/* Mobile Offline Indicator */}
+      <OfflineIndicatorMini isOffline={isOffline} />
+      
       {/* Header */}
   <div className="bg-slate-900/40 backdrop-blur-sm" style={{WebkitAppRegion: 'drag'} as React.CSSProperties}>
         <div className="flex items-center justify-between px-4 py-3" style={{WebkitAppRegion: 'no-drag'} as React.CSSProperties}>
@@ -826,6 +1097,85 @@ export function POSPage() {
             </button>
           </div>
           <div className="flex items-center space-x-4">
+            {/* Offline Status Indicator */}
+            <OfflineStatus
+              isOffline={isOffline}
+              queuedCount={queueStats?.pending ?? 0}
+              isSyncing={isSyncing}
+              failedCount={queueStats?.failed ?? 0}
+              conflictsCount={queueStats?.conflicts ?? 0}
+              onSyncClick={() => syncQueue()}
+              compact
+              className="hidden sm:flex"
+            />
+
+            <div className="hidden sm:flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-2 sm:space-y-0 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur">
+              <div className="flex flex-col text-left min-w-[9rem]">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Lane</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 rounded-full border border-white/10 bg-slate-950/60 text-slate-300 hover:text-white"
+                    onClick={() => setLaneManagerOpen(true)}
+                    aria-label="Manage checkout lanes"
+                  >
+                    <Settings2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+                <Select value={laneId} onValueChange={setLaneId}>
+                  <SelectTrigger className="mt-2 h-9 w-full border-white/10 bg-slate-950/70 text-slate-100">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-white/10 bg-slate-900/95 text-slate-100">
+                    {laneOptions.map((lane) => (
+                      <SelectItem value={lane} key={lane}>
+                        {lane}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="mt-1 text-[11px] text-slate-400">Active lane for this checkout</span>
+              </div>
+              <div className="flex flex-col text-left min-w-[12rem]">
+                <span className="text-[10px] uppercase tracking-[0.3em] text-slate-400">Device</span>
+                <Select
+                  value={deviceSelectValue}
+                  onValueChange={(value) => setSelectedDeviceId(value === 'no-device' ? null : value)}
+                >
+                  <SelectTrigger className="mt-2 h-9 w-full border-white/10 bg-slate-950/70 text-slate-100">
+                    <SelectValue placeholder={hardwareAvailable ? 'Select device' : 'Simulated device'} />
+                  </SelectTrigger>
+                  <SelectContent className="border-white/10 bg-slate-900/95 text-slate-100">
+                    <SelectItem value="no-device">
+                      {hardwareAvailable ? 'No device selected' : 'Simulated device'}
+                    </SelectItem>
+                    {deviceOptions.map((device) => (
+                      <SelectItem value={device.id} key={device.id}>
+                        <div className="flex flex-col">
+                          <span>{device.label}</span>
+                          <span className="text-xs text-slate-400">
+                            {device.connected ? 'Online' : 'Offline'}
+                            {device.simulated ? ' • Simulated' : ''}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="mt-1 text-[11px] text-slate-400">{deviceStatusLabel}</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileLaneDeviceOpen(true)}
+              className="sm:hidden group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
+              aria-label="Lane and device settings"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-green-500/[0.03] via-transparent to-blue-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+              <SlidersHorizontal className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
+            </button>
             <div className="relative">
               <Input 
                 ref={attachScannerInput}
@@ -1194,6 +1544,118 @@ export function POSPage() {
         <EnhancedSalesTab />
       )}
       
+      <Dialog open={laneManagerOpen} onOpenChange={setLaneManagerOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Manage checkout lanes</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-400">
+            Rename, add, or remove preset lanes. These options are saved locally for this device.
+          </p>
+          <div className="mt-4 space-y-3">
+            {laneDrafts.map((lane, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <Input
+                  value={lane}
+                  onChange={(event) => handleLaneDraftChange(index, event.target.value)}
+                  className="flex-1 bg-slate-900/60 border-white/10"
+                  placeholder={`Lane ${index + 1}`}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 text-slate-400 hover:text-red-400"
+                  onClick={() => handleLaneDraftRemove(index)}
+                  disabled={laneDrafts.length <= 1}
+                  aria-label="Remove lane"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 flex items-center justify-between">
+            <Button type="button" variant="outline" onClick={handleLaneDraftAdd}>
+              Add lane
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="ghost" onClick={() => setLaneManagerOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={handleLaneManagerSave}>
+                Save changes
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={mobileLaneDeviceOpen} onOpenChange={setMobileLaneDeviceOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Lane & device</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Lane</span>
+              <Select value={laneId} onValueChange={setLaneId}>
+                <SelectTrigger className="mt-2 h-9 w-full border-white/10 bg-slate-950/70 text-slate-100">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="border-white/10 bg-slate-900/95 text-slate-100">
+                  {laneOptions.map((lane) => (
+                    <SelectItem value={lane} key={lane}>
+                      {lane}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mt-2 justify-start text-slate-400 hover:text-white"
+                onClick={() => {
+                  setMobileLaneDeviceOpen(false)
+                  setLaneManagerOpen(true)
+                }}
+              >
+                <Settings2 className="mr-2 h-4 w-4" /> Manage lanes
+              </Button>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Device</span>
+              <Select
+                value={deviceSelectValue}
+                onValueChange={(value) => setSelectedDeviceId(value === 'no-device' ? null : value)}
+              >
+                <SelectTrigger className="mt-2 h-9 w-full border-white/10 bg-slate-950/70 text-slate-100">
+                  <SelectValue placeholder={hardwareAvailable ? 'Select device' : 'Simulated device'} />
+                </SelectTrigger>
+                <SelectContent className="border-white/10 bg-slate-900/95 text-slate-100">
+                  <SelectItem value="no-device">
+                    {hardwareAvailable ? 'No device selected' : 'Simulated device'}
+                  </SelectItem>
+                  {deviceOptions.map((device) => (
+                    <SelectItem value={device.id} key={device.id}>
+                      <div className="flex flex-col">
+                        <span>{device.label}</span>
+                        <span className="text-xs text-slate-400">
+                          {device.connected ? 'Online' : 'Offline'}
+                          {device.simulated ? ' • Simulated' : ''}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-2 text-xs text-slate-400">{deviceStatusLabel}</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Glassmorphic Toast Container */}
       <POSCheckoutModal
         open={checkoutOpen}
@@ -1237,6 +1699,16 @@ export function POSPage() {
             )}
           </DialogContent>
         </Dialog>
+
+      {/* Conflict Resolution Dialog */}
+      <ConflictResolutionDialog
+        open={conflictDialogOpen}
+        onOpenChange={setConflictDialogOpen}
+        conflicts={conflicts}
+        onResolve={handleResolveConflict}
+      />
+
+      {ToastContainer}
     </motion.div>
   )
 }

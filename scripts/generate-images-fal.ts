@@ -20,6 +20,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { config as dotenvConfig } from 'dotenv';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
@@ -35,19 +36,28 @@ const options = {
   skipEmbeddings: args.includes('--skip-embeddings')
 };
 
+// Load env from .env.local
+dotenvConfig({ path: path.join(process.cwd(), '.env.local') });
+
 console.log('🚀 FAL.ai Distributor Image Generator');
 console.log('Options:', options, '\n');
 
-// Initialize Firebase Admin
+// Initialize Firebase Admin (env var fallback)
 try {
-  const serviceAccount = JSON.parse(
-    fs.readFileSync(path.join(process.cwd(), 'serviceAccountKey.json'), 'utf-8')
-  );
-  
-  initializeApp({
-    credential: cert(serviceAccount),
-    storageBucket: 'vendai-fa58c.appspot.com'
-  });
+  let adminInit: any = {};
+  const bucketFromEnv = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET;
+  const storageBucket = bucketFromEnv || 'vendai-fa58c.appspot.com';
+
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+    adminInit = { credential: cert(serviceAccount), storageBucket };
+  } else {
+    const keyPath = path.join(process.cwd(), 'serviceAccountKey.json');
+    const serviceAccount = JSON.parse(fs.readFileSync(keyPath, 'utf-8'));
+    adminInit = { credential: cert(serviceAccount), storageBucket };
+  }
+
+  initializeApp(adminInit);
 } catch (error: any) {
   console.error('❌ Failed to initialize Firebase Admin:', error.message);
   process.exit(1);
@@ -175,6 +185,21 @@ interface ParsedProduct {
   packSize: string;
   packUnit: string;
   price?: number;
+}
+
+function buildProductPrompt(product: ParsedProduct): string {
+  const base = `Professional studio product photography, single centered product on floating glass shelf, uniform slate gray background (#1f2937), tight crop with product filling 75% of frame, sharp focus with gentle depth of field, cool teal-accent lighting, high detail, rich color saturation, subtle film grain, no text or props, modern e-commerce style.`
+
+  const details = [
+    product.brandName && `Brand: ${product.brandName}`,
+    product.productName && `Product name: ${product.productName}`,
+    product.rawText && `Description: ${product.rawText}`,
+    product.category && `Category: ${product.category}`,
+    product.packSize && `Pack size: ${product.packSize}`,
+    product.packUnit && `Unit: ${product.packUnit}`
+  ].filter(Boolean).join('. ')
+
+  return details ? `${base} Product details: ${details}. Maintain consistent slate gray backdrop.` : `${base} Maintain consistent slate gray backdrop.`
 }
 
 // Categorization helper
@@ -345,16 +370,18 @@ async function main() {
     
     try {
       // Generate prompt
-      const title = `${product.brandName} ${product.productName}`.trim();
-      const prompt = `Professional studio product photography, single centered product on floating glass shelf, 
-        uniform slate gray background (#1f2937), tight crop with product filling 75% of frame, 
-        sharp focus with gentle depth of field, cool teal-accent lighting, high detail, 
-        rich color saturation, subtle film grain, no text or props, modern e-commerce style.
-        Product: ${title}. Category: ${product.category}. Maintain consistent slate gray backdrop.`;
+      const prompt = buildProductPrompt(product);
       
       // Get reference images (SMART search)
       console.log(`   🔍 Finding reference images...`);
-      const refUrls = await googleRefImages(`${title} product image`, 4);
+      const searchTerms = [
+        product.brandName,
+        product.productName,
+        product.packSize,
+        product.packUnit,
+        product.category
+      ].filter(Boolean).join(' ');
+      const refUrls = await googleRefImages(`${searchTerms} product image`, 4);
       let referenceDataUrl: string | undefined;
       
       if (refUrls.length > 0) {

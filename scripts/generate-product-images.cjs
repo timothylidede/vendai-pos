@@ -120,9 +120,18 @@ function chunk(arr, size) {
   return out
 }
 
-function buildPrompt(name, brand) {
-  const brandTxt = brand ? `${brand} ` : ''
-  return `Photorealistic product photo of ${brandTxt}${name} using the reference image. Output a single centered product placed on a brown mahogany wooden shelf with visible wood grain. Lighting: warm, studio-quality, 'precious' accent lighting from top-left creating soft highlights and gentle shadows. Background color: ${THEME_BG_HEX}. Camera: 50mm, slight 10° angle, product fully visible, no additional props. Keep product proportions and text readable. Ensure consistent composition across all SKUs: product centered, same distance from camera, shelf visible across bottom third of frame. High detail, high resolution, natural specular highlights on glossy surfaces. If no license to reproduce brand logos, render neutral label placeholders instead. Output format: ${OUTPUT_SIZE} JPEG.`
+function buildPrompt(product) {
+  const details = [
+    product?.name && `Product name: ${product.name}`,
+    product?.brand && `Brand: ${product.brand}`,
+    product?.description && `Description: ${product.description}`,
+    product?.category && `Category: ${product.category}`,
+    product?.unit && `Packaging: ${product.unit}`
+  ].filter(Boolean).join('. ')
+
+  const base = `Photorealistic product photo using the supplied reference image. Output a single centered ${product?.category || 'consumer'} product placed on a brown mahogany wooden shelf with visible wood grain. Lighting: warm, studio-quality, 'precious' accent lighting from top-left creating soft highlights and gentle shadows. Background color: ${THEME_BG_HEX}. Camera: 50mm, slight 10° angle, product fully visible, no additional props. Keep product proportions and label text readable. Ensure consistent composition across all SKUs: product centered, same distance from camera, shelf visible across bottom third of frame. High detail, high resolution, natural specular highlights on glossy surfaces. If no license to reproduce brand logos, render neutral label placeholders instead. Output format: ${OUTPUT_SIZE} JPEG.`
+
+  return details ? `${base} Product details: ${details}.` : base
 }
 
 // ----- Google CSE Image Search -----
@@ -428,12 +437,19 @@ async function main() {
         }
       }
 
-      const query = `${p.brand ? p.brand + ' ' : ''}${p.name} product image`
+  const queryParts = [p.brand, p.name, p.unit, p.category].filter(Boolean)
+  const query = `${queryParts.join(' ')} product image`
       const refs = await searchReferenceImages(query, REF_TOPN)
       if (!refs.length) { console.warn('   ⚠️  No reference images found'); continue }
       console.log(`   🔎 Found ${refs.length} reference images`)
 
-      const prompt = buildPrompt(p.name, p.brand)
+      const prompt = buildPrompt({
+        name: p.name,
+        brand: p.brand,
+        description: p.name,
+        category: p.category,
+        unit: p.unit
+      })
       if (SEARCH_ONLY) {
         console.log('   🔎 Search-only mode: refs ->')
         refs.forEach((u, i) => console.log(`      [${i+1}] ${u}`))

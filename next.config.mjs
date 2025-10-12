@@ -21,9 +21,7 @@ const nextConfig = {
     NEXT_PUBLIC_APP_ENV: process.env.VERCEL_ENV || 'electron',
   },
   // Use standard build for both Vercel and Electron
-  experimental: {
-    serverComponentsExternalPackages: ['@firebase/app-compat'],
-  },
+  serverExternalPackages: ['@firebase/app-compat'],
 }
 
 export default nextConfig

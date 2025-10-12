@@ -28,6 +28,7 @@ import type {
   POSOrderLine,
   POSProduct,
 } from '@/lib/types'
+import { computeUpdatedStock, InsufficientStockError } from '@/lib/pos-operations-optimized'
 import type {
   CreatePOSOrderOptions,
   POSOrderStatus,
@@ -231,43 +232,25 @@ export async function addPosOrder(
           
           if (snap.exists()) {
             const inv = snap.data() as InventoryRecord
-            const unitsPerBase = inv.unitsPerBase || 1
-            const { base, loose } = computeIssueFromPieces(line.quantityPieces, unitsPerBase)
-
-            let newQtyBase = inv.qtyBase
-            let newQtyLoose = inv.qtyLoose
-
-            // Issue loose first, then base
-            if (newQtyLoose >= loose) {
-              newQtyLoose -= loose
-            } else {
-              const needed = loose - newQtyLoose
-              // borrow one base if possible
-              if (newQtyBase > 0) {
-                newQtyBase -= 1
-                newQtyLoose = unitsPerBase - needed
-              } else {
-                // If insufficient stock, just set to 0
-                newQtyLoose = 0
-              }
-            }
-            
-            if (base > newQtyBase) {
-              newQtyBase = 0 // Set to 0 instead of throwing error
-            } else {
-              newQtyBase -= base
-            }
+            const updatedValues = computeUpdatedStock(line.productId, {
+              qtyBase: inv.qtyBase ?? 0,
+              qtyLoose: inv.qtyLoose ?? 0,
+              unitsPerBase: inv.unitsPerBase ?? 1,
+            }, line.quantityPieces)
 
             tx.update(invRef, {
-              qtyBase: newQtyBase,
-              qtyLoose: newQtyLoose,
-              updatedAt: new Date().toISOString(),
+              qtyBase: updatedValues.qtyBase,
+              qtyLoose: updatedValues.qtyLoose,
+              updatedAt: nowIso,
               updatedBy: userId,
             })
           }
           // If inventory doesn't exist, just continue without error
         } catch (invError) {
           console.warn(`Failed to update inventory for product ${line.productId}:`, invError)
+          if (invError instanceof InsufficientStockError) {
+            throw invError
+          }
           // Continue processing other items
         }
       }
@@ -276,6 +259,9 @@ export async function addPosOrder(
     })
     return id as string
   } catch (error) {
+    if (error instanceof InsufficientStockError) {
+      throw error
+    }
     // Implement exponential backoff retry for contention errors
     const errorMessage = error instanceof Error ? error.message : String(error)
     const isContentionError = errorMessage.includes('contention') || 

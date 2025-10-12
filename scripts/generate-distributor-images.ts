@@ -1,41 +1,70 @@
 /**
- * Generate product images for distributor catalogs using Google Image Search + Replicate
- * Uses the same workflow as inventory module image generation
+ * Generate product images for distributor catalogs using Google Image Search + FAL.ai
+ * Uses FAL.ai FLUX image-to-image for 90% cost savings vs Replicate
  * 
  * Requirements:
- * - REPLICATE_API_TOKEN in environment
+ * - FAL_API_KEY in environment
  * - GOOGLE_CSE_API_KEY and GOOGLE_CSE_CX for Google Custom Search
- * - Firebase web config in .env.local
+ * - Firebase configuration
  */
 
-const Replicate = require('replicate')
-const path = require('path')
-const fs = require('fs')
-require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') })
+import * as fal from '@fal-ai/serverless-client'
+import * as path from 'path'
+import * as fs from 'fs'
+import { config } from 'dotenv'
+import { fileURLToPath } from 'url'
+import { initializeApp, cert } from 'firebase-admin/app'
+import { getFirestore } from 'firebase-admin/firestore'
+import { getStorage } from 'firebase-admin/storage'
 
-import { getAllDistributors, distributorProducts, type DistributorProduct } from '../data/distributor-data'
+// Get __dirname equivalent
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
-// Configuration
-const PRODUCTS_PER_DISTRIBUTOR = 10
-const IMAGE_OUTPUT_DIR = path.join(process.cwd(), 'public', 'images', 'distributors', 'products')
-const LOG_FILE = path.join(process.cwd(), 'distributor-image-generation.log')
+// Load environment
+config({ path: path.join(__dirname, '..', '.env.local') })
 
-// API Keys
-const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN
-const GOOGLE_CSE_API_KEY = process.env.GOOGLE_CSE_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-const GOOGLE_CSE_CX = process.env.GOOGLE_CSE_CX || process.env.NEXT_PUBLIC_CX
-
-if (!REPLICATE_API_TOKEN) {
-  console.error('❌ Missing REPLICATE_API_TOKEN in environment. Aborting.')
+// Check required API keys
+if (!process.env.FAL_API_KEY) {
+  console.error('❌ Missing FAL_API_KEY in environment. Aborting.')
+  console.error('Please add FAL_API_KEY to your .env.local file')
   process.exit(1)
 }
 
-const replicate = new Replicate({ auth: REPLICATE_API_TOKEN })
+// Configure FAL.ai client
+fal.config({
+  credentials: process.env.FAL_API_KEY
+})
 
-// Model configuration (same as inventory)
-const MODEL = process.env.REPLICATE_MODEL || 'google/nano-banana'
-const STRENGTH = Number(process.env.REPLICATE_STRENGTH || '0.6')
-const THEME_BG_HEX = '#6B21A8' // Purple-800 for supplier module
+// Initialize Firebase Admin
+try {
+  const adminConfig: any = {
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'vendai-fa58c',
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'vendai-fa58c.firebasestorage.app',
+  }
+
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
+    adminConfig.credential = cert(serviceAccount)
+  }
+
+  initializeApp(adminConfig)
+  console.log('✅ Firebase initialized')
+} catch (error: any) {
+  console.error('❌ Firebase init error:', error.message)
+  process.exit(1)
+}
+
+const db = getFirestore()
+const storage = getStorage()
+
+// Configuration
+const BATCH_SIZE = 10 // Process 10 products at a time
+const LOG_FILE = path.join(process.cwd(), 'distributor-image-generation.log')
+
+// API Keys
+const GOOGLE_CSE_API_KEY = process.env.GOOGLE_CSE_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+const GOOGLE_CSE_CX = process.env.GOOGLE_CSE_CX || process.env.NEXT_PUBLIC_CX
 
 interface ImageGenerationResult {
   distributorId: string
@@ -56,10 +85,22 @@ function ensureDirectoryExists(dirPath: string) {
   }
 }
 
-// Build prompt (same style as inventory)
-function buildPrompt(name: string, brand?: string): string {
-  const brandTxt = brand ? `${brand} ` : ''
-  return `Photorealistic product photo of ${brandTxt}${name} using the reference image. Output a single centered product placed on a brown mahogany wooden shelf with visible wood grain. Lighting: warm, studio-quality, 'precious' accent lighting from top-left creating soft highlights and gentle shadows. Background color: ${THEME_BG_HEX}. Camera: 50mm, slight 10° angle, product fully visible, no additional props. Keep product proportions and text readable. Ensure consistent composition across all SKUs: product centered, same distance from camera, shelf visible across bottom third of frame. High detail, high resolution, natural specular highlights on glossy surfaces. Output format: 1024x1024 JPEG.`
+// Build prompt (same style as inventory) but enriched with product metadata
+function buildPrompt(product: DistributorProduct): string {
+  const details = [
+    `Product name: ${product.name}`,
+    product.brand && `Brand: ${product.brand}`,
+    product.description && `Description: ${product.description}`,
+    product.category && `Category: ${product.category}`,
+    product.unit && `Packaging: ${product.unit}`
+  ].filter(Boolean).join('. ')
+
+  return [
+    `Photorealistic product photo using the supplied reference image. Output a single centered ${product.category || 'consumer'} product placed on a brown mahogany wooden shelf with visible wood grain.`,
+    `Lighting: warm, studio-quality, 'precious' accent lighting from top-left creating soft highlights and gentle shadows. Background color: ${THEME_BG_HEX}. Camera: 50mm, slight 10° angle, product fully visible, no additional props.`,
+    `Keep product proportions, label artwork, and packaging structure faithful to the real SKU. Make every brand mark and label text sharp and legible. Ensure consistent composition across all SKUs: product centered, same distance from camera, shelf visible across bottom third of frame. High detail, 1024x1024 JPEG output.`,
+    `Product details: ${details}.`
+  ].join(' ')
 }
 
 // Google CSE Image Search
@@ -140,12 +181,16 @@ async function generateProductImage(
 ): Promise<ImageGenerationResult> {
   const distributorId = distributor.id
   const distributorName = distributor.displayName
+  const productIdStr: string = String(product.id)
   
   try {
     console.log(`  → Generating image for: ${product.name}`)
     
     // Step 1: Search for reference images
-    const searchQuery = `${product.brand || ''} ${product.name} product`.trim()
+    const searchQueryParts = [product.brand, product.name, product.unit, product.category]
+      .filter(Boolean)
+      .map(part => String(part))
+    const searchQuery = `${searchQueryParts.join(' ')} product photo`.trim()
     console.log(`    🔍 Searching: "${searchQuery}"`)
     const refImages = await searchReferenceImages(searchQuery, 5)
     console.log(`    Found ${refImages.length} reference images`)
@@ -155,7 +200,7 @@ async function generateProductImage(
       return {
         distributorId,
         distributorName,
-        productId: product.id,
+        productId: productIdStr,
         productName: product.name,
         imageUrl: '',
         status: 'skipped',
@@ -164,7 +209,7 @@ async function generateProductImage(
     }
     
     // Step 2: Generate image with Replicate using first reference
-    const prompt = buildPrompt(product.name, product.brand)
+  const prompt = buildPrompt(product)
     console.log(`    🎨 Generating with Replicate (${MODEL})`)
     
     const input: any = {
@@ -211,7 +256,7 @@ async function generateProductImage(
     return {
       distributorId,
       distributorName,
-      productId: product.id,
+      productId: productIdStr,
       productName: product.name,
       imageUrl: publicUrl,
       status: 'success',
@@ -222,7 +267,7 @@ async function generateProductImage(
     return {
       distributorId,
       distributorName,
-      productId: product.id,
+      productId: productIdStr,
       productName: product.name,
       imageUrl: '',
       status: 'failed',

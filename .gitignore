@@ -57,6 +57,10 @@ cache/
 tmp/
 temp/
 .vercel
+data/.extraction-cache/
+data/.page-agent-cache/
+data/.logs/
+data/.agent-logs/
 
 # Scripts with secrets - DO NOT COMMIT
 scripts/setup-all-vercel-env.ps1

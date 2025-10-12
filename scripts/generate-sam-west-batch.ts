@@ -76,6 +76,21 @@ interface ParsedProduct {
   price?: number;
 }
 
+function buildProductPrompt(product: ParsedProduct): string {
+  const base = `Professional studio product photography, single centered product on floating glass shelf, uniform slate background (#1f2937) to match Vendai dashboard styling, tight composition with product filling ~75% of frame, crisp focus with gentle depth falloff, cool teal-accent lighting, high detail, rich color, subtle grain, no additional props.`
+
+  const details = [
+    product.brandName && `Brand: ${product.brandName}`,
+    product.productName && `Product name: ${product.productName}`,
+    product.category && `Category: ${product.category}`,
+    product.packSize && `Pack size: ${product.packSize}`,
+    product.packUnit && `Unit: ${product.packUnit}`,
+    product.price && `Distributor price: KES ${product.price}`
+  ].filter(Boolean).join('. ')
+
+  return details ? `${base} Product details: ${details}. Ensure label text is legible, packaging shape accurate, and brand artwork authentic.` : `${base} Ensure label text is legible, packaging shape accurate, and brand artwork authentic.`
+}
+
 // SMART Google Image Search with e-commerce priority
 async function googleRefImages(query: string, topN = 8): Promise<string[]> {
   const apiKey = process.env.GOOGLE_CSE_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -253,7 +268,14 @@ function parseSamWest(filePath: string): ParsedProduct[] {
 async function generateImage(product: ParsedProduct): Promise<{ url: string; references: string[] } | null> {
   try {
     // Build search query
-    const searchQuery = `${product.brandName} ${product.productName} product packaging ${product.category}`.trim();
+    const searchQueryParts = [
+      product.brandName,
+      product.productName,
+      product.packSize,
+      product.packUnit,
+      product.category
+    ].filter(Boolean);
+    const searchQuery = `${searchQueryParts.join(' ')} product packaging`.trim();
     console.log(`   🔍 Searching: "${searchQuery}"`);
     
     // Get reference images from Google (SMART search)
@@ -278,7 +300,7 @@ async function generateImage(product: ParsedProduct): Promise<{ url: string; ref
     
     if (referenceDataUrls.length === 0) {
       console.log(`   ⚠️ No references loaded, trying brand-only search...`);
-      const brandRefs = await googleRefImages(`${product.brandName} product`, 8);
+  const brandRefs = await googleRefImages(`${searchQueryParts.join(' ')} product`, 8);
       for (const url of brandRefs) {
         const result = await fetchImageAsDataUrl(url, 3);
         if (result) {
@@ -293,13 +315,7 @@ async function generateImage(product: ParsedProduct): Promise<{ url: string; ref
     console.log(`   🎯 Using ${referenceDataUrls.length} reference images`);
     
     // Build prompt
-    const title = `${product.brandName} ${product.productName}`.trim();
-    const prompt = `Professional studio product photography, single centered product on floating glass shelf, 
-      uniform slate gray background (#1f2937), tight crop with product filling 75% of frame, 
-      sharp focus with gentle depth of field, cool teal-accent lighting, high detail, 
-      rich color saturation, subtle film grain, no text or props, modern e-commerce style, 
-      clean and minimalist aesthetic. Product: ${title}. Category: ${product.category}. 
-      Maintain consistent slate gray backdrop with subtle glass reflection.`;
+    const prompt = buildProductPrompt(product);
     
     console.log(`   🎨 Generating with FAL.ai...`);
     

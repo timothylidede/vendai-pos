@@ -209,9 +209,15 @@ async function findSmartReferenceImages(params: {
   brand: string;
   productName: string;
   category?: string;
+  packSize?: string;
+  unit?: string;
+  description?: string;
   maxImages?: number;
 }): Promise<Array<{ dataUrl: string; source: string; originalUrl: string }>> {
-  console.log(`   🧠 Smart Reference Search: "${params.brand} ${params.productName}"`);
+  const descriptor = [params.brand, params.productName, params.packSize, params.unit]
+    .filter(Boolean)
+    .join(' ');
+  console.log(`   🧠 Smart Reference Search: "${descriptor}"`);
   
   const apiKey = process.env.GOOGLE_CSE_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_CSE_API_KEY;
   const cx = process.env.GOOGLE_CSE_CX || process.env.NEXT_PUBLIC_CX;
@@ -225,13 +231,16 @@ async function findSmartReferenceImages(params: {
   const allImages: ReferenceImage[] = [];
   
   // Try e-commerce first, then general
-  const ecommerceImages = await searchEcommerce(params.brand, params.productName, apiKey, cx);
+  const ecommerceProductName = [params.productName, params.packSize, params.unit]
+    .filter(Boolean)
+    .join(' ');
+  const ecommerceImages = await searchEcommerce(params.brand, ecommerceProductName, apiKey, cx);
   allImages.push(...ecommerceImages);
   
   if (allImages.length < maxImages * 2) {
     const generalImages = await searchGeneralOptimized(
       params.brand,
-      params.productName,
+      ecommerceProductName,
       params.category || '',
       apiKey,
       cx
@@ -312,6 +321,24 @@ interface Product {
   category: string;
   packSize: string;
   price: number;
+  unit?: string;
+  description?: string;
+}
+
+function buildProductPrompt(product: Product): string {
+  const base = `Studio product photo, single centered product captured with a tight crop (product fills ~75% of frame) on a floating glass shelf, uniform slate background (#1f2937) matching the Vendai dashboard, crisp focus across the product with gentle depth falloff, cool teal-accent studio lighting, high detail, rich color, subtle grain, no text, props, hands, or accessories, background color must remain constant, consistent shadow and lighting, modern, e-commerce ready.`;
+
+  const details = [
+    product.brandName && `Brand: ${product.brandName}`,
+    product.productName && `Product name: ${product.productName}`,
+    product.description && `Description: ${product.description}`,
+    product.category && `Category: ${product.category}`,
+    product.packSize && `Pack size: ${product.packSize}`,
+    product.unit && `Unit: ${product.unit}`,
+    product.price && `Distributor price: KES ${product.price}`
+  ].filter(Boolean).join('. ');
+
+  return details ? `${base} Product details: ${details}. Maintain an unbroken slate backdrop (#1f2937) with subtle glass reflection; no alternative backgrounds.` : `${base} Maintain an unbroken slate backdrop (#1f2937) with subtle glass reflection; no alternative backgrounds.`;
 }
 
 // Categorize products
@@ -355,7 +382,9 @@ function parseFirst5(filePath: string): Product[] {
       brandName,
       category: categorizeProduct(productName),
       packSize,
-      price: parseFloat(price.replace(/KES|,/g, '').trim())
+      price: parseFloat(price.replace(/KES|,/g, '').trim()),
+      unit: packSize,
+      description: productName
     });
   }
   
@@ -365,14 +394,15 @@ function parseFirst5(filePath: string): Product[] {
 // Generate image with SMART references
 async function generateImage(product: Product): Promise<{ url: string; references: string[]; sources: string[] } | null> {
   try {
-    const title = `${product.brandName} ${product.productName}`.trim();
-    
     // Get SMART reference images
     console.log('   🧠 Finding smart reference images...');
     const smartRefs = await findSmartReferenceImages({
       brand: product.brandName,
       productName: product.productName,
       category: product.category,
+      packSize: product.packSize,
+      unit: product.unit,
+      description: product.description,
       maxImages: 4
     });
     
@@ -387,9 +417,7 @@ async function generateImage(product: Product): Promise<{ url: string; reference
     });
     
     // Build prompt
-    const basePrompt = `Studio product photo, single centered product captured with a tight crop (product fills ~75% of frame) on a floating glass shelf, uniform slate background (#1f2937) matching the Vendai dashboard, crisp focus across the product with gentle depth falloff, cool teal-accent studio lighting, high detail, rich color, subtle grain, no text, props, hands, or accessories, background color must remain constant, consistent shadow and lighting, modern, e-commerce ready.`;
-    
-    const enhancedPrompt = `${basePrompt}. Product: ${title}${product.category ? '. Category: ' + product.category : ''}. Maintain an unbroken slate backdrop (#1f2937) with subtle glass reflection; no alternative backgrounds.`;
+  const enhancedPrompt = buildProductPrompt(product);
     
     console.log('   🎨 Generating with FAL.ai...');
     
@@ -405,7 +433,7 @@ async function generateImage(product: Product): Promise<{ url: string; reference
     };
     
     // Use the highest-scored reference (first one)
-    input.image_url = smartRefs[0].dataUrl;
+  input.image_url = smartRefs[0].dataUrl;
     input.strength = 0.6;
     console.log(`   🖼️ Using ${smartRefs[0].source} reference image for guidance`);
     

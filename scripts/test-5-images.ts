@@ -61,6 +61,24 @@ interface Product {
   category: string;
   packSize: string;
   price: number;
+  unit?: string;
+  description?: string;
+}
+
+function buildProductPrompt(product: Product): string {
+  const base = `Studio product photo, single centered product captured with a tight crop (product fills ~75% of frame) on a floating glass shelf, uniform slate background (#1f2937) matching the Vendai dashboard, crisp focus across the product with gentle depth falloff, cool teal-accent studio lighting, high detail, rich color, subtle grain, no text, props, hands, or accessories, background color must remain constant, consistent shadow and lighting, modern, e-commerce ready.`;
+
+  const details = [
+    product.brandName && `Brand: ${product.brandName}`,
+    product.productName && `Product name: ${product.productName}`,
+    product.description && `Description: ${product.description}`,
+    product.category && `Category: ${product.category}`,
+    product.packSize && `Pack size: ${product.packSize}`,
+    product.unit && `Unit: ${product.unit}`,
+    product.price && `Distributor price: KES ${product.price}`
+  ].filter(Boolean).join('. ');
+
+  return details ? `${base} Product details: ${details}. Maintain an unbroken slate backdrop (#1f2937) with subtle glass reflection; no alternative backgrounds.` : `${base} Maintain an unbroken slate backdrop (#1f2937) with subtle glass reflection; no alternative backgrounds.`;
 }
 
 // Google Image Search (same as inventory module)
@@ -200,7 +218,9 @@ function parseFirst5(filePath: string): Product[] {
       brandName,
       category: categorizeProduct(productName),
       packSize,
-      price: parseFloat(price.replace(/KES|,/g, '').trim())
+      price: parseFloat(price.replace(/KES|,/g, '').trim()),
+      unit: packSize,
+      description: productName
     });
   }
   
@@ -210,11 +230,16 @@ function parseFirst5(filePath: string): Product[] {
 // Generate image with FAL.ai (following inventory module pattern)
 async function generateImage(product: Product): Promise<{ url: string; references: string[] } | null> {
   try {
-    const title = `${product.brandName} ${product.productName}`.trim();
-    
     // Get reference images with retry logic
     console.log('   🔍 Searching for reference images...');
-    const referenceUrls = await googleRefImages(`${title} product image`, 8);
+      const searchTerms = [
+        product.brandName,
+        product.productName,
+        product.packSize,
+        product.unit,
+        product.category
+      ].filter(Boolean).join(' ');
+      const referenceUrls = await googleRefImages(`${searchTerms} product image`, 8);
     
     let referenceImageInputs: string[] = [];
     let referenceImageSources: string[] = [];
@@ -265,9 +290,7 @@ async function generateImage(product: Product): Promise<{ url: string; reference
     }
     
     // Build prompt (same style as inventory module)
-    const basePrompt = `Studio product photo, single centered product captured with a tight crop (product fills ~75% of frame) on a floating glass shelf, uniform slate background (#1f2937) matching the Vendai dashboard, crisp focus across the product with gentle depth falloff, cool teal-accent studio lighting, high detail, rich color, subtle grain, no text, props, hands, or accessories, background color must remain constant, consistent shadow and lighting, modern, e-commerce ready.`;
-    
-    const enhancedPrompt = `${basePrompt}. Product: ${title}${product.category ? '. Category: ' + product.category : ''}. Maintain an unbroken slate backdrop (#1f2937) with subtle glass reflection; no alternative backgrounds.`;
+    const enhancedPrompt = buildProductPrompt(product);
     
     console.log('   🎨 Generating with FAL.ai...');
     

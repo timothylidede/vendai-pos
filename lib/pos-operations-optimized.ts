@@ -117,6 +117,64 @@ export function ensureSufficientStock(inv: InventoryRecord | null, qtyPieces: nu
   return available >= qtyPieces
 }
 
+export class InsufficientStockError extends Error {
+  productId: string
+  requested: number
+  available: number
+
+  constructor(productId: string, requested: number, available: number) {
+    super(`Insufficient stock for product ${productId}: requested ${requested} pieces, available ${available}`)
+    this.name = 'InsufficientStockError'
+    this.productId = productId
+    this.requested = requested
+    this.available = available
+  }
+}
+
+export function computeUpdatedStock(
+  productId: string,
+  current: { qtyBase: number; qtyLoose: number; unitsPerBase: number },
+  quantityPieces: number,
+): { qtyBase: number; qtyLoose: number; available: number } {
+  const unitsPerBase = current.unitsPerBase || 1
+  const availablePieces = current.qtyBase * unitsPerBase + current.qtyLoose
+
+  if (quantityPieces > availablePieces) {
+    throw new InsufficientStockError(productId, quantityPieces, availablePieces)
+  }
+
+  const { base: baseToDeduct, loose: looseToDeduct } = computeIssueFromPieces(quantityPieces, unitsPerBase)
+
+  let newQtyBase = current.qtyBase
+  let newQtyLoose = current.qtyLoose
+
+  if (newQtyLoose >= looseToDeduct) {
+    newQtyLoose -= looseToDeduct
+  } else {
+    const needed = looseToDeduct - newQtyLoose
+    const borrowBases = Math.ceil(needed / unitsPerBase)
+    newQtyBase -= borrowBases
+    newQtyLoose = (borrowBases * unitsPerBase) - needed
+  }
+
+  newQtyBase -= baseToDeduct
+
+  if (newQtyBase < 0) {
+    // Guard even further due to integer rounding edge cases
+    throw new InsufficientStockError(productId, quantityPieces, availablePieces)
+  }
+
+  const clampedBase = Math.max(0, newQtyBase)
+  const clampedLoose = Math.max(0, newQtyLoose)
+  const available = clampedBase * unitsPerBase + clampedLoose
+
+  return {
+    qtyBase: clampedBase,
+    qtyLoose: clampedLoose,
+    available,
+  }
+}
+
 // Enhanced product listing with optimized structure support
 export async function listPOSProducts(
   orgId: string, 
@@ -308,6 +366,14 @@ export async function addPosOrder(
     updatedAt: nowIso,
   }
 
+  if (options.deviceId) {
+    baseOrderDoc.deviceId = options.deviceId
+  }
+
+  if (options.laneId) {
+    baseOrderDoc.laneId = options.laneId
+  }
+
   if (paymentSummary) {
     baseOrderDoc.paymentSummary = paymentSummary
   }
@@ -362,32 +428,21 @@ export async function addPosOrder(
             
             if (productSnap.exists()) {
               const productData = productSnap.data()
-              const currentStock = productData.stock || { qtyBase: 0, qtyLoose: 0, unitsPerBase: 1 }
-              
-              // Calculate stock deduction
-              const { base: baseToDeduct, loose: looseToDeduct } = computeIssueFromPieces(
-                line.quantityPieces, 
-                currentStock.unitsPerBase || 1
-              )
-              
-              let newQtyBase = currentStock.qtyBase - baseToDeduct
-              let newQtyLoose = currentStock.qtyLoose - looseToDeduct
-              
-              if (newQtyLoose < 0) {
-                newQtyBase += Math.floor(newQtyLoose / (currentStock.unitsPerBase || 1))
-                newQtyLoose = newQtyLoose % (currentStock.unitsPerBase || 1)
-                if (newQtyLoose < 0) {
-                  newQtyLoose += (currentStock.unitsPerBase || 1)
-                  newQtyBase -= 1
-                }
+              const currentStock = {
+                qtyBase: productData.stock?.qtyBase ?? 0,
+                qtyLoose: productData.stock?.qtyLoose ?? 0,
+                unitsPerBase: productData.stock?.unitsPerBase ?? 1,
               }
-              
+
+              const updatedValues = computeUpdatedStock(line.productId, currentStock, line.quantityPieces)
+
               const updatedStock = {
-                ...currentStock,
-                qtyBase: Math.max(0, newQtyBase),
-                qtyLoose: Math.max(0, newQtyLoose),
-                available: Math.max(0, (Math.max(0, newQtyBase) * (currentStock.unitsPerBase || 1)) + Math.max(0, newQtyLoose)),
-                lastUpdated: nowIso
+                ...productData.stock,
+                qtyBase: updatedValues.qtyBase,
+                qtyLoose: updatedValues.qtyLoose,
+                unitsPerBase: currentStock.unitsPerBase,
+                available: updatedValues.available,
+                lastUpdated: nowIso,
               }
               optimizedStockUpdates.push({
                 ref: productRef,
@@ -399,25 +454,19 @@ export async function addPosOrder(
               const invSnap = await tx.get(invRef)
               if (invSnap.exists()) {
                 const inv = invSnap.data() as InventoryRecord
-                const { base: baseToDeduct, loose: looseToDeduct } = computeIssueFromPieces(line.quantityPieces, inv.unitsPerBase || 1)
-
-                let newQtyBase = inv.qtyBase - baseToDeduct
-                let newQtyLoose = inv.qtyLoose - looseToDeduct
-
-                if (newQtyLoose < 0) {
-                  newQtyBase += Math.floor(newQtyLoose / (inv.unitsPerBase || 1))
-                  newQtyLoose = newQtyLoose % (inv.unitsPerBase || 1)
-                  if (newQtyLoose < 0) {
-                    newQtyLoose += (inv.unitsPerBase || 1)
-                    newQtyBase -= 1
-                  }
-                }
+                const updatedValues = computeUpdatedStock(line.productId, {
+                  qtyBase: inv.qtyBase ?? 0,
+                  qtyLoose: inv.qtyLoose ?? 0,
+                  unitsPerBase: inv.unitsPerBase ?? 1,
+                }, line.quantityPieces)
 
                 legacyInventoryUpdates.push({
                   ref: invRef,
                   updates: {
-                    qtyBase: Math.max(0, newQtyBase),
-                    qtyLoose: Math.max(0, newQtyLoose)
+                    qtyBase: updatedValues.qtyBase,
+                    qtyLoose: updatedValues.qtyLoose,
+                    updatedAt: nowIso,
+                    updatedBy: userId,
                   }
                 })
               }
@@ -430,24 +479,19 @@ export async function addPosOrder(
             
             if (invSnap.exists()) {
               const inv = invSnap.data() as InventoryRecord
-              const { base: baseToDeduct, loose: looseToDeduct } = computeIssueFromPieces(line.quantityPieces, inv.unitsPerBase || 1)
-              
-              let newQtyBase = inv.qtyBase - baseToDeduct
-              let newQtyLoose = inv.qtyLoose - looseToDeduct
-              
-              if (newQtyLoose < 0) {
-                newQtyBase += Math.floor(newQtyLoose / (inv.unitsPerBase || 1))
-                newQtyLoose = newQtyLoose % (inv.unitsPerBase || 1)
-                if (newQtyLoose < 0) {
-                  newQtyLoose += (inv.unitsPerBase || 1)
-                  newQtyBase -= 1
-                }
-              }
+              const updatedValues = computeUpdatedStock(line.productId, {
+                qtyBase: inv.qtyBase ?? 0,
+                qtyLoose: inv.qtyLoose ?? 0,
+                unitsPerBase: inv.unitsPerBase ?? 1,
+              }, line.quantityPieces)
+
               legacyInventoryUpdates.push({
                 ref: invRef,
                 updates: {
-                  qtyBase: Math.max(0, newQtyBase),
-                  qtyLoose: Math.max(0, newQtyLoose)
+                  qtyBase: updatedValues.qtyBase,
+                  qtyLoose: updatedValues.qtyLoose,
+                  updatedAt: nowIso,
+                  updatedBy: userId,
                 }
               })
             }
@@ -455,7 +499,10 @@ export async function addPosOrder(
           
         } catch (invError) {
           console.warn(`Failed to update inventory for product ${line.productId}:`, invError)
-          // Continue with order creation even if inventory update fails
+          if (invError instanceof InsufficientStockError) {
+            throw invError
+          }
+          // Continue with order creation even if other inventory update fails
         }
       }
 
@@ -482,6 +529,9 @@ export async function addPosOrder(
     })
     
   } catch (error) {
+    if (error instanceof InsufficientStockError) {
+      throw error
+    }
     console.error('Order creation failed:', error)
     const fallbackOrder = await addDoc(collection(getDb(), POS_ORDERS_COL), {
       ...baseOrderDoc,

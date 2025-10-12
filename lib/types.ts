@@ -50,7 +50,6 @@ export interface Product {
   name: string
   description: string
   price: number
-  wholesalePrice: number
   category: string
   brand?: string
   image?: string

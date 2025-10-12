@@ -497,20 +497,21 @@ export function SupplierModule() {
     if (!selectedSupplier) return
     
     setCart(prev => {
-      const existing = prev.find(item => item.productId === product.id && item.distributorId === selectedSupplier.id)
+      const productIdStr = String(product.id)
+      const existing = prev.find(item => item.productId === productIdStr && item.distributorId === selectedSupplier.id)
       if (existing) {
         return prev.map(item => 
-          item.productId === product.id && item.distributorId === selectedSupplier.id
+          item.productId === productIdStr && item.distributorId === selectedSupplier.id
             ? { ...item, quantity: item.quantity + 1 }
             : item
         )
       }
       return [...prev, {
-        productId: product.id,
+        productId: productIdStr,
         productName: product.name,
         distributorId: selectedSupplier.id,
         distributorName: selectedSupplier.name,
-        unitPrice: product.unitPrice,
+        unitPrice: product.unitPrice ?? product.price ?? 0,
         quantity: 1,
         unit: product.unit,
         imageUrl: product.imageUrl,
@@ -992,7 +993,7 @@ export function SupplierModule() {
                             <h4 className="text-slate-200 font-medium text-sm truncate group-hover:text-white transition-colors duration-300">{product.name}</h4>
                             <div className="mt-2 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-2 group-hover:translate-y-0">
                               <span className="text-xs text-slate-400 group-hover:text-slate-300">{product.brand || product.category || 'N/A'}</span>
-                              <span className="text-xs px-2 py-1 rounded-full border text-purple-400 bg-purple-500/20 border-purple-500/30">{formatCurrency(product.unitPrice)}</span>
+                              <span className="text-xs px-2 py-1 rounded-full border text-purple-400 bg-purple-500/20 border-purple-500/30">{formatCurrency(product.unitPrice ?? product.price ?? 0)}</span>
                             </div>
                           </div>
                         </div>

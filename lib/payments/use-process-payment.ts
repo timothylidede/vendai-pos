@@ -50,6 +50,8 @@ export interface ProcessCheckoutParams {
   notes?: string
   receiptNumber: string
   cashierId?: string
+  laneId?: string
+  deviceId?: string
   events?: PaymentProcessorEvents
 }
 
@@ -155,6 +157,8 @@ export const useProcessPayment = (options: UseProcessPaymentOptions = {}): UsePr
         ...(params.checkoutContext.metadata ?? {}),
         plannedPayments: params.payments.length,
         initialStatus: params.status,
+        laneId: params.laneId,
+        deviceId: params.deviceId,
       },
     }
 
@@ -169,6 +173,8 @@ export const useProcessPayment = (options: UseProcessPaymentOptions = {}): UsePr
       checkoutContext,
       notes: params.notes,
       balanceDue: params.total,
+      laneId: params.laneId,
+      deviceId: params.deviceId,
     })
 
     stateRef.current = {

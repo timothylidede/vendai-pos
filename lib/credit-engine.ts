@@ -75,11 +75,18 @@ export interface ScorePenalties {
 }
 
 export interface ScoreBreakdown {
-  volume: number
-  payments: number
-  behaviour: number
-  recency: number
-  tenure: number
+  // New 6-component scoring (aligns with Pezesha integration)
+  sales: number          // 30 points max - sales volume performance
+  payments: number       // 30 points max - payment reliability
+  consistency: number    // 15 points max - order frequency
+  tenure: number         // 10 points max - business age
+  growth: number         // 10 points max - volume growth trend
+  utilization: number    // 5 points max - credit usage efficiency
+  
+  // Legacy fields for backward compatibility
+  volume?: number
+  behaviour?: number
+  recency?: number
   manual: number
   riskAdjustment: number
   penalties: ScorePenalties
@@ -241,24 +248,43 @@ export function assessCredit(
     manualAdjustment = 0
   } = input
 
+  // ============================================================================
+  // NEW 6-COMPONENT SCORING SYSTEM (Aligned with Pezesha Integration)
+  // ============================================================================
+  
+  // 1. SALES SCORE (30 points max) - Based on sales volume performance
   const normalizedVolume = trailingVolume90d / Math.max(options.volumeTarget, 1)
-  const volumeScore = clampNumber(normalizedVolume * 32 + clampNumber(trailingGrowthRate * 100, -10, 10), 0, 40)
-
-  const repaymentLagPenalty = Math.max(repaymentLagDays - options.targetRepaymentLag, 0) * 2.2
-  const paymentScore = clampNumber(onTimePaymentRate * 30 - repaymentLagPenalty, 0, 30)
-
-  const utilizationPenalty = creditUtilization > options.utilizationComfortThreshold
-    ? (creditUtilization - options.utilizationComfortThreshold) * 40
-    : 0
-  const disputePenalty = disputeRate * 120
-  const latePenalty = Math.max(1 - onTimePaymentRate, 0) * 60
-  const behaviourScore = clampNumber(20 - (utilizationPenalty + disputePenalty + latePenalty) / 3.5, -5, 20)
-
-  const recencyBoost = clampNumber(Math.min(consecutiveOnTimePayments, 12) * 0.8, 0, 8)
-  const tenureBoost = clampNumber(daysSinceSignup / 30, 0, 6)
-  const sectorPenalty = sectorRisk === 'high' ? -8 : sectorRisk === 'medium' ? -3 : 0
-
-  const rawScore = volumeScore + paymentScore + behaviourScore + recencyBoost + tenureBoost + manualAdjustment + sectorPenalty
+  const salesScore = clampNumber(normalizedVolume * 30, 0, 30)
+  
+  // 2. PAYMENTS SCORE (30 points max) - Payment reliability and timeliness
+  const repaymentLagPenalty = Math.max(repaymentLagDays - options.targetRepaymentLag, 0) * 0.5
+  const latePaymentPenalty = Math.max(1 - onTimePaymentRate, 0) * 20
+  const paymentsScore = clampNumber(onTimePaymentRate * 30 - repaymentLagPenalty - latePaymentPenalty, 0, 30)
+  
+  // 3. CONSISTENCY SCORE (15 points max) - Order frequency and pattern stability
+  const ordersPerMonth = (input.orders90d / 3)
+  const orderConsistency = Math.min(ordersPerMonth / 20, 1) // Target: 20 orders/month for max score
+  const consistencyScore = clampNumber(orderConsistency * 15, 0, 15)
+  
+  // 4. TENURE SCORE (10 points max) - Business age on platform
+  const tenureMonths = daysSinceSignup / 30
+  const tenureScore = clampNumber((tenureMonths / 12) * 10, 0, 10) // Max at 12 months
+  
+  // 5. GROWTH SCORE (10 points max) - Volume growth trend
+  const growthScore = clampNumber((trailingGrowthRate * 10) + 5, 0, 10) // Center at 5, +50% growth = 10 points
+  
+  // 6. UTILIZATION SCORE (5 points max) - Credit usage efficiency
+  const optimalUtilization = 0.65 // Sweet spot: 65% utilization
+  const utilizationDistance = Math.abs(creditUtilization - optimalUtilization)
+  const utilizationScore = clampNumber(5 - (utilizationDistance * 10), 0, 5)
+  
+  // Penalties (deducted from total)
+  const utilizationPenalty = creditUtilization > 0.85 ? (creditUtilization - 0.85) * 33 : 0
+  const disputePenalty = disputeRate * 100
+  const sectorPenalty = sectorRisk === 'high' ? 8 : sectorRisk === 'medium' ? 3 : 0
+  const totalPenalties = utilizationPenalty + disputePenalty + sectorPenalty
+  
+  const rawScore = salesScore + paymentsScore + consistencyScore + tenureScore + growthScore + utilizationScore - totalPenalties + manualAdjustment
   const score = Number(clampNumber(rawScore, 0, 100).toFixed(2))
   const tier = getTierForScore(score)
 
@@ -275,18 +301,22 @@ export function assessCredit(
   const availableHeadroom = Math.max(recommendedLimit - currentOutstanding, 0)
 
   const breakdown: ScoreBreakdown = {
-    volume: Number(volumeScore.toFixed(2)),
-    payments: Number(paymentScore.toFixed(2)),
-    behaviour: Number(behaviourScore.toFixed(2)),
-    recency: Number(recencyBoost.toFixed(2)),
-    tenure: Number(tenureBoost.toFixed(2)),
+    // New 6-component system
+    sales: Number(salesScore.toFixed(2)),
+    payments: Number(paymentsScore.toFixed(2)),
+    consistency: Number(consistencyScore.toFixed(2)),
+    tenure: Number(tenureScore.toFixed(2)),
+    growth: Number(growthScore.toFixed(2)),
+    utilization: Number(utilizationScore.toFixed(2)),
+    
+    // Legacy fields (for backward compatibility)
     manual: Number(manualAdjustment.toFixed(2)),
-    riskAdjustment: Number(sectorPenalty.toFixed(2)),
+    riskAdjustment: Number((-sectorPenalty).toFixed(2)),
     penalties: {
       utilization: Number(utilizationPenalty.toFixed(2)),
       disputes: Number(disputePenalty.toFixed(2)),
       repaymentLag: Number(repaymentLagPenalty.toFixed(2)),
-      latePayments: Number(latePenalty.toFixed(2))
+      latePayments: Number(latePaymentPenalty.toFixed(2))
     }
   }
 

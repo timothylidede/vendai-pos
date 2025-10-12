@@ -807,7 +807,6 @@ export function POSPage() {
           deviceId: selectedDeviceId ?? undefined,
           receiptNumber,
           status: result.status,
-          paymentMethods: result.payments.map(p => p.method),
         })
 
         toast({
@@ -821,8 +820,8 @@ export function POSPage() {
           success: true,
           orderId: queuedId,
           status: result.status,
-          receiptBundle: null,
-          receiptArtifacts: []
+          receiptBundle: undefined,
+          receiptArtifacts: undefined
         }
 
         await finalizeSuccess(offlineResponse)
@@ -1666,7 +1665,7 @@ export function POSPage() {
         submitting={checkoutSubmitting}
         onSubmit={handleCheckoutSubmit}
       />
-      <ToastContainer />
+      {ToastContainer}
         <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
           <DialogContent className="max-w-3xl" showCloseButton>
             <DialogHeader>

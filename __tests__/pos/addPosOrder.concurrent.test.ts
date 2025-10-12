@@ -1,11 +1,23 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/firebase', () => ({
   db: {},
 }))
 
 const runTransactionMock = vi.fn()
-const addDocMock = vi.fn()
+const addDocM  })
+}
+
+// Import dynamically in beforeAll to avoid top-level await
+let addPosOrder: any
+
+describe('addPosOrder concurrency safeguards', () => {
+  beforeAll(async () => {
+    const module = await import('@/lib/pos-operations')
+    addPosOrder = module.addPosOrder
+  })
+  
+  beforeEach(() => {vi.fn()
 const collectionMock = vi.fn()
 const docMock = vi.fn()
 const getDocMock = vi.fn()
@@ -46,13 +58,13 @@ const createTransaction = () => {
       const snapshot = inventoryStore.get(key)
       if (!snapshot) {
         return {
-          exists: () => false,
+          exists: (): boolean => false,
         }
       }
       readVersions.set(key, snapshot.version ?? 0)
       const cloned = { ...snapshot }
       return {
-        exists: () => true,
+        exists: (): boolean => true,
         data: () => cloned,
       }
     }),

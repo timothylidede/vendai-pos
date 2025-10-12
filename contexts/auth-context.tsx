@@ -36,6 +36,7 @@ interface AuthContextType {
   electronUser: ElectronUser | null;
   loading: boolean;
   isElectron: boolean;
+  organization: { id: string; name: string } | null;
   refreshUserData: () => Promise<void>;
   clearUserData: () => void;
 }
@@ -164,6 +165,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     electronUser,
     loading,
     isElectron,
+    organization: userData ? { id: userData.organizationName, name: userData.organizationDisplayName || userData.organizationName } : null,
     refreshUserData,
     clearUserData
   };

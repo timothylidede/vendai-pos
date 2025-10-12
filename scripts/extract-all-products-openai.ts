@@ -645,7 +645,7 @@ async function fetchImageUrls(distributorId: string): Promise<Map<string, string
 
     const imageMap = new Map<string, string>();
     
-    snapshot.forEach((doc) => {
+    snapshot.forEach((doc: any) => {
         const data = doc.data();
         const url: string | undefined = data.imageUrl || data.url || data.image || data.imageURL;
         const rawNames: any[] = [data.productName, data.name, data.normalizedName];

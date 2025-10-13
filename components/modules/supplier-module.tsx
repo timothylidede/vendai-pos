@@ -25,6 +25,8 @@ import {
   Trash2,
   X,
   Loader2,
+  CreditCard,
+  Wallet,
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { doc, setDoc, deleteDoc, getDoc, collection, query, where, getDocs, getCountFromServer } from "firebase/firestore"
@@ -45,6 +47,7 @@ import { ReceivingModal } from "./receiving-modal"
 import ReplenishmentDashboard from "./replenishment-dashboard"
 import PriceAlertReview from "./price-alert-review"
 import ReconciliationDashboard from "./reconciliation-dashboard"
+import { CreditBalanceWidget } from "../credit/credit-balance-widget"
 
 interface CartItem {
   productId: string
@@ -277,6 +280,7 @@ export function SupplierModule() {
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [receivingOpen, setReceivingOpen] = useState(false)
   const [placingOrder, setPlacingOrder] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<"immediate" | "credit">("immediate")
   const inventoryTagSet = useMemo(
     () => new Set(inventoryTags.map((tag) => tag.toLowerCase())),
     [inventoryTags],
@@ -545,11 +549,35 @@ export function SupplierModule() {
     setCart([])
   }, [])
 
+  const cartTotal = useMemo(() => {
+    return cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0)
+  }, [cart])
+
   const handlePlaceOrder = useCallback(async () => {
     if (!userData?.uid || cart.length === 0) return
 
     setPlacingOrder(true)
     try {
+      // If paying with credit, check credit availability first
+      if (paymentMethod === "credit") {
+        const { checkCreditAvailability } = await import("@/lib/credit-operations")
+        const creditCheck = await checkCreditAvailability(
+          userData.uid,
+          userData.uid, // Using uid as organizationId for now
+          cartTotal
+        )
+
+        if (!creditCheck.hasSufficientCredit) {
+          toast({
+            title: "Insufficient Credit",
+            description: creditCheck.message || "You don't have enough available credit for this order",
+            variant: "destructive",
+          })
+          setPlacingOrder(false)
+          return
+        }
+      }
+
       // Group cart items by distributor
       const ordersByDistributor = cart.reduce((acc, item) => {
         if (!acc[item.distributorId]) {
@@ -565,58 +593,110 @@ export function SupplierModule() {
 
       // Create a PO for each distributor
       const poPromises = Object.values(ordersByDistributor).map(async (order) => {
-        const response = await fetch('/api/supplier/purchase-orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orgId: userData.uid, // Using uid as orgId for now
-            supplierId: order.supplierId,
-            supplierName: order.supplierName,
-            lines: order.items.map(item => ({
-              productId: item.productId,
-              productName: item.productName,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              unit: item.unit || 'PCS',
-            })),
-            notes: `Order placed from cart by ${userData.displayName || userData.email}`,
-          }),
-        })
+        const orderTotal = order.items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0)
 
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || 'Failed to create purchase order')
+        // If using credit, request disbursement
+        if (paymentMethod === "credit") {
+          const disbursementResponse = await fetch("/api/credit/disburse", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              retailerId: userData.uid,
+              organizationId: userData.uid, // Using uid as organizationId for now
+              amount: orderTotal,
+              purpose: `Payment to ${order.supplierName} for order`,
+              supplierId: order.supplierId,
+              supplierName: order.supplierName,
+            }),
+          })
+
+          if (!disbursementResponse.ok) {
+            const error = await disbursementResponse.json()
+            throw new Error(error.error || "Credit disbursement failed")
+          }
+
+          const disbursement = await disbursementResponse.json()
+
+          // Create PO with disbursement reference
+          const response = await fetch("/api/supplier/purchase-orders", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orgId: userData.uid,
+              supplierId: order.supplierId,
+              supplierName: order.supplierName,
+              lines: order.items.map(item => ({
+                productId: item.productId,
+                productName: item.productName,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                unit: item.unit || "PCS",
+              })),
+              paymentMethod: "credit",
+              disbursementId: disbursement.id,
+              notes: `Order placed using credit by ${userData.displayName || userData.email}`,
+            }),
+          })
+
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || "Failed to create purchase order")
+          }
+
+          return response.json()
+        } else {
+          // Immediate payment - create PO normally
+          const response = await fetch("/api/supplier/purchase-orders", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orgId: userData.uid,
+              supplierId: order.supplierId,
+              supplierName: order.supplierName,
+              lines: order.items.map(item => ({
+                productId: item.productId,
+                productName: item.productName,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                unit: item.unit || "PCS",
+              })),
+              paymentMethod: "immediate",
+              notes: `Order placed from cart by ${userData.displayName || userData.email}`,
+            }),
+          })
+
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || "Failed to create purchase order")
+          }
+
+          return response.json()
         }
-
-        return response.json()
       })
 
       const results = await Promise.all(poPromises)
       
       toast({
         title: "Order(s) Submitted",
-        description: `${results.length} purchase order(s) created totaling ${formatCurrency(cartTotal)}`,
+        description: `${results.length} purchase order(s) created totaling ${formatCurrency(cartTotal)}${paymentMethod === "credit" ? " using credit" : ""}`,
         className: "border-purple-500/20 bg-purple-950/90 backdrop-blur-xl text-white shadow-[0_8px_32px_-8px_rgba(168,85,247,0.4)]",
       })
 
       clearCart()
+      setPaymentMethod("immediate") // Reset to default
       setCheckoutOpen(false)
 
     } catch (error: any) {
-      console.error('Error placing order:', error)
+      console.error("Error placing order:", error)
       toast({
         title: "Order Failed",
-        description: error.message || 'Failed to create purchase order',
-        variant: 'destructive',
+        description: error.message || "Failed to create purchase order",
+        variant: "destructive",
       })
     } finally {
       setPlacingOrder(false)
     }
-  }, [cart, userData, toast, clearCart]) // Removed cartTotal from dependencies
-
-  const cartTotal = useMemo(() => {
-    return cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0)
-  }, [cart])
+  }, [cart, userData, toast, clearCart, paymentMethod, cartTotal])
 
   const cartItemCount = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.quantity, 0)
@@ -1318,10 +1398,53 @@ export function SupplierModule() {
               {/* Footer */}
               {cart.length > 0 && (
                 <div className="border-t border-purple-500/20 bg-gradient-to-r from-purple-500/5 to-transparent px-6 py-4">
+                  {/* Payment Method Selection */}
+                  <div className="mb-4">
+                    <label className="text-sm font-medium text-slate-300 mb-2 block">
+                      Payment Method
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => setPaymentMethod("immediate")}
+                        className={cn(
+                          "flex items-center justify-center gap-2 p-3 rounded-lg border transition-all",
+                          paymentMethod === "immediate"
+                            ? "border-purple-400 bg-purple-500/20 text-white"
+                            : "border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-600"
+                        )}
+                      >
+                        <Wallet className="h-4 w-4" />
+                        <span className="text-sm font-medium">Pay Now</span>
+                      </button>
+                      <button
+                        onClick={() => setPaymentMethod("credit")}
+                        className={cn(
+                          "flex items-center justify-center gap-2 p-3 rounded-lg border transition-all",
+                          paymentMethod === "credit"
+                            ? "border-purple-400 bg-purple-500/20 text-white"
+                            : "border-slate-700 bg-slate-800/40 text-slate-400 hover:border-slate-600"
+                        )}
+                      >
+                        <CreditCard className="h-4 w-4" />
+                        <span className="text-sm font-medium">Use Credit</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Credit Balance Widget (shown when credit selected) */}
+                  {paymentMethod === "credit" && (
+                    <div className="mb-4">
+                      <CreditBalanceWidget />
+                    </div>
+                  )}
+
+                  {/* Order Total */}
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-lg font-semibold text-white">Total</span>
                     <span className="text-2xl font-bold text-purple-300">{formatCurrency(cartTotal)}</span>
                   </div>
+
+                  {/* Action Buttons */}
                   <div className="flex gap-3">
                     <Button
                       variant="outline"
@@ -1339,12 +1462,12 @@ export function SupplierModule() {
                       {placingOrder ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Creating PO...
+                          {paymentMethod === "credit" ? "Processing..." : "Creating PO..."}
                         </>
                       ) : (
                         <>
                           <Check className="h-4 w-4 mr-2" />
-                          Place Order
+                          {paymentMethod === "credit" ? "Pay with Credit" : "Place Order"}
                         </>
                       )}
                     </Button>

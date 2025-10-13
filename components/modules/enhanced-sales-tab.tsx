@@ -53,7 +53,7 @@ const DATE_RANGES: DateRange[] = [
   { label: '90 Days', days: 90, startDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), endDate: new Date() },
 ]
 
-export function EnhancedSalesTab() {
+export function EnhancedSalesTab(): JSX.Element {
   const { userData } = useAuth()
   const { toast } = useToast()
 

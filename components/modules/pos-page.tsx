@@ -821,7 +821,10 @@ export function POSPage() {
           orderId: queuedId,
           status: result.status,
           receiptBundle: undefined,
-          receiptArtifacts: undefined
+          receiptArtifacts: undefined,
+          payments: [],
+          paymentSummary: { totalApplied: 0, totalTendered: 0, totalChange: 0, balanceDue: 0 },
+          balanceDue: 0
         }
 
         await finalizeSuccess(offlineResponse)
@@ -1665,7 +1668,7 @@ export function POSPage() {
         submitting={checkoutSubmitting}
         onSubmit={handleCheckoutSubmit}
       />
-      {ToastContainer}
+      <ToastContainer />
         <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
           <DialogContent className="max-w-3xl" showCloseButton>
             <DialogHeader>
@@ -1707,7 +1710,7 @@ export function POSPage() {
         onResolve={handleResolveConflict}
       />
 
-      {ToastContainer}
+      <ToastContainer />
     </motion.div>
   )
 }

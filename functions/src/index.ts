@@ -1224,3 +1224,356 @@ async function generateReplenishmentSuggestionsForOrg(orgId: string): Promise<nu
 
   return suggestionsCreated;
 }
+
+// ========================================================================================
+// PAYMENT REMINDER SYSTEM
+// ========================================================================================
+
+interface PaymentReminderData {
+  retailerId: string;
+  organizationId: string;
+  repaymentScheduleId: string;
+  installmentNumber: number;
+  dueDate: Date;
+  totalAmount: number;
+  principalAmount: number;
+  interestAmount: number;
+  retailerName?: string | null;
+  retailerEmail?: string | null;
+  retailerPhone?: string | null;
+  daysUntilDue: number;
+}
+
+/**
+ * Scheduled function that runs daily at 8 AM EAT to send payment reminders
+ * Reminders are sent at 7, 3, and 1 days before due date
+ */
+export const sendPaymentReminders = functions.pubsub
+  .schedule('0 8 * * *') // Every day at 8 AM
+  .timeZone('Africa/Nairobi')
+  .onRun(async (context) => {
+    functions.logger.info('Starting payment reminder job...');
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // Calculate reminder dates (7, 3, 1 days before due)
+    const reminderDays = [7, 3, 1];
+    const reminderDates = reminderDays.map((days) => {
+      const date = new Date(today);
+      date.setDate(date.getDate() + days);
+      return date;
+    });
+
+    let remindersCreated = 0;
+    let errors = 0;
+
+    try {
+      // Query all pending/partially paid repayment schedules across all organizations
+      const schedulesSnapshot = await db.collectionGroup('repayment_schedules')
+        .where('status', 'in', ['pending', 'partially_paid'])
+        .get();
+
+      functions.logger.info(`Found ${schedulesSnapshot.size} pending repayment schedules`);
+
+      for (const scheduleDoc of schedulesSnapshot.docs) {
+        try {
+          const schedule = scheduleDoc.data();
+          const dueDate = schedule.dueDate?.toDate();
+          
+          if (!dueDate) {
+            functions.logger.warn(`No due date for schedule ${scheduleDoc.id}`);
+            continue;
+          }
+
+          // Check if due date matches any reminder date
+          const dueDateStr = dueDate.toISOString().split('T')[0];
+          const shouldRemind = reminderDates.some(
+            (reminderDate) => reminderDate.toISOString().split('T')[0] === dueDateStr
+          );
+
+          if (!shouldRemind) {
+            continue;
+          }
+
+          // Calculate days until due
+          const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+          // Extract organization ID from path
+          const pathParts = scheduleDoc.ref.path.split('/');
+          const orgIndex = pathParts.indexOf('organizations');
+          if (orgIndex === -1 || orgIndex + 1 >= pathParts.length) {
+            functions.logger.warn(`Invalid path structure for schedule ${scheduleDoc.id}`);
+            continue;
+          }
+          const organizationId = pathParts[orgIndex + 1];
+
+          // Fetch retailer info
+          let retailerInfo: RetailerContactInfo = {};
+          if (schedule.retailerId) {
+            try {
+              const retailerDoc = await db
+                .collection('organizations')
+                .doc(organizationId)
+                .collection('retailers')
+                .doc(schedule.retailerId)
+                .get();
+
+              if (retailerDoc.exists) {
+                const retailer = retailerDoc.data();
+                retailerInfo = {
+                  retailerName: retailer?.name || retailer?.businessName,
+                  retailerEmail: retailer?.email,
+                  retailerPhone: retailer?.phone || retailer?.phoneNumber,
+                  retailerUserId: retailer?.userId,
+                };
+              }
+            } catch (err) {
+              functions.logger.error(`Error fetching retailer ${schedule.retailerId}:`, err);
+            }
+          }
+
+          // Create payment reminder
+          const reminderData: PaymentReminderData = {
+            retailerId: schedule.retailerId,
+            organizationId,
+            repaymentScheduleId: scheduleDoc.id,
+            installmentNumber: schedule.installmentNumber || 0,
+            dueDate,
+            totalAmount: schedule.totalAmount || 0,
+            principalAmount: schedule.principalAmount || 0,
+            interestAmount: schedule.interestAmount || 0,
+            ...retailerInfo,
+            daysUntilDue,
+          };
+
+          // Create communication job for sending reminder
+          await db.collection(COMMUNICATION_COLLECTION).add({
+            type: 'payment_reminder',
+            channel: 'sms_and_email',
+            priority: daysUntilDue === 1 ? 'high' : 'normal',
+            status: 'pending',
+            data: reminderData,
+            createdAt: admin.firestore.Timestamp.now(),
+            scheduledFor: admin.firestore.Timestamp.now(),
+          });
+
+          remindersCreated++;
+          functions.logger.info(
+            `Created reminder for ${retailerInfo.retailerName || schedule.retailerId} - ${daysUntilDue} days until due`
+          );
+        } catch (err) {
+          errors++;
+          functions.logger.error(`Error processing schedule ${scheduleDoc.id}:`, err);
+        }
+      }
+
+      functions.logger.info(
+        `Payment reminder job completed: ${remindersCreated} reminders created, ${errors} errors`
+      );
+
+      return {
+        success: true,
+        remindersCreated,
+        errors,
+      };
+    } catch (error) {
+      functions.logger.error('Payment reminder job failed:', error);
+      throw error;
+    }
+  });
+
+/**
+ * Scheduled function that runs daily at 9 AM EAT to send overdue payment notifications
+ */
+export const sendOverdueNotifications = functions.pubsub
+  .schedule('0 9 * * *') // Every day at 9 AM
+  .timeZone('Africa/Nairobi')
+  .onRun(async (context) => {
+    functions.logger.info('Starting overdue notification job...');
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    let notificationsCreated = 0;
+    let errors = 0;
+
+    try {
+      // Query all overdue repayment schedules
+      const overdueSnapshot = await db.collectionGroup('repayment_schedules')
+        .where('status', '==', 'overdue')
+        .get();
+
+      functions.logger.info(`Found ${overdueSnapshot.size} overdue repayment schedules`);
+
+      for (const scheduleDoc of overdueSnapshot.docs) {
+        try {
+          const schedule = scheduleDoc.data();
+          const dueDate = schedule.dueDate?.toDate();
+          
+          if (!dueDate) {
+            continue;
+          }
+
+          // Calculate days overdue
+          const daysOverdue = Math.ceil((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+
+          // Send notifications on days 1, 3, 7, 14, 21, 28 after due date
+          const notificationDays = [1, 3, 7, 14, 21, 28];
+          if (!notificationDays.includes(daysOverdue)) {
+            continue;
+          }
+
+          // Extract organization ID from path
+          const pathParts = scheduleDoc.ref.path.split('/');
+          const orgIndex = pathParts.indexOf('organizations');
+          if (orgIndex === -1 || orgIndex + 1 >= pathParts.length) {
+            continue;
+          }
+          const organizationId = pathParts[orgIndex + 1];
+
+          // Fetch retailer info
+          let retailerInfo: RetailerContactInfo = {};
+          if (schedule.retailerId) {
+            try {
+              const retailerDoc = await db
+                .collection('organizations')
+                .doc(organizationId)
+                .collection('retailers')
+                .doc(schedule.retailerId)
+                .get();
+
+              if (retailerDoc.exists) {
+                const retailer = retailerDoc.data();
+                retailerInfo = {
+                  retailerName: retailer?.name || retailer?.businessName,
+                  retailerEmail: retailer?.email,
+                  retailerPhone: retailer?.phone || retailer?.phoneNumber,
+                  retailerUserId: retailer?.userId,
+                };
+              }
+            } catch (err) {
+              functions.logger.error(`Error fetching retailer ${schedule.retailerId}:`, err);
+            }
+          }
+
+          // Create overdue notification
+          const notificationData = {
+            retailerId: schedule.retailerId,
+            organizationId,
+            repaymentScheduleId: scheduleDoc.id,
+            installmentNumber: schedule.installmentNumber || 0,
+            dueDate,
+            totalAmount: schedule.totalAmount || 0,
+            principalAmount: schedule.principalAmount || 0,
+            interestAmount: schedule.interestAmount || 0,
+            outstandingAmount: schedule.totalAmount - (schedule.paidAmount || 0),
+            ...retailerInfo,
+            daysOverdue,
+          };
+
+          // Create communication job
+          await db.collection(COMMUNICATION_COLLECTION).add({
+            type: 'overdue_notification',
+            channel: 'sms_and_email',
+            priority: daysOverdue >= 14 ? 'urgent' : 'high',
+            status: 'pending',
+            data: notificationData,
+            createdAt: admin.firestore.Timestamp.now(),
+            scheduledFor: admin.firestore.Timestamp.now(),
+          });
+
+          notificationsCreated++;
+          functions.logger.info(
+            `Created overdue notification for ${retailerInfo.retailerName || schedule.retailerId} - ${daysOverdue} days overdue`
+          );
+        } catch (err) {
+          errors++;
+          functions.logger.error(`Error processing overdue schedule ${scheduleDoc.id}:`, err);
+        }
+      }
+
+      functions.logger.info(
+        `Overdue notification job completed: ${notificationsCreated} notifications created, ${errors} errors`
+      );
+
+      return {
+        success: true,
+        notificationsCreated,
+        errors,
+      };
+    } catch (error) {
+      functions.logger.error('Overdue notification job failed:', error);
+      throw error;
+    }
+  });
+
+/**
+ * Process communication jobs from the queue
+ * This function would integrate with SMS/email providers (AfricasTalking, SendGrid, etc.)
+ */
+export const processCommunicationJobs = functions.pubsub
+  .schedule('*/10 * * * *') // Every 10 minutes
+  .onRun(async (context) => {
+    functions.logger.info('Processing communication jobs...');
+
+    let processed = 0;
+    let errors = 0;
+
+    try {
+      // Get pending jobs
+      const jobsSnapshot = await db
+        .collection(COMMUNICATION_COLLECTION)
+        .where('status', '==', 'pending')
+        .limit(50)
+        .get();
+
+      for (const jobDoc of jobsSnapshot.docs) {
+        try {
+          const job = jobDoc.data();
+          
+          // Mark as processing
+          await jobDoc.ref.update({
+            status: 'processing',
+            processingAt: admin.firestore.Timestamp.now(),
+          });
+
+          // TODO: Integrate with actual SMS/email providers
+          // Example: sendSMS(job.data.retailerPhone, generateSMSMessage(job))
+          // Example: sendEmail(job.data.retailerEmail, generateEmailMessage(job))
+          
+          functions.logger.info(`Processing ${job.type} for ${job.data.retailerName || job.data.retailerId}`);
+
+          // Mark as completed
+          await jobDoc.ref.update({
+            status: 'completed',
+            completedAt: admin.firestore.Timestamp.now(),
+          });
+
+          processed++;
+        } catch (err) {
+          errors++;
+          functions.logger.error(`Error processing job ${jobDoc.id}:`, err);
+          
+          await jobDoc.ref.update({
+            status: 'failed',
+            error: String(err),
+            failedAt: admin.firestore.Timestamp.now(),
+          });
+        }
+      }
+
+      functions.logger.info(
+        `Communication jobs processed: ${processed} completed, ${errors} errors`
+      );
+
+      return {
+        success: true,
+        processed,
+        errors,
+      };
+    } catch (error) {
+      functions.logger.error('Communication job processor failed:', error);
+      throw error;
+    }
+  });

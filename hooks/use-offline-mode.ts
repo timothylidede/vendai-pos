@@ -145,7 +145,7 @@ export function useOfflineMode(): OfflineMode {
         syncQueue().catch((error) => {
           console.error('[OfflineMode] Auto-sync failed:', error)
         })
-      }, 2000)
+      }, 1000)
     }
 
     return () => {
@@ -155,7 +155,7 @@ export function useOfflineMode(): OfflineMode {
     }
   }, [isOnline, queueStats, autoSyncEnabled, isInitialized, syncQueue])
 
-  // Periodic sync check (every 2 minutes when online)
+  // Periodic sync check (every 30 seconds when online)
   useEffect(() => {
     if (!isInitialized || !autoSyncEnabled || !isOnline) return
 
@@ -166,7 +166,7 @@ export function useOfflineMode(): OfflineMode {
           console.error('[OfflineMode] Periodic sync failed:', error)
         })
       }
-    }, 2 * 60 * 1000) // 2 minutes
+    }, 30 * 1000) // 30 seconds
 
     return () => clearInterval(intervalId)
   }, [isInitialized, autoSyncEnabled, isOnline, queueStats, syncQueue])

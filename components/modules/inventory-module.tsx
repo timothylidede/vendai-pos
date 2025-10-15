@@ -109,6 +109,13 @@ const DEFAULT_IMAGE_PROMPT = `Studio product photo, single centered product capt
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null
 
+const getDb = (): import('firebase/firestore').Firestore => {
+  if (!db) {
+    throw new Error('Firestore is not initialized')
+  }
+  return db as import('firebase/firestore').Firestore
+}
+
 const toIsoString = (value: unknown): string | undefined => {
   if (!value) return undefined
   if (typeof value === 'string') return value
@@ -426,7 +433,7 @@ function useCreditSnapshot(orgId: string, productsRef: MutableRefObject<Inventor
         const products = productsRef.current
         const { totalUnits, totalValue, avgUnitPrice } = computeInventoryStats(products)
 
-        const profileRef = doc(db, 'credit_profiles', orgId)
+        const profileRef = doc(getDb(), 'credit_profiles', orgId)
         const snapshot = await getDoc(profileRef)
         const existing = snapshot.exists() ? (snapshot.data() as Record<string, unknown>) : {}
         const inventoryMetrics = isRecord(existing.inventoryMetrics)
@@ -546,7 +553,7 @@ function useCreditSnapshot(orgId: string, productsRef: MutableRefObject<Inventor
           { merge: true },
         )
 
-        await addDoc(collection(db, 'credit_profiles', orgId, 'snapshots'), snapshotPayload)
+        await addDoc(collection(getDb(), 'credit_profiles', orgId, 'snapshots'), snapshotPayload)
       } catch (error) {
         console.error('Failed to log credit snapshot from inventory module', error)
       }
@@ -726,7 +733,7 @@ export function InventoryModule() {
   let snapshot: QuerySnapshot<FirestoreRecord> | null = null
         for (const constraint of primaryConstraints) {
           try {
-            snapshot = await getDocs(query(collectionGroup(db, 'products'), constraint, limit(10)))
+            snapshot = await getDocs(query(collectionGroup(getDb(), 'products'), constraint, limit(10)))
             if (snapshot && !snapshot.empty) break
           } catch (error) {
             console.warn('Supplier lookup failed for barcode constraint', error)
@@ -736,7 +743,7 @@ export function InventoryModule() {
         const productName = typeof product.name === 'string' ? product.name.trim() : ''
         if ((!snapshot || snapshot.empty) && productName) {
           try {
-            snapshot = await getDocs(query(collectionGroup(db, 'products'), where('name', '==', productName), limit(12)))
+            snapshot = await getDocs(query(collectionGroup(getDb(), 'products'), where('name', '==', productName), limit(12)))
           } catch (error) {
             console.warn('Supplier lookup failed for name constraint', error)
           }
@@ -745,7 +752,7 @@ export function InventoryModule() {
         const productBrand = typeof product.brand === 'string' ? product.brand.trim() : ''
         if ((!snapshot || snapshot.empty) && productBrand) {
           try {
-            snapshot = await getDocs(query(collectionGroup(db, 'products'), where('brand', '==', productBrand), limit(15)))
+            snapshot = await getDocs(query(collectionGroup(getDb(), 'products'), where('brand', '==', productBrand), limit(15)))
           } catch (error) {
             console.warn('Supplier lookup failed for brand constraint', error)
           }
@@ -754,7 +761,7 @@ export function InventoryModule() {
         const productCategory = typeof product.category === 'string' ? product.category.trim() : ''
         if ((!snapshot || snapshot.empty) && productCategory) {
           try {
-            snapshot = await getDocs(query(collectionGroup(db, 'products'), where('category', '==', productCategory), limit(15)))
+            snapshot = await getDocs(query(collectionGroup(getDb(), 'products'), where('category', '==', productCategory), limit(15)))
           } catch (error) {
             console.warn('Supplier lookup failed for category constraint', error)
           }
@@ -777,7 +784,7 @@ export function InventoryModule() {
         const distributorDocs = await Promise.all(
           distributorIds.map(async (id) => {
             try {
-              return await getDoc(doc(db, 'distributors', id))
+              return await getDoc(doc(getDb(), 'distributors', id))
             } catch (error) {
               console.warn('Failed to load distributor doc', id, error)
               return null
@@ -1005,7 +1012,7 @@ export function InventoryModule() {
 
         constraints.push(limit(PRODUCTS_PAGE_SIZE + 1))
 
-        const productSnapshot = await getDocs(query(collection(db, POS_PRODUCTS_COL), ...constraints))
+        const productSnapshot = await getDocs(query(collection(getDb(), POS_PRODUCTS_COL), ...constraints))
         if (queryKeyRef.current !== queryKey) {
           return
         }
@@ -1017,7 +1024,7 @@ export function InventoryModule() {
           if (normalizedSearch) {
             const fallbackSnapshot = await getDocs(
               query(
-                collection(db, POS_PRODUCTS_COL),
+                collection(getDb(), POS_PRODUCTS_COL),
                 where('orgId', '==', org),
                 orderBy('updatedAt', 'desc'),
                 limit(PRODUCTS_PAGE_SIZE + 1),
@@ -1055,7 +1062,7 @@ export function InventoryModule() {
 
         let parsedPricelist: PricelistInfo | null = null
         if (!append && !normalizedSearch) {
-          const pricelistSnap = await getDoc(doc(db, 'org_pricelists', org)).catch(() => null)
+          const pricelistSnap = await getDoc(doc(getDb(), 'org_pricelists', org)).catch(() => null)
           parsedPricelist = pricelistSnap && 'exists' in pricelistSnap && pricelistSnap.exists()
             ? toPricelistInfo(pricelistSnap.data())
             : null
@@ -1071,7 +1078,7 @@ export function InventoryModule() {
             const image_url = toStringValue(raw?.image_url)
 
             const inventoryId = `${org}_${docSnap.id}`
-            const inventorySnap = await getDoc(doc(db, INVENTORY_COL, inventoryId)).catch(() => null)
+            const inventorySnap = await getDoc(doc(getDb(), INVENTORY_COL, inventoryId)).catch(() => null)
             const inventory = inventorySnap && inventorySnap.exists()
               ? (inventorySnap.data() as InventoryStockRecord)
               : undefined
@@ -1110,7 +1117,7 @@ export function InventoryModule() {
             if (!hasSearchKeywords) {
               const keywords = buildSearchKeywords(productData)
               if (keywords.length > 0) {
-                void setDoc(doc(db, POS_PRODUCTS_COL, docSnap.id), { searchKeywords: keywords }, { merge: true }).catch(() => undefined)
+                void setDoc(doc(getDb(), POS_PRODUCTS_COL, docSnap.id), { searchKeywords: keywords }, { merge: true }).catch(() => undefined)
               }
             }
 
@@ -1644,7 +1651,7 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
         ? { x: 0, y: -300, rotate: 0, opacity: 0 }
         : { x: 0, y: 0, rotate: 0, opacity: 1 }
       }
-      transition={{ duration: 0.15, ease: [0.4, 0.0, 0.2, 1] }}
+      transition={{ duration: 0.08, ease: [0.4, 0.0, 0.2, 1] }}
     >
       {/* AI Processing Modal */}
       <AIProcessingModal
@@ -1835,8 +1842,8 @@ Corner Desk Left Sit,FURN_0001,Furniture,DeskMaster,L-Shape,160x120cm,1,PC,85.00
                   key={item.id}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2, ease: [0.4, 0.0, 0.2, 1] }}
-                  className="group relative transform-gpu overflow-hidden rounded-3xl border border-slate-400/15 bg-gradient-to-br from-slate-900/55 via-slate-900/30 to-sky-950/35 backdrop-blur-2xl transition-all duration-500 shadow-[0_10px_32px_-20px_rgba(56,189,248,0.32)] hover:shadow-[0_22px_56px_-30px_rgba(59,130,246,0.42)] hover:-translate-y-2 hover:scale-[1.02] hover:rotate-[0.35deg] cursor-pointer"
+                  transition={{ duration: 0.1, ease: [0.4, 0.0, 0.2, 1] }}
+                  className="group relative transform-gpu overflow-hidden rounded-3xl border border-slate-400/15 bg-gradient-to-br from-slate-900/55 via-slate-900/30 to-sky-950/35 backdrop-blur-2xl transition-all duration-300 shadow-[0_10px_32px_-20px_rgba(56,189,248,0.32)] hover:shadow-[0_22px_56px_-30px_rgba(59,130,246,0.42)] hover:-translate-y-2 hover:scale-[1.02] hover:rotate-[0.35deg] cursor-pointer"
                   onClick={() => {
                     setEditingProduct(item)
                     setModalMode('preview')
@@ -2548,15 +2555,15 @@ function ProductForm({ orgId, initial, onCancel, onSaved, onDeleted, onCreditEve
       }
       let id = typeof initial?.id === 'string' ? initial.id : undefined
       if (id) {
-        await setDoc(doc(db, POS_PRODUCTS_COL, id), payload, { merge: true })
+        await setDoc(doc(getDb(), POS_PRODUCTS_COL, id), payload, { merge: true })
       } else {
-        const newRef = await addDoc(collection(db, POS_PRODUCTS_COL), { ...payload, createdAt: now })
+        const newRef = await addDoc(collection(getDb(), POS_PRODUCTS_COL), { ...payload, createdAt: now })
         id = newRef.id
       }
 
       // Ensure an inventory stub exists to unlock modules
       const invId = `${orgId}_${id}`
-      const invRef = doc(db, INVENTORY_COL, invId)
+      const invRef = doc(getDb(), INVENTORY_COL, invId)
       if (setInitialStock) {
         await setDoc(invRef, {
           orgId,
@@ -2618,10 +2625,10 @@ function ProductForm({ orgId, initial, onCancel, onSaved, onDeleted, onCreditEve
     if (!initial?.id) return
     setSaving(true)
     try {
-      await deleteDoc(doc(db, POS_PRODUCTS_COL, initial.id))
+      await deleteDoc(doc(getDb(), POS_PRODUCTS_COL, initial.id))
       // Remove only this org's inventory record
       const invId = `${orgId}_${initial.id}`
-      await deleteDoc(doc(db, INVENTORY_COL, invId)).catch(() => {})
+      await deleteDoc(doc(getDb(), INVENTORY_COL, invId)).catch(() => {})
       await onCreditEvent('success', {
         action: 'delete',
         productId: initial.id,

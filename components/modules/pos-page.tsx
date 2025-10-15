@@ -990,7 +990,7 @@ export function POSPage() {
         ? { x: 0, y: -300, rotate: 0, opacity: 0 }
         : { x: 0, y: 0, rotate: 0, opacity: 1 }
       }
-      transition={{ duration: 0.15, ease: [0.4, 0.0, 0.2, 1] }}
+      transition={{ duration: 0.08, ease: [0.4, 0.0, 0.2, 1] }}
     >
       {/* Mobile Offline Indicator */}
       <OfflineIndicatorMini isOffline={isOffline} />
@@ -1045,7 +1045,7 @@ export function POSPage() {
               <motion.button
                 whileHover={{ scale: 1.1, backgroundColor: 'rgba(251,191,36,0.18)' }}
                 whileTap={{ scale: 0.97 }}
-                transition={{ type: 'spring', stiffness: 300 }}
+                transition={{ type: 'spring', stiffness: 400 }}
                 onClick={addNewOrder}
                 className="w-6 h-6 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center p-0"
               >
@@ -1069,7 +1069,7 @@ export function POSPage() {
                     key={orderId}
                     whileHover={{ scale: 1.08, backgroundColor: 'rgba(16,185,129,0.18)' }}
                     whileTap={{ scale: 0.97 }}
-                    transition={{ type: 'spring', stiffness: 300 }}
+                    transition={{ type: 'spring', stiffness: 400 }}
                     type="button"
                     className={`px-3 py-1 text-sm rounded relative ${
                       isActive 
@@ -1224,7 +1224,7 @@ export function POSPage() {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            transition={{ duration: 0.15, ease: 'easeInOut' }}
             className="px-4 py-3 bg-slate-900/30 border-b border-white/10 overflow-hidden"
           >
             <HardwareStatusStrip className="max-w-4xl" />
@@ -1238,7 +1238,7 @@ export function POSPage() {
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 300 }}
+            transition={{ type: 'spring', stiffness: 400 }}
             className="bg-slate-900 rounded-lg p-6 max-w-2xl w-full mx-4"
           >
             <div className="flex items-center justify-between mb-4">

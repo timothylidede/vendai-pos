@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -175,8 +175,9 @@ export function POSCheckoutModal({
     }
   }, [open, step, primaryMethod, total, tenders.length])
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     setValidationMessage(null)
+
     if (step === 0) {
       if (!primaryMethod) {
         setValidationMessage('Please choose a payment method to continue.')
@@ -195,28 +196,26 @@ export function POSCheckoutModal({
         return
       }
 
-      if (totalApplied < total) {
-        if (!insufficientAcknowledged) {
-          setValidationMessage('Payments do not cover the total. Click next again to record the remaining balance.')
-          setInsufficientAcknowledged(true)
-          return
-        }
+      if (totalApplied < total && !insufficientAcknowledged) {
+        setValidationMessage('Payments do not cover the total. Press continue again to record the remaining balance.')
+        setInsufficientAcknowledged(true)
+        return
       }
     }
 
     setStep((prev) => Math.min(prev + 1, STEP_TITLES.length - 1))
-  }
+  }, [customer, insufficientAcknowledged, primaryMethod, step, total, totalApplied])
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     setValidationMessage(null)
     setStep((prev) => Math.max(prev - 1, 0))
-  }
+  }, [])
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     setValidationMessage(null)
 
     if (balanceDue > 0 && totalApplied < total && !insufficientAcknowledged) {
-      setValidationMessage('Outstanding balance will remain due. Click complete again to confirm.')
+      setValidationMessage('Outstanding balance will remain due. Press complete again to confirm.')
       setInsufficientAcknowledged(true)
       return
     }
@@ -275,14 +274,41 @@ export function POSCheckoutModal({
     } finally {
       setLocalSubmitting(false)
     }
-  }
+  }, [balanceDue, changeDue, customer, insufficientAcknowledged, notes, onOpenChange, onSubmit, registerId, status, tenders, total, totalApplied, totalTendered])
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || event.isComposing || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) {
+        return
+      }
+
+      const target = event.target as HTMLElement | null
+      if (target && (target.getAttribute('contenteditable') === 'true' || target.tagName === 'TEXTAREA')) {
+        return
+      }
+
+      event.preventDefault()
+      if (step < STEP_TITLES.length - 1) {
+        handleNext()
+      } else {
+        void handleSubmit()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleNext, handleSubmit, open, step])
 
   const disableNext = step === 1 && (totalApplied <= 0 || (totalApplied < total && !insufficientAcknowledged))
   const disableSubmit = localSubmitting || submitting
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-5xl translate-x-[-50%] translate-y-[-50%] gap-0 border border-white/10 bg-slate-900/95 p-0 shadow-[0_32px_64px_-24px_rgba(12,74,110,0.4)] backdrop-blur-2xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-2xl max-h-[90vh] overflow-hidden" showCloseButton>
+          <DialogContent className="fixed left-[50%] top-[50%] z-50 flex w-full max-w-4xl translate-x-[-50%] translate-y-[-50%] flex-col gap-0 border border-white/10 bg-slate-900/95 p-0 shadow-[0_32px_64px_-24px_rgba(12,74,110,0.4)] backdrop-blur-2xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-2xl max-h-[92vh] overflow-hidden" showCloseButton>
         <DialogHeader className="px-8 pt-6 pb-4 border-b border-white/5">
           <DialogTitle className="flex items-center gap-3 text-xl font-semibold text-emerald-200">
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 text-base">
@@ -295,7 +321,7 @@ export function POSCheckoutModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex h-full flex-col gap-8 overflow-y-auto px-8 py-6">
+  <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5">
           <StepIndicators current={step} />
 
           {validationMessage && (
@@ -315,26 +341,30 @@ export function POSCheckoutModal({
               className="flex flex-col gap-6"
             >
               {step === 0 && (
-                <div className="grid gap-6 lg:grid-cols-2">
-                  <MethodSelector
-                    primaryMethod={primaryMethod}
-                    onChange={(method) => {
-                      setPrimaryMethod(method)
-                      setTenders((prev) => {
-                        const amount = method === 'mixed' ? Math.min(total, prev[0]?.amount ?? total) : total
-                        return [
-                          {
-                            ...(prev[0] ?? createTender(method, amount)),
-                            method: method === 'mixed' ? 'cash' : method,
-                            amount,
-                            tenderedAmount: amount,
-                          },
-                        ]
-                      })
-                    }}
-                  />
+                <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
+                  <div className="flex-1">
+                    <MethodSelector
+                      primaryMethod={primaryMethod}
+                      onChange={(method) => {
+                        setPrimaryMethod(method)
+                        setTenders((prev) => {
+                          const amount = method === 'mixed' ? Math.min(total, prev[0]?.amount ?? total) : total
+                          return [
+                            {
+                              ...(prev[0] ?? createTender(method, amount)),
+                              method: method === 'mixed' ? 'cash' : method,
+                              amount,
+                              tenderedAmount: amount,
+                            },
+                          ]
+                        })
+                      }}
+                    />
+                  </div>
 
-                  <CustomerCapture customer={customer} onChange={setCustomer} />
+                  <div className="flex-1">
+                    <CustomerCapture customer={customer} onChange={setCustomer} />
+                  </div>
                 </div>
               )}
 
@@ -384,7 +414,7 @@ export function POSCheckoutModal({
                 disabled={disableNext}
                 className="flex items-center gap-2 rounded-full bg-emerald-500/80 px-7 h-11 text-white shadow-[0_12px_28px_-18px_rgba(5,150,105,0.6)] transition hover:bg-emerald-500"
               >
-                Next <ArrowRight className="h-4 w-4" />
+                Continue <ArrowRight className="h-4 w-4" />
               </Button>
             ) : (
               <Button
@@ -427,10 +457,10 @@ function MethodSelector({ primaryMethod, onChange }: { primaryMethod: POSPayment
   const methods: POSPaymentMethod[] = ['cash', 'card', 'mobile_money', 'mixed', 'voucher', 'store_credit', 'bank_transfer', 'other']
 
   return (
-    <div className="rounded-2xl border border-white/8 bg-slate-900/60 p-6 shadow-[0_18px_48px_-26px_rgba(15,118,110,0.42)]">
-      <h3 className="text-base font-semibold text-slate-200">Payment method</h3>
-      <p className="mt-2 text-sm text-slate-400">Choose how the customer is paying. Mixed tender lets you combine multiple methods.</p>
-      <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
+    <div className="w-full rounded-2xl border border-white/8 bg-slate-900/65 p-5 shadow-[0_18px_48px_-26px_rgba(15,118,110,0.38)]">
+      <h3 className="text-sm font-semibold text-slate-100">Payment method</h3>
+      <p className="mt-1 text-xs text-slate-400">Pick how this sale is being paid.</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {methods.map((method) => {
           const Icon = PAYMENT_ICONS[method]
           const active = primaryMethod === method
@@ -440,35 +470,33 @@ function MethodSelector({ primaryMethod, onChange }: { primaryMethod: POSPayment
               type="button"
               onClick={() => onChange(method)}
               className={cn(
-                'group relative flex items-center gap-4 rounded-xl border border-white/6 bg-slate-900/55 px-5 py-4 text-left transition-all duration-200 hover:border-emerald-400/40 hover:bg-emerald-500/10',
-                active && 'border-emerald-400/50 bg-emerald-500/12 shadow-[0_16px_36px_-24px_rgba(16,185,129,0.5)]',
+                'group flex w-full items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-950/70 px-4 py-4 text-left transition duration-150 hover:border-emerald-400/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300',
+                active && 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100 shadow-[0_18px_36px_-24px_rgba(16,185,129,0.45)]',
               )}
             >
-              <span className={cn('flex h-12 w-12 items-center justify-center rounded-2xl border border-white/6 bg-slate-800/60 text-emerald-200', active && 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100')}>
+              <span
+                className={cn(
+                  'flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-slate-900/70 text-emerald-200 transition',
+                  active && 'border-emerald-400/50 bg-emerald-500/20 text-emerald-100',
+                )}
+              >
                 <Icon className="h-5 w-5" />
               </span>
               <div className="flex-1">
                 <div className="text-sm font-semibold text-slate-200">{PAYMENT_METHOD_LABELS[method]}</div>
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="mt-1 text-xs text-slate-400">
                   {method === 'mixed'
-                    ? 'Split across cash, card and more.'
+                    ? 'Split across cash, card and mobile.'
                     : method === 'cash'
-                    ? 'Fast drawer checkout.'
+                    ? 'Drawer handoff.'
                     : method === 'mobile_money'
-                    ? 'Collect via STK push or wallet transfer.'
+                    ? 'STK push or wallet.'
                     : method === 'card'
                     ? 'Swipe, chip or tap.'
-                    : 'Capture alternative tender.'}
+                    : 'Record another tender.'}
                 </p>
               </div>
-              <span
-                className={cn(
-                  'absolute right-4 top-1/2 hidden -translate-y-1/2 rounded-full border border-emerald-400/40 bg-emerald-500/10 p-1 text-emerald-200 shadow-sm md:inline-flex',
-                  active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-                )}
-              >
-                <Check className="h-3 w-3" />
-              </span>
+              <Check className={cn('h-4 w-4 text-emerald-200 opacity-0 transition', active && 'opacity-100')} />
             </button>
           )
         })}
@@ -479,9 +507,9 @@ function MethodSelector({ primaryMethod, onChange }: { primaryMethod: POSPayment
 
 function CustomerCapture({ customer, onChange }: { customer: CustomerDraft; onChange: (draft: CustomerDraft) => void }) {
   return (
-    <div className="rounded-2xl border border-white/8 bg-slate-900/60 p-5 shadow-[0_18px_48px_-26px_rgba(15,118,110,0.42)]">
-      <h3 className="text-sm font-semibold text-slate-200">Customer</h3>
-      <p className="mt-1 text-xs text-slate-400">Record who you’re selling to for receipts and loyalty.</p>
+    <div className="w-full rounded-2xl border border-white/8 bg-slate-900/65 p-5 shadow-[0_18px_48px_-26px_rgba(15,118,110,0.38)]">
+      <h3 className="text-sm font-semibold text-slate-100">Customer</h3>
+      <p className="mt-1 text-xs text-slate-400">Optional details for receipts or loyalty.</p>
 
       <RadioGroup
         value={customer.type}
@@ -490,35 +518,45 @@ function CustomerCapture({ customer, onChange }: { customer: CustomerDraft; onCh
       >
         <label
           className={cn(
-            'group flex cursor-pointer items-center gap-3 rounded-xl border border-white/6 bg-slate-900/55 px-4 py-3 transition-all hover:border-emerald-400/30 hover:bg-emerald-500/10',
-            customer.type === 'guest' && 'border-emerald-400/40 bg-emerald-500/12 shadow-[0_16px_36px_-24px_rgba(16,185,129,0.5)]',
+            'group flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 transition duration-150 hover:border-emerald-400/30 focus-within:border-emerald-400/40',
+            customer.type === 'guest' && 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100 shadow-[0_18px_36px_-24px_rgba(16,185,129,0.45)]',
           )}
         >
           <RadioGroupItem value="guest" className="sr-only" />
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/6 bg-slate-800/60 text-emerald-200">
+          <div
+            className={cn(
+              'flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-slate-900/70 text-emerald-200 transition',
+              customer.type === 'guest' && 'border-emerald-400/40 bg-emerald-500/20 text-emerald-100',
+            )}
+          >
             <User className="h-4 w-4" />
           </div>
           <div>
             <div className="text-sm font-semibold text-slate-200">Guest checkout</div>
             <p className="text-xs text-slate-400">No customer details required.</p>
           </div>
-          {customer.type === 'guest' && <Check className="ml-auto h-4 w-4 text-emerald-300" />}
+          {customer.type === 'guest' && <Check className="ml-auto h-4 w-4 text-emerald-200" />}
         </label>
         <label
           className={cn(
-            'group flex cursor-pointer items-center gap-3 rounded-xl border border-white/6 bg-slate-900/55 px-4 py-3 transition-all hover:border-emerald-400/30 hover:bg-emerald-500/10',
-            customer.type === 'identified' && 'border-emerald-400/40 bg-emerald-500/12 shadow-[0_16px_36px_-24px_rgba(16,185,129,0.5)]',
+            'group flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 transition duration-150 hover:border-emerald-400/30 focus-within:border-emerald-400/40',
+            customer.type === 'identified' && 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100 shadow-[0_18px_36px_-24px_rgba(16,185,129,0.45)]',
           )}
         >
           <RadioGroupItem value="identified" className="sr-only" />
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/6 bg-slate-800/60 text-emerald-200">
+          <div
+            className={cn(
+              'flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-slate-900/70 text-emerald-200 transition',
+              customer.type === 'identified' && 'border-emerald-400/40 bg-emerald-500/20 text-emerald-100',
+            )}
+          >
             <UserPlus className="h-4 w-4" />
           </div>
           <div>
             <div className="text-sm font-semibold text-slate-200">Identify customer</div>
             <p className="text-xs text-slate-400">Capture loyalty or contact details.</p>
           </div>
-          {customer.type === 'identified' && <Check className="ml-auto h-4 w-4 text-emerald-300" />}
+          {customer.type === 'identified' && <Check className="ml-auto h-4 w-4 text-emerald-200" />}
         </label>
       </RadioGroup>
 

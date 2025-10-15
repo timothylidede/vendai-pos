@@ -10,7 +10,7 @@ const DB_NAME = 'vendai_offline_queue'
 const DB_VERSION = 1
 const STORE_NAME = 'pos_transactions'
 const MAX_RETRY_ATTEMPTS = 3
-const SYNC_BATCH_SIZE = 5
+const SYNC_BATCH_SIZE = 10
 
 class OfflineQueueManager {
   private db: IDBDatabase | null = null

@@ -340,7 +340,7 @@ export function ModulesDashboard() {
       return {
         scale: 1.05,
         opacity: 0,
-        transition: { duration: 0.12, ease: [0.4, 0.0, 0.2, 1] as any }
+        transition: { duration: 0.08, ease: [0.4, 0.0, 0.2, 1] as any }
       };
     }
     
@@ -356,7 +356,7 @@ export function ModulesDashboard() {
     
     return {
       ...exitVariants[index],
-      transition: { duration: 0.15, ease: [0.4, 0.0, 0.2, 1] as any, delay: 0.02 }
+      transition: { duration: 0.08, ease: [0.4, 0.0, 0.2, 1] as any }
     };
   };
 
@@ -372,7 +372,7 @@ export function ModulesDashboard() {
         y: 0
       }}
       transition={{
-        duration: 0.15,
+        duration: 0.08,
         ease: [0.4, 0.0, 0.2, 1] as any
       }}
     >
@@ -382,7 +382,7 @@ export function ModulesDashboard() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm z-10"
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.15 }}
         />
       )}
       
@@ -416,7 +416,7 @@ export function ModulesDashboard() {
                 initial={{ opacity: 0, y: -10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                transition={{ duration: 0.1, ease: [0.4, 0, 0.2, 1] }}
                 className="absolute right-0 top-12 w-80 z-50"
               >
                 {/* Glassmorphic dropdown container */}
@@ -569,7 +569,7 @@ export function ModulesDashboard() {
                 whileHover={!isExiting ? { 
                   y: -12,
                   scale: 1.02,
-                  transition: { duration: 0.3, ease: "easeOut" }
+                  transition: { duration: 0.2, ease: "easeOut" }
                 } : {}}
                 onClick={() => handleModuleClick(module.title)}
                 onMouseEnter={() => handleModuleHover(module.title)}
@@ -677,7 +677,7 @@ export function ModulesDashboard() {
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+            transition={{ duration: 0.1, ease: [0.4, 0, 0.2, 1] }}
             className="relative w-full max-w-md"
           >
             {/* Glassmorphic modal container */}

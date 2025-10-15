@@ -776,7 +776,7 @@ export function SupplierModule() {
       className="module-background flex h-[calc(100vh-2.5rem)] flex-col overflow-hidden"
       initial={{ x: 0, y: -300, opacity: 0 }}
       animate={{ x: 0, y: 0, opacity: 1 }}
-      transition={{ duration: 0.18, ease: [0.4, 0.0, 0.2, 1] }}
+      transition={{ duration: 0.08, ease: [0.4, 0.0, 0.2, 1] }}
     >
       {/* Header */}
       <div className="bg-slate-900/40 backdrop-blur-sm">

@@ -22,6 +22,14 @@ export function AppHeader() {
     return (isMounted && isElectron) ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined
   }, [isMounted, isElectron])
 
+  if (!isMounted) {
+    return null
+  }
+
+  if (!isElectron) {
+    return null
+  }
+
   return (
     <header
       className="fixed left-0 right-0 top-0 h-10 flex items-center justify-between px-3 border-b border-slate-800 bg-slate-900/60 backdrop-blur z-40"

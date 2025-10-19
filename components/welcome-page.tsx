@@ -75,6 +75,36 @@ export function WelcomePage() {
     }
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (process.env.NODE_ENV !== 'development') return;
+
+    const host = window.location.host;
+    const baseHost = host.split(':')[0];
+    const domains = Array.from(new Set([host, baseHost].filter(Boolean)));
+
+    if (domains.length === 0) return;
+
+    const ensureDomains = async () => {
+      try {
+        const response = await fetch('/api/firebase/ensure-authorized-domain', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domains }),
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          console.warn('⚠️ Unable to ensure Firebase authorized domains:', text);
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to call ensure-authorized-domain endpoint', error);
+      }
+    };
+
+    void ensureDomains();
+  }, []);
+
   // Separate effect for Electron-specific setup
   useEffect(() => {
     if (!isElectron || !isMounted) return;

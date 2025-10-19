@@ -4,28 +4,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { initializeApp, getApps, cert } from 'firebase-admin/app'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { pezeshaClient, generateDisbursementReference } from '@/lib/pezesha-api'
+import { getFirebaseAdminDb } from '@/lib/firebase-admin'
 
-// Initialize Firebase Admin
-if (!getApps().length) {
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-  
-  if (privateKey && clientEmail && projectId) {
-    initializeApp({
-      credential: cert({
-        projectId,
-        clientEmail,
-        privateKey,
-      }),
-    })
-  }
-}
-
-const db = getFirestore()
+const db = getFirebaseAdminDb()
 
 // ============================================================================
 // Request/Response Types

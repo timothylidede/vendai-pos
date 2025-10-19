@@ -1,51 +1,99 @@
-import { initializeApp, getApps, cert } from 'firebase-admin/app'
-import { getFirestore } from 'firebase-admin/firestore'
-import { getStorage } from 'firebase-admin/storage'
+import { initializeApp, cert, getApps, getApp, type App, type ServiceAccount } from 'firebase-admin/app'
+import { getFirestore, type Firestore } from 'firebase-admin/firestore'
+import { getAuth, type Auth } from 'firebase-admin/auth'
+import { getStorage, type Storage } from 'firebase-admin/storage'
 
-console.log('🔧 Firebase Admin Configuration:')
-console.log('- Project ID:', process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID)
-console.log('- Storage Bucket:', process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
-console.log('- Has Service Account Key:', !!process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
+let adminAppInstance: App | null = null
+let adminDbInstance: Firestore | null = null
+let adminAuthInstance: Auth | null = null
+let adminStorageInstance: Storage | null = null
 
-// Initialize Firebase Admin SDK
-const adminConfig = {
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'vendai-fa58c',
-  // Use the correct storage bucket from environment or default to .firebasestorage.app
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'vendai-fa58c.firebasestorage.app',
-}
+const parseServiceAccountKey = (): ServiceAccount | null => {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+  if (!raw) return null
 
-// Add service account key if available
-if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+  const normalized = raw.startsWith('{') ? raw : raw.replace(/^['"]|['"]$/g, '')
+
   try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
-    ;(adminConfig as any).credential = cert(serviceAccount)
-    console.log('✅ Using Firebase service account credentials')
-  } catch (e) {
-    console.warn('⚠️ Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY:', e)
+    const parsed = JSON.parse(normalized) as ServiceAccount
+    if (parsed.private_key) {
+      parsed.private_key = parsed.private_key.replace(/\\n/g, '\n')
+    }
+    return parsed
+  } catch (error) {
+    console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY', error)
+    return null
   }
-} else {
-  console.log('ℹ️ No Firebase service account key found')
-  console.log('💡 For image upload to work, you need to:')
-  console.log('   1. Go to Firebase Console > Project Settings > Service Accounts')
-  console.log('   2. Generate new private key')
-  console.log('   3. Add the JSON as FIREBASE_SERVICE_ACCOUNT_KEY in .env.local')
-  console.log('   4. Or use Application Default Credentials with `gcloud auth application-default login`')
-  
-  // In development without service account, we'll catch the error in the image generation
-  // and provide a helpful message to the user
 }
 
-// Initialize app if not already initialized
-let adminApp
-try {
-  adminApp = getApps().find(app => app.name === 'admin-app') || 
-    initializeApp(adminConfig, 'admin-app')
-  console.log('✅ Firebase Admin app initialized')
-} catch (error: any) {
-  console.error('❌ Failed to initialize Firebase Admin app:', error.message)
-  throw error
+const buildServiceAccount = (): ServiceAccount => {
+  const parsed = parseServiceAccountKey()
+  if (parsed) {
+    return parsed
+  }
+
+  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error('Firebase Admin credentials are not configured. Set FIREBASE_SERVICE_ACCOUNT_KEY or FIREBASE_PRIVATE_KEY/FIREBASE_CLIENT_EMAIL/FIREBASE_PROJECT_ID.')
+  }
+
+  return {
+    projectId,
+    clientEmail,
+    privateKey,
+  }
 }
 
-export const adminDb = getFirestore(adminApp)
-export const adminStorage = getStorage(adminApp)
+export const getFirebaseAdminApp = (): App => {
+  if (adminAppInstance) {
+    return adminAppInstance
+  }
+
+  if (getApps().length) {
+    adminAppInstance = getApp()
+    return adminAppInstance
+  }
+
+  const serviceAccount = buildServiceAccount()
+  const projectId = serviceAccount.projectId
+  const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || undefined
+
+  adminAppInstance = initializeApp({
+    credential: cert(serviceAccount),
+    projectId,
+    storageBucket,
+  })
+
+  return adminAppInstance
+}
+
+export const getFirebaseAdminDb = (): Firestore => {
+  if (!adminDbInstance) {
+    adminDbInstance = getFirestore(getFirebaseAdminApp())
+  }
+  return adminDbInstance
+}
+
+export const getFirebaseAdminAuth = (): Auth => {
+  if (!adminAuthInstance) {
+    adminAuthInstance = getAuth(getFirebaseAdminApp())
+  }
+  return adminAuthInstance
+}
+
+export const getFirebaseAdminStorage = (): Storage => {
+  if (!adminStorageInstance) {
+    adminStorageInstance = getStorage(getFirebaseAdminApp())
+  }
+  return adminStorageInstance
+}
+
+export const adminApp = getFirebaseAdminApp()
+export const adminDb = getFirebaseAdminDb()
+export const adminAuth = getFirebaseAdminAuth()
+export const adminStorage = getFirebaseAdminStorage()
+
 export default adminApp

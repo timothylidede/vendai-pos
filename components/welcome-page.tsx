@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from './ui/button';
 import { motion } from 'framer-motion';
-import { signInWithRedirect, signInWithPopup, signInWithCredential, GoogleAuthProvider, getRedirectResult } from 'firebase/auth';
+import { signInWithRedirect, signInWithCredential, GoogleAuthProvider, getRedirectResult } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '@/lib/firebase';
 import { useEffect, useState } from 'react';
@@ -56,6 +56,30 @@ export function WelcomePage() {
     }
   }, [isLoading]);
 
+  const handleRedirectResult = async () => {
+    if (!auth) return;
+    
+    try {
+      setIsLoading(true);
+      const result = await getRedirectResult(auth);
+      
+      if (result?.user) {
+        console.log('✅ Redirect authentication successful');
+        await handleUserAuthentication(result.user);
+      }
+    } catch (error: any) {
+      console.error('🔴 Redirect result error:', error);
+      
+      // Only show error if it's not a user cancellation
+      if (error?.code && !error.code.includes('cancelled') && !error.code.includes('closed')) {
+        setErrorMessage(getErrorMessage(error));
+        setTimeout(() => setErrorMessage(null), 6000);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     setIsMounted(true);
     
@@ -70,7 +94,7 @@ export function WelcomePage() {
     setIsElectron(detectedElectron);
 
     // Handle redirect result from Google Sign-In
-    if (!detectedElectron && auth) {
+    if (!detectedElectron) {
       handleRedirectResult();
     }
   }, []);
@@ -141,28 +165,6 @@ export function WelcomePage() {
     }
   }, [isElectron, isMounted, electronUser, user, router]);
 
-  const handleRedirectResult = async () => {
-    try {
-      setIsLoading(true);
-      const result = await getRedirectResult(auth!);
-      
-      if (result?.user) {
-        console.log('✅ Redirect authentication successful');
-        await handleUserAuthentication(result.user);
-      }
-    } catch (error: any) {
-      console.error('🔴 Redirect result error:', error);
-      
-      // Only show error if it's not a user cancellation
-      if (error?.code && !error.code.includes('cancelled') && !error.code.includes('closed')) {
-        setErrorMessage(getErrorMessage(error));
-        setTimeout(() => setErrorMessage(null), 6000);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
     if (!isMounted || authLoading) return;
     if (!user) return;
@@ -176,9 +178,10 @@ export function WelcomePage() {
 
   const getErrorMessage = (error: any): string => {
     if (error?.code === 'auth/unauthorized-domain') {
-      return 'This domain is not authorized. Please check Firebase console settings.';
+      const currentDomain = window.location.hostname;
+      return `This domain (${currentDomain}) is not authorized for Google Sign-In. Please add it to Firebase Console → Authentication → Settings → Authorized domains.`;
     } else if (error?.code === 'auth/popup-blocked') {
-      return 'Pop-up was blocked. Using redirect method instead...';
+      return 'Pop-up was blocked by your browser. Please allow popups for this site, or we\'ll try redirect method...';
     } else if (error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
       return 'Sign in was cancelled. Click the button again to continue.';
     } else if (error?.code === 'auth/network-request-failed') {
@@ -196,6 +199,9 @@ export function WelcomePage() {
         return 'Sign in was cancelled. Click the button again to continue.';
       } else if (error.message.includes('network') || error.message.includes('fetch')) {
         return 'Network error. Please check your internet connection and try again.';
+      } else if (error.message.includes('unauthorized-domain') || error.message.includes('not authorized')) {
+        const currentDomain = window.location.hostname;
+        return `Domain ${currentDomain} not authorized. Visit /auth-debug for help.`;
       }
     }
     return 'An error occurred during sign in. Please try again.';
@@ -250,37 +256,21 @@ export function WelcomePage() {
     }
 
     try {
-      // Clear any existing auth state first
+      // Always clear existing auth state before sign-in
       if (auth.currentUser) {
         await auth.signOut();
       }
-      
-      try {
-        console.log('🪟 Launching Google sign-in popup...');
-        const result = await signInWithPopup(auth, googleProvider);
-        if (result?.user) {
-          console.log('✅ Google sign-in popup completed');
-          await handleUserAuthentication(result.user);
-          return;
-        }
-      } catch (popupError: any) {
-        const popupBlocked = popupError?.code === 'auth/popup-blocked' ||
-          popupError?.code === 'auth/operation-not-supported-in-this-environment';
-        if (popupBlocked) {
-          console.warn('⚠️ Popup blocked, falling back to redirect flow');
-        } else if (popupError?.code === 'auth/popup-closed-by-user' || popupError?.code === 'auth/cancelled-popup-request') {
-          throw popupError;
-        } else {
-          throw popupError;
-        }
-      }
 
-      // Fallback to redirect when popup is blocked or not supported
-      console.log('🔄 Redirecting to Google sign-in...');
+      // Use redirect flow - goes directly to Google account picker
+      // This is the recommended approach for web apps:
+      // - No popup blockers
+      // - Direct to Google (no Firebase handler intermediary)
+      // - Better mobile experience
+      console.log('🔄 Starting Google sign-in redirect...');
       await signInWithRedirect(auth, googleProvider);
-      // User will be redirected away, result handled in handleRedirectResult
+      // User will be redirected to Google, then back to our app
+      // Result is handled in handleRedirectResult
     } catch (error) {
-      // Re-throw to be handled by the main error handler
       throw error;
     }
   };
@@ -513,7 +503,15 @@ export function WelcomePage() {
               transition={{ duration: 0.3 }}
               className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-300 text-sm"
             >
-              {errorMessage}
+              <div>{errorMessage}</div>
+              {(errorMessage.includes('not authorized') || errorMessage.includes('unauthorized')) && (
+                <Link 
+                  href="/auth-debug" 
+                  className="mt-2 inline-block text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2"
+                >
+                  → View diagnostic information
+                </Link>
+              )}
             </motion.div>
           )}
 

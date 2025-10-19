@@ -14,12 +14,14 @@ const sanitizeDomain = (value: string | null | undefined): string | null => {
   if (!trimmed) return null
 
   const withoutProtocol = trimmed.replace(/^https?:\/\//, '')
-  const domain = withoutProtocol.split('/')[0]
+  const host = withoutProtocol.split('/')[0]
+  if (!host) return null
+  const [domain] = host.split(':')
   return domain || null
 }
 
 const isDevDomain = (domain: string): boolean => {
-  return domain === 'localhost' || domain.startsWith('localhost:') || domain.startsWith('127.0.0.1')
+  return domain === 'localhost' || domain === '127.0.0.1'
 }
 
 const getServiceAccount = () => {

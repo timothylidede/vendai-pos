@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from './ui/button';
 import { motion } from 'framer-motion';
-import { signInWithRedirect, signInWithCredential, GoogleAuthProvider, getRedirectResult } from 'firebase/auth';
+import { signInWithRedirect, signInWithPopup, signInWithCredential, GoogleAuthProvider, getRedirectResult } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '@/lib/firebase';
 import { useEffect, useState } from 'react';
@@ -255,7 +255,27 @@ export function WelcomePage() {
         await auth.signOut();
       }
       
-      // Use redirect instead of popup - works better with popup blockers
+      try {
+        console.log('🪟 Launching Google sign-in popup...');
+        const result = await signInWithPopup(auth, googleProvider);
+        if (result?.user) {
+          console.log('✅ Google sign-in popup completed');
+          await handleUserAuthentication(result.user);
+          return;
+        }
+      } catch (popupError: any) {
+        const popupBlocked = popupError?.code === 'auth/popup-blocked' ||
+          popupError?.code === 'auth/operation-not-supported-in-this-environment';
+        if (popupBlocked) {
+          console.warn('⚠️ Popup blocked, falling back to redirect flow');
+        } else if (popupError?.code === 'auth/popup-closed-by-user' || popupError?.code === 'auth/cancelled-popup-request') {
+          throw popupError;
+        } else {
+          throw popupError;
+        }
+      }
+
+      // Fallback to redirect when popup is blocked or not supported
       console.log('🔄 Redirecting to Google sign-in...');
       await signInWithRedirect(auth, googleProvider);
       // User will be redirected away, result handled in handleRedirectResult

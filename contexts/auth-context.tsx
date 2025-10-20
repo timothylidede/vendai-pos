@@ -141,19 +141,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return;
     }
 
+    // Set loading to false immediately if there's a cached auth state
+    const currentUser = auth.currentUser;
+    if (currentUser === null) {
+      setLoading(false);
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setLoading(true);
-      
       if (user) {
         setUser(user);
-        await fetchUserData(user);
+        setLoading(false); // Set loading false immediately, fetch data in background
+        
+        // Fetch user data in background without blocking
+        fetchUserData(user).catch((error) => {
+          console.error('Background user data fetch failed:', error);
+        });
       } else {
         // Only clear Firebase user data, keep Electron user if present
         setUser(null);
         setUserData(null);
+        setLoading(false);
       }
-      
-      setLoading(false);
     });
 
     return () => unsubscribe();

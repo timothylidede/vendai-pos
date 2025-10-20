@@ -61,12 +61,25 @@ export function WelcomePage() {
     
     try {
       setIsLoading(true);
+      console.log('🔄 Checking for redirect result...');
+      
       const result = await getRedirectResult(auth);
       
       if (result?.user) {
-        console.log('✅ Redirect authentication successful');
+        console.log('✅ Redirect authentication successful:', result.user.email);
         await handleUserAuthentication(result.user);
+        return; // Don't clear loading, let navigation handle it
       }
+      
+      // Also check if user is already signed in (from previous session)
+      if (auth.currentUser) {
+        console.log('✅ User already signed in:', auth.currentUser.email);
+        await handleUserAuthentication(auth.currentUser);
+        return; // Don't clear loading, let navigation handle it
+      }
+      
+      console.log('ℹ️ No redirect result or existing user');
+      setIsLoading(false);
     } catch (error: any) {
       console.error('🔴 Redirect result error:', error);
       
@@ -75,7 +88,6 @@ export function WelcomePage() {
         setErrorMessage(getErrorMessage(error));
         setTimeout(() => setErrorMessage(null), 6000);
       }
-    } finally {
       setIsLoading(false);
     }
   };
@@ -166,9 +178,17 @@ export function WelcomePage() {
   }, [isElectron, isMounted, electronUser, user, router]);
 
   useEffect(() => {
-    if (!isMounted || authLoading) return;
-    if (!user) return;
+    if (!isMounted) return;
+    if (authLoading) {
+      console.log('⏳ Auth still loading...');
+      return;
+    }
+    if (!user) {
+      console.log('ℹ️ No user found, staying on login page');
+      return;
+    }
 
+    console.log('✅ User detected, redirecting...', user.email);
     const hasCompletedOnboarding = Boolean(userData?.onboardingCompleted);
     const targetRoute = hasCompletedOnboarding ? '/modules' : '/onboarding/choose';
 
@@ -439,12 +459,12 @@ export function WelcomePage() {
   };
 
   // Don't render until mounted to prevent hydration issues
-  if (!isMounted || authLoading || isRedirecting) {
+  if (!isMounted) {
     return <UniversalLoading type="auth" />;
   }
 
-  // Show loading screen during sign-in process
-  if (isLoading) {
+  // Show loading screen during auth check or redirect
+  if (authLoading || isRedirecting || isLoading) {
     return <UniversalLoading type="auth" />;
   }
 

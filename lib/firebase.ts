@@ -53,9 +53,8 @@ try {
   // Add scopes for OAuth
   googleProvider.addScope('email');
   googleProvider.addScope('profile');
-  
-  // Don't force account selection on every auth - only when needed
-  // This prevents the redirect loop issue
+  googleProvider.setCustomParameters({ prompt: 'select_account' });
+  // Force account picker so users can switch accounts without clearing cache
   
   console.log('✅ Firebase initialized successfully');
 } catch (error) {

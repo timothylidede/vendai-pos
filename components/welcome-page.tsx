@@ -38,7 +38,7 @@ const resolvePostAuthRoute = (role?: string | null, onboardingCompleted?: boolea
     return '/onboarding/choose';
   }
 
-  return role === 'distributor' ? '/modules/inventory' : '/modules';
+  return '/modules';
 };
 
 export function WelcomePage() {

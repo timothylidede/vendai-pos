@@ -88,6 +88,10 @@ export default function AuthDebugPage() {
     );
   }
 
+  const expectedAuthDomain = (process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'auth.vendai.digital').replace(/^https?:\/\//, '');
+  const normalizedAuthDomain = (debugInfo?.firebase?.authDomain || '').replace(/^https?:\/\//, '');
+  const domainMatchesExpected = normalizedAuthDomain === expectedAuthDomain;
+
   return (
     <div className="min-h-screen bg-slate-950 text-white p-8">
       <div className="max-w-4xl mx-auto">
@@ -185,9 +189,9 @@ export default function AuthDebugPage() {
           </h2>
           <div className="space-y-3 text-sm">
             <CheckItem
-              condition={debugInfo?.window?.hostname === debugInfo?.firebase?.authDomain?.replace('.firebaseapp.com', '.vendai.digital')}
-              pass="Domain matches expected configuration"
-              fail={`Domain mismatch: ${debugInfo?.window?.hostname} vs ${debugInfo?.firebase?.authDomain}`}
+              condition={domainMatchesExpected}
+              pass={`Auth domain matches ${expectedAuthDomain}`}
+              fail={`Auth domain mismatch. Expected ${expectedAuthDomain}, found ${normalizedAuthDomain || 'unknown'}`}
             />
             <CheckItem
               condition={debugInfo?.firebase?.authInitialized}

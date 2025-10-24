@@ -60,25 +60,18 @@ export function WelcomePage() {
     if (!auth) return;
     
     try {
+      console.log('🔍 Checking for redirect result...');
       setIsLoading(true);
-      console.log('🔄 Checking for redirect result...');
-      
       const result = await getRedirectResult(auth);
       
       if (result?.user) {
-        console.log('✅ Redirect authentication successful:', result.user.email);
+        console.log('✅ Redirect authentication successful', result.user.email);
         await handleUserAuthentication(result.user);
-        return; // Don't clear loading, let navigation handle it
+        // Don't setIsLoading(false) here - let handleUserAuthentication complete
+        return;
       }
       
-      // Also check if user is already signed in (from previous session)
-      if (auth.currentUser) {
-        console.log('✅ User already signed in:', auth.currentUser.email);
-        await handleUserAuthentication(auth.currentUser);
-        return; // Don't clear loading, let navigation handle it
-      }
-      
-      console.log('ℹ️ No redirect result or existing user');
+      console.log('ℹ️ No redirect result found (this is normal on first page load)');
       setIsLoading(false);
     } catch (error: any) {
       console.error('🔴 Redirect result error:', error);
@@ -89,6 +82,7 @@ export function WelcomePage() {
         setTimeout(() => setErrorMessage(null), 6000);
       }
       setIsLoading(false);
+      setIsRedirecting(false);
     }
   };
 
@@ -105,9 +99,19 @@ export function WelcomePage() {
 
     setIsElectron(detectedElectron);
 
-    // Handle redirect result from Google Sign-In
+    // Handle redirect result from Google Sign-In with timeout
     if (!detectedElectron) {
-      handleRedirectResult();
+      // Set a timeout to prevent hanging on redirect check
+      const redirectTimeout = setTimeout(() => {
+        if (isLoading) {
+          console.warn('⚠️ Redirect check timeout, proceeding...');
+          setIsLoading(false);
+        }
+      }, 3000); // 3 second timeout for redirect check
+
+      handleRedirectResult().finally(() => {
+        clearTimeout(redirectTimeout);
+      });
     }
   }, []);
 
@@ -178,17 +182,9 @@ export function WelcomePage() {
   }, [isElectron, isMounted, electronUser, user, router]);
 
   useEffect(() => {
-    if (!isMounted) return;
-    if (authLoading) {
-      console.log('⏳ Auth still loading...');
-      return;
-    }
-    if (!user) {
-      console.log('ℹ️ No user found, staying on login page');
-      return;
-    }
+    if (!isMounted || authLoading) return;
+    if (!user) return;
 
-    console.log('✅ User detected, redirecting...', user.email);
     const hasCompletedOnboarding = Boolean(userData?.onboardingCompleted);
     const targetRoute = hasCompletedOnboarding ? '/modules' : '/onboarding/choose';
 
@@ -276,17 +272,16 @@ export function WelcomePage() {
     }
 
     try {
-      // Always clear existing auth state before sign-in
-      if (auth.currentUser) {
-        await auth.signOut();
-      }
-
+      // Don't sign out before redirect - this can cause issues
+      // The redirect will handle the auth flow cleanly
+      
       // Use redirect flow - goes directly to Google account picker
       // This is the recommended approach for web apps:
       // - No popup blockers
       // - Direct to Google (no Firebase handler intermediary)
       // - Better mobile experience
       console.log('🔄 Starting Google sign-in redirect...');
+      console.log('- Auth domain:', auth.app.options.authDomain);
       await signInWithRedirect(auth, googleProvider);
       // User will be redirected to Google, then back to our app
       // Result is handled in handleRedirectResult
@@ -369,32 +364,37 @@ export function WelcomePage() {
       throw new Error('Firestore not initialized');
     }
 
-    const userDocRef = doc(db, 'users', user.uid);
-    const snapshot = await getDoc(userDocRef);
+    setIsRedirecting(true);
 
-    if (snapshot.exists()) {
-      const userData = snapshot.data() as { role?: string; onboardingCompleted?: boolean };
-      const role = userData.role || 'retailer';
-      const onboardingCompleted = Boolean(userData.onboardingCompleted);
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      const snapshot = await getDoc(userDocRef);
 
-      localStorage.setItem('vendai-user-role', role);
-      localStorage.setItem('vendai-first-login', onboardingCompleted ? 'false' : 'true');
-      setIsRedirecting(true);
-      router.push(onboardingCompleted ? '/modules' : '/onboarding/choose');
-    } else {
-      await setDoc(userDocRef, {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        createdAt: new Date().toISOString(),
-        onboardingCompleted: false,
-        role: 'retailer',
-      });
+      if (snapshot.exists()) {
+        const userData = snapshot.data() as { role?: string; onboardingCompleted?: boolean };
+        const role = userData.role || 'retailer';
+        const onboardingCompleted = Boolean(userData.onboardingCompleted);
 
-      localStorage.setItem('vendai-first-login', 'true');
-      setIsRedirecting(true);
-      router.push('/onboarding/choose');
+        localStorage.setItem('vendai-user-role', role);
+        localStorage.setItem('vendai-first-login', onboardingCompleted ? 'false' : 'true');
+        router.push(onboardingCompleted ? '/modules' : '/onboarding/choose');
+      } else {
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+          createdAt: new Date().toISOString(),
+          onboardingCompleted: false,
+          role: 'retailer',
+        });
+
+        localStorage.setItem('vendai-first-login', 'true');
+        router.push('/onboarding/choose');
+      }
+    } catch (error) {
+      setIsRedirecting(false);
+      throw error;
     }
   };
 

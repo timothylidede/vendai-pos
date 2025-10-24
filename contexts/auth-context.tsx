@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -29,6 +29,58 @@ interface ElectronUser {
   name: string;
   picture?: string;
 }
+
+const USER_DATA_CACHE_PREFIX = 'vendai-user-data::';
+const USER_DATA_CACHE_TTL_MS = 1000 * 60 * 5;
+
+type CachedUserPayload = {
+  data: UserData;
+  timestamp: number;
+};
+
+const buildUserCacheKey = (uid: string) => `${USER_DATA_CACHE_PREFIX}${uid}`;
+
+const getCachedUserData = (uid: string): UserData | null => {
+  try {
+    const raw = localStorage.getItem(buildUserCacheKey(uid));
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<CachedUserPayload>;
+    if (!parsed?.data || !parsed?.timestamp) {
+      localStorage.removeItem(buildUserCacheKey(uid));
+      return null;
+    }
+
+    if (Date.now() - parsed.timestamp > USER_DATA_CACHE_TTL_MS) {
+      localStorage.removeItem(buildUserCacheKey(uid));
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    console.warn('Failed to read cached user data', error);
+    return null;
+  }
+};
+
+const cacheUserData = (uid: string, data: UserData) => {
+  try {
+    const payload: CachedUserPayload = { data, timestamp: Date.now() };
+    localStorage.setItem(buildUserCacheKey(uid), JSON.stringify(payload));
+  } catch (error) {
+    console.warn('Failed to cache user data', error);
+  }
+};
+
+const removeCachedUserData = (uid: string) => {
+  try {
+    localStorage.removeItem(buildUserCacheKey(uid));
+  } catch (error) {
+    console.warn('Failed to clear cached user data', error);
+  }
+};
 
 interface AuthContextType {
   user: User | null;
@@ -62,6 +114,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
   const [isElectron, setIsElectron] = useState(false);
+  const lastUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -106,14 +159,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (userDoc.exists()) {
         const data = userDoc.data() as UserData;
         setUserData(data);
+        cacheUserData(user.uid, data);
         return data;
       } else {
         setUserData(null);
+        removeCachedUserData(user.uid);
         return null;
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
       setUserData(null);
+      removeCachedUserData(user.uid);
       return null;
     }
   };
@@ -125,6 +181,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const clearUserData = () => {
+    const currentUid = user?.uid || lastUserIdRef.current;
     setUser(null);
     setUserData(null);
     setElectronUser(null);
@@ -132,6 +189,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('vendai-user-role');
     localStorage.removeItem('vendai-first-login');
     localStorage.removeItem('vendai-electron-user');
+    if (currentUid) {
+      removeCachedUserData(currentUid);
+    }
+    lastUserIdRef.current = null;
   };
 
   useEffect(() => {
@@ -141,27 +202,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return;
     }
 
-    // Set loading to false immediately if there's a cached auth state
-    const currentUser = auth.currentUser;
-    if (currentUser === null) {
-      setLoading(false);
-    }
+    const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
+      setLoading(true);
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setUser(user);
-        setLoading(false); // Set loading false immediately, fetch data in background
-        
-        // Fetch user data in background without blocking
-        fetchUserData(user).catch((error) => {
-          console.error('Background user data fetch failed:', error);
-        });
-      } else {
-        // Only clear Firebase user data, keep Electron user if present
-        setUser(null);
-        setUserData(null);
+      if (nextUser) {
+        setUser(nextUser);
+        lastUserIdRef.current = nextUser.uid;
+
+        const cachedData = getCachedUserData(nextUser.uid);
+        if (cachedData) {
+          setUserData(cachedData);
+          setLoading(false);
+          void fetchUserData(nextUser);
+          return;
+        }
+
+        await fetchUserData(nextUser);
         setLoading(false);
+        return;
       }
+
+      if (lastUserIdRef.current) {
+        removeCachedUserData(lastUserIdRef.current);
+        lastUserIdRef.current = null;
+      }
+      setUser(null);
+      setUserData(null);
+      setLoading(false);
     });
 
     return () => unsubscribe();

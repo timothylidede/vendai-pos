@@ -7,7 +7,6 @@ import { HardwareProvider } from '@/contexts/hardware-context'
 import { VendaiPanel } from '@/components/vendai-panel'
 import { Toaster } from '@/components/ui/toaster'
 import { ErrorBoundary } from '@/components/error-boundary'
-import { AppHeader } from '@/components/app-header'
 import { ServiceWorkerRegistration } from '@/components/service-worker-registration'
 import './globals.css'
 
@@ -46,8 +45,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           enableSystem={false}
           storageKey="vendai-theme"
         >
-          <AppHeader />
-
           {/* Service Worker for offline image caching */}
           <ServiceWorkerRegistration />
           
@@ -55,7 +52,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <AuthProvider>
             <HardwareProvider>
               <ErrorBoundary>
-                <main className="pt-10">
+                <main>
                   {children}
                 </main>
               </ErrorBoundary>

@@ -30,6 +30,14 @@ interface OnboardingData {
   isJoiningExisting?: boolean;
   inviterName?: string;
   inviterOrganization?: string;
+  // Retailer-specific fields
+  salesChannels?: string[];
+  salesChannelDescription?: string;
+  website?: string;
+  county?: string;
+  subCounty?: string;
+  storeCategory?: string;
+  openingYear?: string;
 }
 
 interface UserProfileDocument {
@@ -67,12 +75,113 @@ export default function OnboardingPage() {
     invitationId: undefined,
     isJoiningExisting: false,
     inviterName: '',
-    inviterOrganization: ''
+    inviterOrganization: '',
+    salesChannels: [],
+    salesChannelDescription: '',
+    website: '',
+    county: '',
+    subCounty: '',
+    storeCategory: '',
+    openingYear: ''
   });
 
+  const [showRetailerWarning, setShowRetailerWarning] = useState(false);
+
+  // Store categories for retailer onboarding
+  const storeCategories = [
+    { id: 'general-trade', label: 'General Trade' },
+    { id: 'food-beverage', label: 'Food & Beverage' },
+    { id: 'electrical', label: 'Electrical' },
+    { id: 'construction', label: 'Construction' },
+    { id: 'fmcg', label: 'FMCG' },
+    { id: 'cosmetics', label: 'Cosmetics' },
+    { id: 'furniture', label: 'Furniture' },
+    { id: 'electronics', label: 'Electronics' },
+    { id: 'chemical', label: 'Chemical' },
+    { id: 'packaging', label: 'Packaging' },
+    { id: 'textile', label: 'Textile' },
+    { id: 'agricultural', label: 'Agricultural' },
+    { id: 'pharmaceutical', label: 'Pharmaceutical' },
+    { id: 'stationery', label: 'Stationery' },
+    { id: 'automotive', label: 'Automotive' },
+    { id: 'plumbing', label: 'Plumbing' },
+    { id: 'industrial', label: 'Industrial' },
+    { id: 'cleaning', label: 'Cleaning' },
+    { id: 'alcohol', label: 'Alcohol' }
+  ];
+
+  // Opening year options
+  const openingYearOptions = [
+    { id: 'opening-soon', label: 'Opening soon' },
+    { id: '2025', label: '2025' },
+    { id: '2024', label: '2024' },
+    { id: '2023', label: '2023' },
+    { id: '2022', label: '2022' },
+    { id: '2021', label: '2021' },
+    { id: '2020', label: '2020' },
+    { id: 'before-2020', label: 'Before 2020' }
+  ];
+
+  // Kenya counties and sub-counties data
+  const kenyanCounties = [
+    { code: 30, name: 'Baringo', capital: 'Kabarnet', subCounties: ['Baringo Central', 'Baringo North', 'Baringo South', 'Eldama Ravine', 'Mogotio', 'Tiaty'] },
+    { code: 36, name: 'Bomet', capital: 'Bomet', subCounties: ['Bomet Central', 'Bomet East', 'Chepalungu', 'Konoin', 'Sotik'] },
+    { code: 39, name: 'Bungoma', capital: 'Bungoma', subCounties: ['Bumula', 'Kabuchai', 'Kanduyi', 'Kimilil', 'Mt Elgon', 'Sirisia', 'Tongaren', 'Webuye East', 'Webuye West'] },
+    { code: 40, name: 'Busia', capital: 'Busia', subCounties: ['Budalangi', 'Butula', 'Funyula', 'Nambele', 'Teso North', 'Teso South'] },
+    { code: 28, name: 'Elgeyo-Marakwet', capital: 'Iten', subCounties: ['Keiyo North', 'Keiyo South', 'Marakwet East', 'Marakwet West'] },
+    { code: 14, name: 'Embu', capital: 'Embu', subCounties: ['Manyatta', 'Mbeere North', 'Mbeere South', 'Runyenjes'] },
+    { code: 7, name: 'Garissa', capital: 'Garissa', subCounties: ['Daadab', 'Fafi', 'Garissa Township', 'Hulugho', 'Ijara', 'Lagdera', 'Balambala'] },
+    { code: 43, name: 'Homa Bay', capital: 'Homa Bay', subCounties: ['Homabay Town', 'Kabondo', 'Karachwonyo', 'Kasipul', 'Mbita', 'Ndhiwa', 'Rangwe', 'Suba'] },
+    { code: 11, name: 'Isiolo', capital: 'Isiolo', subCounties: ['Isiolo', 'Merti', 'Garbatulla'] },
+    { code: 34, name: 'Kajiado', capital: 'Kajiado', subCounties: ['Isinya', 'Kajiado Central', 'Kajiado North', 'Loitokitok', 'Mashuuru'] },
+    { code: 37, name: 'Kakamega', capital: 'Kakamega', subCounties: ['Butere', 'Kakamega Central', 'Kakamega East', 'Kakamega North', 'Kakamega South', 'Khwisero', 'Lugari', 'Lukuyani', 'Lurambi', 'Matete', 'Mumias', 'Mutungu', 'Navakholo'] },
+    { code: 35, name: 'Kericho', capital: 'Kericho', subCounties: ['Ainamoi', 'Belgut', 'Bureti', 'Kipkelion East', 'Kipkelion West', 'Soin/Sigowet'] },
+    { code: 22, name: 'Kiambu', capital: 'Kiambu', subCounties: ['Gatundu North', 'Gatundu South', 'Githunguri', 'Juja', 'Kabete', 'Kiambaa', 'Kiambu', 'Kikuyu', 'Limuru', 'Ruiru', 'Thika Town', 'Lari'] },
+    { code: 3, name: 'Kilifi', capital: 'Kilifi', subCounties: ['Ganze', 'Kaloleni', 'Kilifi North', 'Kilifi South', 'Magarini', 'Malindi', 'Rabai'] },
+    { code: 20, name: 'Kirinyaga', capital: 'Kerugoya/Kutus', subCounties: ['Kirinyaga Central', 'Kirinyaga East', 'Kirinyaga West', 'Mwea East', 'Mwea West'] },
+    { code: 45, name: 'Kisii', capital: 'Kisii', subCounties: [] },
+    { code: 42, name: 'Kisumu', capital: 'Kisumu', subCounties: ['Kisumu Central', 'Kisumu East', 'Kisumu West', 'Muhoroni', 'Nyakach', 'Nyando', 'Seme'] },
+    { code: 15, name: 'Kitui', capital: 'Kitui', subCounties: ['Kitui West', 'Kitui Central', 'Kitui Rural', 'Kitui South', 'Kitui East', 'Mwingi North', 'Mwingi West', 'Mwingi Central'] },
+    { code: 2, name: 'Kwale', capital: 'Kwale', subCounties: ['Kinango', 'Lunga Lunga', 'Msambweni', 'Matuga'] },
+    { code: 31, name: 'Laikipia', capital: 'Rumuruti', subCounties: ['Laikipia Central', 'Laikipia East', 'Laikipia North', 'Laikipia West', 'Nyahururu'] },
+    { code: 5, name: 'Lamu', capital: 'Lamu', subCounties: ['Lamu East', 'Lamu West'] },
+    { code: 16, name: 'Machakos', capital: 'Machakos', subCounties: ['Kathiani', 'Machakos Town', 'Masinga', 'Matungulu', 'Mavoko', 'Mwala', 'Yatta'] },
+    { code: 17, name: 'Makueni', capital: 'Wote', subCounties: ['Kaiti', 'Kibwezi West', 'Kibwezi East', 'Kilome', 'Makueni', 'Mbooni'] },
+    { code: 9, name: 'Mandera', capital: 'Mandera', subCounties: ['Banissa', 'Lafey', 'Mandera East', 'Mandera North', 'Mandera South', 'Mandera West'] },
+    { code: 10, name: 'Marsabit', capital: 'Marsabit', subCounties: ['Laisamis', 'Moyale', 'North Hor', 'Saku'] },
+    { code: 12, name: 'Meru', capital: 'Meru', subCounties: ['Buuri', 'Igembe Central', 'Igembe North', 'Igembe South', 'Imenti Central', 'Imenti North', 'Imenti South', 'Tigania East', 'Tigania West'] },
+    { code: 44, name: 'Migori', capital: 'Migori', subCounties: ['Awendo', 'Kuria East', 'Kuria West', 'Mabera', 'Ntimaru', 'Rongo', 'Suna East', 'Suna West', 'Uriri'] },
+    { code: 1, name: 'Mombasa', capital: 'Mombasa City', subCounties: ['Changamwe', 'Jomvu', 'Kisauni', 'Likoni', 'Mvita', 'Nyali'] },
+    { code: 21, name: "Murang'a", capital: "Murang'a", subCounties: ['Gatanga', 'Kahuro', 'Kandara', 'Kangema', 'Kigumo', 'Kiharu', 'Mathioya', "Murang'a South"] },
+    { code: 47, name: 'Nairobi', capital: 'Nairobi City', subCounties: ['Dagoretti North', 'Dagoretti South', 'Embakasi Central', 'Embakasi East', 'Embakasi North', 'Embakasi South', 'Embakasi West', 'Kamukunji', 'Kasarani', 'Kibra', "Lang'ata", 'Makadara', 'Mathare', 'Roysambu', 'Ruaraka', 'Starehe', 'Westlands'] },
+    { code: 32, name: 'Nakuru', capital: 'Nakuru', subCounties: ['Bahati', 'Gilgil', 'Kuresoi North', 'Kuresoi South', 'Molo', 'Naivasha', 'Nakuru Town East', 'Nakuru Town West', 'Njoro', 'Rongai', 'Subukia'] },
+    { code: 29, name: 'Nandi', capital: 'Kapsabet', subCounties: ['Aldai', 'Chesumei', 'Emgwen', 'Mosop', 'Nandi Hills', 'Tindiret'] },
+    { code: 33, name: 'Narok', capital: 'Narok', subCounties: ['Narok East', 'Narok North', 'Narok South', 'Narok West', 'Transmara East', 'Transmara West'] },
+    { code: 46, name: 'Nyamira', capital: 'Nyamira', subCounties: ['Borabu', 'Manga', 'Masaba North', 'Nyamira North', 'Nyamira South'] },
+    { code: 18, name: 'Nyandarua', capital: 'Ol Kalou', subCounties: ['Kinangop', 'Kipipiri', 'Ndaragwa', 'Ol-Kalou', 'Ol Joro Orok'] },
+    { code: 19, name: 'Nyeri', capital: 'Nyeri', subCounties: ['Kieni East', 'Kieni West', 'Mathira East', 'Mathira West', 'Mukurweini', 'Nyeri Town', 'Othaya', 'Tetu'] },
+    { code: 25, name: 'Samburu', capital: 'Maralal', subCounties: ['Samburu East', 'Samburu North', 'Samburu West'] },
+    { code: 41, name: 'Siaya', capital: 'Siaya', subCounties: ['Alego Usonga', 'Bondo', 'Gem', 'Rarieda', 'Ugenya', 'Unguja'] },
+    { code: 6, name: 'Taita-Taveta', capital: 'Voi', subCounties: ['Mwatate', 'Taveta', 'Voi', 'Wundanyi'] },
+    { code: 4, name: 'Tana River', capital: 'Hola', subCounties: ['Bura', 'Galole', 'Garsen'] },
+    { code: 13, name: 'Tharaka-Nithi', capital: 'Chuka', subCounties: ['Tharaka North', 'Tharaka South', 'Chuka', "Igambango'mbe", 'Maara', 'Chiakariga and Muthambi'] },
+    { code: 26, name: 'Trans-Nzoia', capital: 'Kitale', subCounties: ['Cherangany', 'Endebess', 'Kiminini', 'Kwanza', 'Saboti'] },
+    { code: 23, name: 'Turkana', capital: 'Lodwar', subCounties: ['Loima', 'Turkana Central', 'Turkana East', 'Turkana North', 'Turkana South'] },
+    { code: 27, name: 'Uasin Gishu', capital: 'Eldoret', subCounties: ['Ainabkoi', 'Kapseret', 'Kesses', 'Moiben', 'Soy', 'Turbo'] },
+    { code: 38, name: 'Vihiga', capital: 'Vihiga', subCounties: ['Emuhaya', 'Hamisi', 'Luanda', 'Sabatia', 'Vihiga'] },
+    { code: 8, name: 'Wajir', capital: 'Wajir', subCounties: ['Eldas', 'Tarbaj', 'Wajir East', 'Wajir North', 'Wajir South', 'Wajir West'] },
+    { code: 24, name: 'West Pokot', capital: 'Kapenguria', subCounties: ['Central Pokot', 'North Pokot', 'Pokot South', 'West Pokot'] }
+  ];
+
   // When joining existing org, show a single confirm/contact screen
-  const totalSteps = data.isJoiningExisting ? 1 : 4;
-  const progress = ((Math.min(currentStep, totalSteps - 1) + 1) / totalSteps) * 100;
+  // Retailers: role -> sales channels -> store details -> category -> opening year -> payment terms (6 steps, indices 0-5)
+  // Distributors: role -> org name -> contact -> location (4 steps, indices 0-3)
+  const totalSteps = data.isJoiningExisting ? 1 : data.role === 'retailer' ? 6 : 4;
+  const progress = data.isJoiningExisting 
+    ? 100 
+    : currentStep === 0 
+      ? 0 
+      : ((currentStep / (totalSteps - 1)) * 100);
 
   // Slide variants for left-right animation
   const slideVariants = {
@@ -113,10 +222,10 @@ export default function OnboardingPage() {
       }
     };
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(auth!, async (user) => {
       if (user) {
         try {
-          const userDocRef = doc(db, 'users', user.uid);
+          const userDocRef = doc(db!, 'users', user.uid);
           const userDoc = await getDoc(userDocRef);
           const userData = userDoc.data();
           if (userDoc.exists() && userData?.onboardingCompleted) {
@@ -172,8 +281,10 @@ export default function OnboardingPage() {
     setIsSubmitting(true);
     setError(null);
     try {
+      let organizationDisplayName = data.organizationName; // Track for email
+      
       if (data.isJoiningExisting && data.invitationId) {
-        const userDocRef = doc(db, 'users', user.uid);
+        const userDocRef = doc(db!, 'users', user.uid);
         await setDoc(userDocRef, {
           uid: user.uid,
           email: user.email,
@@ -232,9 +343,16 @@ export default function OnboardingPage() {
           console.error('Error sending notifications:', notificationError);
         }
       } else {
-  const userDocRef = doc(db, 'users', user.uid);
+  const userDocRef = doc(db!, 'users', user.uid);
         // Generate a unique, slugified organization id
         const { orgId, displayName } = await ensureUniqueOrgId(data.organizationName)
+        organizationDisplayName = displayName; // Store for email
+        
+        // For retailers, use sensible defaults for contact and location if not set
+        const contactNumber = data.contactNumber || user.email || 'Not provided';
+        const location = data.location || data.organizationName || 'Kenya';
+        const coordinates = data.coordinates || { lat: -1.2921, lng: 36.8219 }; // Nairobi default
+        
         await setDoc(userDocRef, {
           uid: user.uid,
           email: user.email,
@@ -242,9 +360,16 @@ export default function OnboardingPage() {
           role: data.role,
           organizationName: orgId,
           organizationDisplayName: displayName,
-          contactNumber: data.contactNumber,
-          location: data.location,
-          coordinates: data.coordinates,
+          contactNumber,
+          location,
+          coordinates,
+          salesChannels: data.salesChannels || [],
+          salesChannelDescription: data.salesChannelDescription || '',
+          website: data.website || '',
+          county: data.county || '',
+          subCounty: data.subCounty || '',
+          storeCategory: data.storeCategory || '',
+          openingYear: data.openingYear || '',
           onboardingCompleted: true,
           isOrganizationCreator: true,
           createdAt: new Date().toISOString(),
@@ -262,6 +387,23 @@ export default function OnboardingPage() {
           console.warn('Org scaffold provisioning failed:', e)
         }
       }
+      
+      // Send welcome email after successful onboarding
+      try {
+        await fetch('/api/send-welcome-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: user.email,
+            displayName: user.displayName || user.email?.split('@')[0] || 'there',
+            storeName: organizationDisplayName
+          })
+        });
+      } catch (emailError) {
+        console.error('Failed to send welcome email:', emailError);
+        // Don't block onboarding if email fails
+      }
+      
       router.push('/modules');
     } catch (error) {
       console.error('Error completing onboarding:', error);
@@ -273,7 +415,15 @@ export default function OnboardingPage() {
 
   const validateContactNumber = (number: string) => number.replace(/\D/g, '').length >= 9;
   const validateOrganizationName = (name: string) => name.trim().length >= 2 && name.trim().length <= 100;
-
+  const validateURL = (url: string) => {
+    try {
+      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+      return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+  
   const canProceed = () => {
     if (data.isJoiningExisting) {
       return data.contactNumber.trim() !== '' && validateContactNumber(data.contactNumber);
@@ -282,11 +432,59 @@ export default function OnboardingPage() {
       case 0:
         return data.role !== null;
       case 1:
+        // For retailers, step 1 is sales channels
+        if (data.role === 'retailer') {
+          return (data.salesChannels?.length || 0) > 0;
+        }
+        // For distributors, step 1 is organization name
         return validateOrganizationName(data.organizationName);
       case 2:
+        // For retailers, step 2 is store name + validation based on sales channel
+        if (data.role === 'retailer') {
+          const hasBrickMortar = data.salesChannels?.includes('brick-mortar');
+          const hasOnline = data.salesChannels?.includes('online');
+          const hasPopup = data.salesChannels?.includes('popup');
+          
+          if (hasBrickMortar) {
+            // If county is set (manual entry mode), need name, county, and sub-county
+            if (data.county && data.county !== 'manual') {
+              return validateOrganizationName(data.organizationName) && 
+                     data.county.trim() !== '' && 
+                     data.subCounty?.trim() !== '';
+            }
+            // If no county (map picker mode), need location from places picker
+            return data.organizationName.trim() !== '' && !!data.coordinates;
+          } else if (hasOnline) {
+            // Need store name and valid website
+            return validateOrganizationName(data.organizationName) && 
+                   data.website?.trim() !== '' && 
+                   validateURL(data.website || '');
+          } else if (hasPopup) {
+            // Need store name, county and sub-county
+            return validateOrganizationName(data.organizationName) && 
+                   data.county?.trim() !== '' && 
+                   data.subCounty?.trim() !== '';
+          }
+          return validateOrganizationName(data.organizationName);
+        }
+        // For distributors, step 2 is contact number
         return data.contactNumber.trim() !== '' && validateContactNumber(data.contactNumber);
       case 3:
+        // For retailers, step 3 is store category
+        if (data.role === 'retailer') {
+          return data.storeCategory?.trim() !== '';
+        }
+        // For distributors, step 3 is location
         return data.location.trim() !== '' && !!data.coordinates;
+      case 4:
+        // For retailers, step 4 is opening year
+        if (data.role === 'retailer') {
+          return data.openingYear?.trim() !== '';
+        }
+        return false;
+      case 5:
+        // For retailers only, step 5 is payment terms (always can proceed)
+        return true;
       default:
         return false;
     }
@@ -323,7 +521,7 @@ export default function OnboardingPage() {
               {/* Progress Bar */}
               <div className="mb-10">
                 <div className="mb-2 flex items-center justify-between text-[11px] uppercase tracking-[0.28em] text-slate-200/70">
-                  <span>{data.isJoiningExisting ? 'Accepting Invitation' : `Step ${Math.min(currentStep, totalSteps - 1) + 1} of ${totalSteps}`}</span>
+                  <span>{data.isJoiningExisting ? 'Accepting Invitation' : `Step ${currentStep}`}</span>
                   <span>{Math.round(progress)}% complete</span>
                 </div>
                 <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/10">
@@ -431,8 +629,7 @@ export default function OnboardingPage() {
                         className="space-y-7"
                       >
                         <div className="text-center">
-                          <h2 className="mb-2 text-xl font-semibold text-slate-100">What type of organization are you creating?</h2>
-                          <p className="text-sm text-slate-300/80">We&rsquo;ll tailor your workspace defaults to this role.</p>
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">Hi {user?.displayName?.split(' ')[0] || 'there'}, what type of organization are you setting up?</h2>
                         </div>
                         <div className="space-y-4">
                           <button
@@ -452,8 +649,8 @@ export default function OnboardingPage() {
                                 <Store className="h-6 w-6" />
                               </div>
                               <div className="flex-1">
-                                <div className="text-base font-semibold text-slate-100">Retail / POS</div>
-                                <div className="text-sm text-slate-300/80">Serve customers and process in-store sales.</div>
+                                <div className="text-base font-semibold text-slate-100">Retailer</div>
+                                <div className="text-sm text-slate-300/80">We sell to end consumers, we want to buy wholesale items on Vendai</div>
                               </div>
                               {data.role === 'retailer' && (
                                 <CheckCircle className="ml-auto h-5 w-5 text-sky-200" />
@@ -477,8 +674,8 @@ export default function OnboardingPage() {
                                 <Truck className="h-6 w-6" />
                               </div>
                               <div className="flex-1">
-                                <div className="text-base font-semibold text-slate-100">Distributor / Supplier</div>
-                                <div className="text-sm text-slate-300/80">Manage catalogue, fulfil orders, and deliver.</div>
+                                <div className="text-base font-semibold text-slate-100">Distributor / Wholesaler / Supplier</div>
+                                <div className="text-sm text-slate-300/80">We sell to retailers, we want to sell wholesale items on Vendai</div>
                               </div>
                               {data.role === 'distributor' && (
                                 <CheckCircle className="ml-auto h-5 w-5 text-indigo-200" />
@@ -489,8 +686,100 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 1: Organization Name */}
-                    {!data.isJoiningExisting && currentStep === 1 && (
+                    {/* Step 1 for Retailers: Sales Channels */}
+                    {!data.isJoiningExisting && currentStep === 1 && data.role === 'retailer' && (
+                      <motion.div
+                        key="sales-channels"
+                        variants={slideVariants}
+                        custom={direction}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3 }}
+                        className="space-y-7"
+                      >
+                        <div className="text-center">
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">Where do you sell your products?</h2>
+                        </div>
+                        <div className="space-y-3">
+                          {[
+                            { id: 'brick-mortar', label: 'Brick and mortar store', description: 'A permanent retail location' },
+                            { id: 'online', label: 'Online', description: 'My website or social channel' },
+                            { id: 'popup', label: 'Pop-up shop', description: 'A temporary retail location' },
+                            { id: 'other', label: 'Somewhere else', description: '' }
+                          ].map((channel) => {
+                            const isSelected = data.salesChannels?.includes(channel.id);
+                            const isOther = channel.id === 'other';
+                            return (
+                              <div key={channel.id}>
+                                <button
+                                  onClick={() => {
+                                    const current = data.salesChannels || [];
+                                    if (isSelected) {
+                                      setData({ ...data, salesChannels: current.filter(c => c !== channel.id) });
+                                    } else {
+                                      setData({ ...data, salesChannels: [...current, channel.id] });
+                                    }
+                                  }}
+                                  className={`w-full rounded-2xl border px-5 py-4 text-left transition-all duration-200 ${
+                                    isSelected
+                                      ? 'border-sky-300/60 bg-sky-500/15'
+                                      : 'border-white/12 bg-white/6 hover:border-sky-200/40'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <div className="text-sm font-medium text-slate-100">{channel.label}</div>
+                                      {channel.description && (
+                                        <div className="text-xs text-slate-300/70">{channel.description}</div>
+                                      )}
+                                    </div>
+                                    <div className={`h-5 w-5 rounded border-2 flex items-center justify-center ${
+                                      isSelected ? 'border-sky-300 bg-sky-500' : 'border-white/30'
+                                    }`}>
+                                      {isSelected && (
+                                        <CheckCircle className="h-4 w-4 text-white" />
+                                      )}
+                                    </div>
+                                  </div>
+                                </button>
+                                {isOther && isSelected && (
+                                  <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="mt-3"
+                                  >
+                                    <label className="mb-2 block text-xs text-slate-300/80">Describe where you sell your products</label>
+                                    <textarea
+                                      value={data.salesChannelDescription || ''}
+                                      onChange={(e) => setData({ ...data, salesChannelDescription: e.target.value })}
+                                      placeholder="Tell us more..."
+                                      maxLength={250}
+                                      rows={3}
+                                      className="w-full rounded-xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25"
+                                    />
+                                    <div className="mt-1 text-right text-xs text-slate-400">{data.salesChannelDescription?.length || 0}/250</div>
+                                  </motion.div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="text-center">
+                          <button
+                            onClick={() => setShowRetailerWarning(true)}
+                            className="text-sm text-slate-400 underline transition hover:text-slate-300"
+                          >
+                            I&rsquo;m just shopping for myself
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Step 1 for Distributors / Step 2 for Retailers: Store/Organization Name */}
+                    {!data.isJoiningExisting && 
+                     ((currentStep === 1 && data.role === 'distributor') || (currentStep === 2 && data.role === 'retailer')) && (
                       <motion.div
                         key="org-name"
                         variants={slideVariants}
@@ -502,37 +791,466 @@ export default function OnboardingPage() {
                         className="space-y-7"
                       >
                         <div className="text-center">
-                          <h2 className="mb-2 text-xl font-semibold text-slate-100">What&rsquo;s your organization name?</h2>
-                          <p className="text-sm text-slate-300/80">We&rsquo;ll surface this name across dashboards and invites.</p>
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">
+                            {data.role === 'retailer' ? "What's your store's name?" : "What's your organization name?"}
+                          </h2>
                         </div>
-                        <div>
-                          <div className="mb-3 flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
-                              <Building className="h-4 w-4 text-slate-200" />
+                        <div className="space-y-6">
+                          {/* Brick & Mortar: Use Places Picker or Manual Entry */}
+                          {data.role === 'retailer' && data.salesChannels?.includes('brick-mortar') && (
+                            <>
+                              <div>
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                                    <Store className="h-4 w-4 text-slate-200" />
+                                  </div>
+                                  <label className="text-sm font-medium text-slate-200">Store name</label>
+                                </div>
+                                {!data.county ? (
+                                  <GoogleMapsWrapper apiKey={mapsApiKey}>
+                                    <LocationPickerWithMap
+                                      value={data.organizationName}
+                                      onLocationSelect={(location: string, coordinates?: { lat: number; lng: number }, placeData?: { website?: string; placeId?: string; name?: string }) => {
+                                        const updates: Partial<OnboardingData> = { 
+                                          organizationName: location, 
+                                          location, 
+                                          coordinates 
+                                        };
+                                        // Autofill website if available from Google Places
+                                        if (placeData?.website && !data.website) {
+                                          updates.website = placeData.website;
+                                        }
+                                        setData({ ...data, ...updates });
+                                      }}
+                                      placeholder="Search for your store location..."
+                                    />
+                                  </GoogleMapsWrapper>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={data.organizationName}
+                                    onChange={(e) => setData({ ...data, organizationName: e.target.value })}
+                                    placeholder="e.g. Mambo Retail"
+                                    className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                                      data.organizationName && !validateOrganizationName(data.organizationName)
+                                        ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                        : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                                    }`}
+                                    autoFocus
+                                  />
+                                )}
+                                {data.organizationName && data.county && !validateOrganizationName(data.organizationName) && (
+                                  <p className="mt-2 text-xs text-red-300/80">Store name must be at least 2 characters long.</p>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    if (data.county) {
+                                      // Switch back to map picker
+                                      setData({ ...data, county: '', subCounty: '', organizationName: '', coordinates: undefined });
+                                    } else {
+                                      // Enable manual entry
+                                      setData({ ...data, county: 'manual' });
+                                    }
+                                  }}
+                                  className="mt-2 text-sm text-sky-300 underline transition hover:text-sky-200"
+                                >
+                                  {data.county ? 'Use location search instead' : 'Enter manually'}
+                                </button>
+                              </div>
+                              {data.county && data.county !== 'manual' && (
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="mb-2 block text-sm font-medium text-slate-200">County</label>
+                                    <select
+                                      value={data.county || ''}
+                                      onChange={(e) => {
+                                        setData({ ...data, county: e.target.value, subCounty: '' });
+                                      }}
+                                      className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 [&>option]:text-slate-950"
+                                    >
+                                      <option value="">Select county</option>
+                                      {kenyanCounties.map(county => (
+                                        <option key={county.code} value={county.name}>{county.name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="mb-2 block text-sm font-medium text-slate-200">Sub-County</label>
+                                    <select
+                                      value={data.subCounty || ''}
+                                      onChange={(e) => setData({ ...data, subCounty: e.target.value })}
+                                      disabled={!data.county || data.county === 'manual'}
+                                      className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 disabled:opacity-50 [&>option]:text-slate-950"
+                                    >
+                                      <option value="">Select sub-county</option>
+                                      {data.county && data.county !== 'manual' && kenyanCounties.find(c => c.name === data.county)?.subCounties.map(sub => (
+                                        <option key={sub} value={sub}>{sub}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+                              )}
+                              <div>
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                                    <Building className="h-4 w-4 text-slate-200" />
+                                  </div>
+                                  <label className="text-sm font-medium text-slate-200">Website <span className="text-slate-400">(optional)</span></label>
+                                </div>
+                                <input
+                                  type="url"
+                                  value={data.website || ''}
+                                  onChange={(e) => setData({ ...data, website: e.target.value })}
+                                  placeholder="e.g. https://mystore.com"
+                                  className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                                    data.website && !validateURL(data.website)
+                                      ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                      : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                                  }`}
+                                />
+                                {data.website && !validateURL(data.website) && (
+                                  <p className="mt-2 text-xs text-red-300/80">Please enter a valid URL</p>
+                                )}
+                              </div>
+                            </>
+                          )}
+
+                          {/* Online: Store Name + Website (mandatory) */}
+                          {data.role === 'retailer' && data.salesChannels?.includes('online') && !data.salesChannels?.includes('brick-mortar') && (
+                            <>
+                              <div>
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                                    <Store className="h-4 w-4 text-slate-200" />
+                                  </div>
+                                  <label className="text-sm font-medium text-slate-200">Store name</label>
+                                </div>
+                                <input
+                                  type="text"
+                                  value={data.organizationName}
+                                  onChange={(e) => setData({ ...data, organizationName: e.target.value })}
+                                  placeholder="e.g. Mambo Retail"
+                                  className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                                    data.organizationName && !validateOrganizationName(data.organizationName)
+                                      ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                      : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                                  }`}
+                                  autoFocus
+                                />
+                                {data.organizationName && !validateOrganizationName(data.organizationName) && (
+                                  <p className="mt-2 text-xs text-red-300/80">Store name must be at least 2 characters long.</p>
+                                )}
+                              </div>
+                              <div>
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                                    <Building className="h-4 w-4 text-slate-200" />
+                                  </div>
+                                  <label className="text-sm font-medium text-slate-200">Website</label>
+                                </div>
+                                <input
+                                  type="url"
+                                  value={data.website || ''}
+                                  onChange={(e) => setData({ ...data, website: e.target.value })}
+                                  placeholder="e.g. https://mystore.com"
+                                  className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                                    data.website && !validateURL(data.website)
+                                      ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                      : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                                  }`}
+                                />
+                                {data.website && !validateURL(data.website) && (
+                                  <p className="mt-2 text-xs text-red-300/80">Please enter a valid URL</p>
+                                )}
+                              </div>
+                            </>
+                          )}
+
+                          {/* Pop-up Shop: Store Name + County + Sub-County + Optional Website */}
+                          {data.role === 'retailer' && data.salesChannels?.includes('popup') && !data.salesChannels?.includes('brick-mortar') && !data.salesChannels?.includes('online') && (
+                            <>
+                              <div>
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                                    <Store className="h-4 w-4 text-slate-200" />
+                                  </div>
+                                  <label className="text-sm font-medium text-slate-200">Store name</label>
+                                </div>
+                                <input
+                                  type="text"
+                                  value={data.organizationName}
+                                  onChange={(e) => setData({ ...data, organizationName: e.target.value })}
+                                  placeholder="e.g. Mambo Pop-up"
+                                  className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                                    data.organizationName && !validateOrganizationName(data.organizationName)
+                                      ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                      : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                                  }`}
+                                  autoFocus
+                                />
+                                {data.organizationName && !validateOrganizationName(data.organizationName) && (
+                                  <p className="mt-2 text-xs text-red-300/80">Store name must be at least 2 characters long.</p>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <label className="mb-2 block text-sm font-medium text-slate-200">County</label>
+                                  <select
+                                    value={data.county || ''}
+                                    onChange={(e) => {
+                                      setData({ ...data, county: e.target.value, subCounty: '' });
+                                    }}
+                                    className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 [&>option]:text-slate-950"
+                                  >
+                                    <option value="">Select county</option>
+                                    {kenyanCounties.map(county => (
+                                      <option key={county.code} value={county.name}>{county.name}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="mb-2 block text-sm font-medium text-slate-200">Sub-County</label>
+                                  <select
+                                    value={data.subCounty || ''}
+                                    onChange={(e) => setData({ ...data, subCounty: e.target.value })}
+                                    disabled={!data.county}
+                                    className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 disabled:opacity-50 [&>option]:text-slate-950"
+                                  >
+                                    <option value="">Select sub-county</option>
+                                    {data.county && kenyanCounties.find(c => c.name === data.county)?.subCounties.map(sub => (
+                                      <option key={sub} value={sub}>{sub}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                              <div>
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                                    <Building className="h-4 w-4 text-slate-200" />
+                                  </div>
+                                  <label className="text-sm font-medium text-slate-200">Website <span className="text-slate-400">(optional)</span></label>
+                                </div>
+                                <input
+                                  type="url"
+                                  value={data.website || ''}
+                                  onChange={(e) => setData({ ...data, website: e.target.value })}
+                                  placeholder="e.g. https://mystore.com"
+                                  className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                                    data.website && !validateURL(data.website)
+                                      ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                      : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                                  }`}
+                                />
+                                {data.website && !validateURL(data.website) && (
+                                  <p className="mt-2 text-xs text-red-300/80">Please enter a valid URL</p>
+                                )}
+                              </div>
+                            </>
+                          )}
+
+                          {/* Other/Default: Just store name + optional website */}
+                          {data.role === 'retailer' && 
+                           !data.salesChannels?.includes('brick-mortar') && 
+                           !data.salesChannels?.includes('online') && 
+                           !data.salesChannels?.includes('popup') && (
+                            <>
+                              <div>
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                                    <Store className="h-4 w-4 text-slate-200" />
+                                  </div>
+                                  <label className="text-sm font-medium text-slate-200">Store name</label>
+                                </div>
+                                <input
+                                  type="text"
+                                  value={data.organizationName}
+                                  onChange={(e) => setData({ ...data, organizationName: e.target.value })}
+                                  placeholder="e.g. Mambo Retail"
+                                  className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                                    data.organizationName && !validateOrganizationName(data.organizationName)
+                                      ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                      : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                                  }`}
+                                  autoFocus
+                                />
+                                {data.organizationName && !validateOrganizationName(data.organizationName) && (
+                                  <p className="mt-2 text-xs text-red-300/80">Store name must be at least 2 characters long.</p>
+                                )}
+                              </div>
+                              <div>
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                                    <Building className="h-4 w-4 text-slate-200" />
+                                  </div>
+                                  <label className="text-sm font-medium text-slate-200">Website <span className="text-slate-400">(optional)</span></label>
+                                </div>
+                                <input
+                                  type="url"
+                                  value={data.website || ''}
+                                  onChange={(e) => setData({ ...data, website: e.target.value })}
+                                  placeholder="e.g. https://mystore.com"
+                                  className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                                    data.website && !validateURL(data.website)
+                                      ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                      : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                                  }`}
+                                />
+                                {data.website && !validateURL(data.website) && (
+                                  <p className="mt-2 text-xs text-red-300/80">Please enter a valid URL</p>
+                                )}
+                              </div>
+                            </>
+                          )}
+
+                          {/* Distributor: Regular organization name */}
+                          {data.role === 'distributor' && (
+                            <div>
+                              <div className="mb-3 flex items-center gap-3">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                                  <Building className="h-4 w-4 text-slate-200" />
+                                </div>
+                                <label className="text-sm font-medium text-slate-200">Organization name</label>
+                              </div>
+                              <input
+                                type="text"
+                                value={data.organizationName}
+                                onChange={(e) => setData({ ...data, organizationName: e.target.value })}
+                                placeholder="e.g. Fresh Foods Distribution"
+                                className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                                  data.organizationName && !validateOrganizationName(data.organizationName)
+                                    ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                    : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                                }`}
+                                autoFocus
+                              />
+                              {data.organizationName && !validateOrganizationName(data.organizationName) && (
+                                <p className="mt-2 text-xs text-red-300/80">Organization name must be at least 2 characters long.</p>
+                              )}
                             </div>
-                            <label className="text-sm font-medium text-slate-200">Organization name</label>
-                          </div>
-                          <input
-                            type="text"
-                            value={data.organizationName}
-                            onChange={(e) => setData({ ...data, organizationName: e.target.value })}
-                            placeholder={data.role === 'retailer' ? 'e.g. Mambo Retail Group' : 'e.g. Fresh Foods Distribution'}
-                            className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
-                              data.organizationName && !validateOrganizationName(data.organizationName)
-                                ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
-                                : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
-                            }`}
-                            autoFocus
-                          />
-                          {data.organizationName && !validateOrganizationName(data.organizationName) && (
-                            <p className="mt-2 text-xs text-red-300/80">Organization name must be at least 2 characters long.</p>
                           )}
                         </div>
                       </motion.div>
                     )}
 
-                    {/* Step 2: Contact Number */}
-                    {!data.isJoiningExisting && currentStep === 2 && (
+                    {/* Step 3 for Retailers: Store Category */}
+                    {!data.isJoiningExisting && currentStep === 3 && data.role === 'retailer' && (
+                      <motion.div
+                        key="category"
+                        variants={slideVariants}
+                        custom={direction}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3 }}
+                        className="space-y-7"
+                      >
+                        <div className="text-center">
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">Which of these best describes your store?</h2>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {storeCategories.map((category) => {
+                            const isSelected = data.storeCategory === category.id;
+                            return (
+                              <button
+                                key={category.id}
+                                onClick={() => setData({ ...data, storeCategory: category.id })}
+                                className={`relative rounded-xl border px-4 py-3 text-center transition-all duration-200 ${
+                                  isSelected
+                                    ? 'border-sky-300/60 bg-sky-500/15 shadow-[0_12px_35px_-20px_rgba(56,189,248,0.65)]'
+                                    : 'border-white/12 bg-white/6 hover:border-sky-200/40 hover:bg-sky-400/10'
+                                }`}
+                              >
+                                <div className={`text-sm font-medium ${
+                                  isSelected ? 'text-slate-100' : 'text-slate-200'
+                                }`}>
+                                  {category.label}
+                                </div>
+                                {isSelected && (
+                                  <div className="absolute top-2 right-2">
+                                    <CheckCircle className="h-4 w-4 text-sky-200" />
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Step 4 for Retailers: Opening Year */}
+                    {!data.isJoiningExisting && currentStep === 4 && data.role === 'retailer' && (
+                      <motion.div
+                        key="opening-year"
+                        variants={slideVariants}
+                        custom={direction}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3 }}
+                        className="space-y-7"
+                      >
+                        <div className="text-center">
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">When did your store open?</h2>
+                        </div>
+                        <div className="space-y-3">
+                          {openingYearOptions.map((option) => {
+                            const isSelected = data.openingYear === option.id;
+                            return (
+                              <button
+                                key={option.id}
+                                onClick={() => setData({ ...data, openingYear: option.id })}
+                                className={`w-full rounded-2xl border px-5 py-4 text-left transition-all duration-200 ${
+                                  isSelected
+                                    ? 'border-sky-300/60 bg-sky-500/15 shadow-[0_18px_45px_-25px_rgba(56,189,248,0.65)]'
+                                    : 'border-white/12 bg-white/6 hover:border-sky-200/40 hover:bg-sky-400/10'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-medium text-slate-100">{option.label}</span>
+                                  {isSelected && (
+                                    <CheckCircle className="h-5 w-5 text-sky-200" />
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Step 5 for Retailers: Payment Terms */}
+                    {!data.isJoiningExisting && currentStep === 5 && data.role === 'retailer' && (
+                      <motion.div
+                        key="payment-terms"
+                        variants={slideVariants}
+                        custom={direction}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3 }}
+                        className="space-y-7"
+                      >
+                        <div className="text-center">
+                          <h2 className="mb-4 text-2xl font-semibold text-slate-100">Congrats! You&rsquo;ve got payment terms</h2>
+                          <p className="text-sm text-slate-300/80">
+                            This means you can buy inventory today and pay up to 60 days later—interest-free.
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-white/8 bg-gradient-to-br from-amber-50/5 to-orange-50/5 p-8 backdrop-blur-xl">
+                          <div className="text-center">
+                            <div className="mb-3 text-sm font-medium text-slate-400">{data.organizationName || 'Your Store'}</div>
+                            <div className="mb-4 text-5xl font-bold tracking-tight text-slate-100">KES 20,000</div>
+                            <div className="text-sm text-slate-300/80">Your available payment terms</div>
+                          </div>
+                        </div>
+                        <div className="text-center text-xs text-slate-400">
+                          We use manual and automated processes to verify all retailers on Vendai.
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Step 2 for Distributors: Contact Number */}
+                    {!data.isJoiningExisting && currentStep === 2 && data.role === 'distributor' && (
                       <motion.div
                         key="contact"
                         variants={slideVariants}
@@ -545,7 +1263,6 @@ export default function OnboardingPage() {
                       >
                         <div className="text-center">
                           <h2 className="mb-2 text-xl font-semibold text-slate-100">What&rsquo;s your contact number?</h2>
-                          <p className="text-sm text-slate-300/80">We may use this for account verification or quick onboarding help.</p>
                         </div>
                         <div>
                           <div className="mb-3 flex items-center gap-3">
@@ -572,8 +1289,8 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 3: Location with Map */}
-                    {!data.isJoiningExisting && currentStep === 3 && (
+                    {/* Step 3 for Distributors: Location with Map */}
+                    {!data.isJoiningExisting && currentStep === 3 && data.role === 'distributor' && (
                       <motion.div
                         key="location"
                         variants={slideVariants}
@@ -586,7 +1303,6 @@ export default function OnboardingPage() {
                       >
                         <div className="text-center">
                           <h2 className="mb-2 text-xl font-semibold text-slate-100">Where is your business located?</h2>
-                          <p className="text-sm text-slate-300/80">Search or drop a pin so suppliers and teammates can find you.</p>
                         </div>
                         <div>
                           <div className="mb-3 flex items-center gap-3">
@@ -599,7 +1315,7 @@ export default function OnboardingPage() {
                             <LocationPickerWithMap
                               value={data.location}
                               onLocationSelect={(location: string, coordinates?: { lat: number; lng: number }) => setData({ ...data, location, coordinates })}
-                              placeholder={data.role === 'retailer' ? 'Search your main location…' : 'Search your distribution center…'}
+                              placeholder="Search your distribution center…"
                             />
                           </GoogleMapsWrapper>
                         </div>
@@ -658,6 +1374,47 @@ export default function OnboardingPage() {
               </Card>
             </motion.div>
           </div>
+        </div>
+      )}
+
+      {/* Retailer-only warning modal */}
+      {showRetailerWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md px-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-lg rounded-3xl border border-white/12 bg-slate-900/95 p-8 shadow-2xl backdrop-blur-xl"
+          >
+            <div className="mb-6 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-indigo-300/40 bg-indigo-500/15">
+                <AlertCircle className="h-8 w-8 text-indigo-200" />
+              </div>
+              <h2 className="mb-2 text-xl font-semibold text-slate-100">Vendai is only available to retailers</h2>
+              <p className="text-sm text-slate-300/80">
+                Vendai is a wholesale marketplace designed for retail shops to find and order inventory for their stores.
+              </p>
+            </div>
+            <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
+              <p className="text-sm text-slate-300/90">
+                If you are interested in starting a Retailer store Vendai can help you! We have a program called Open With Vendai that can help new retailers open their dream store.
+              </p>
+            </div>
+            <div className="mt-6 flex gap-3">
+              <Button
+                onClick={() => setShowRetailerWarning(false)}
+                variant="outline"
+                className="flex-1 rounded-xl border border-white/12 bg-white/8 text-slate-200 transition hover:border-sky-200/40 hover:bg-white/12"
+              >
+                Go back
+              </Button>
+              <Button
+                onClick={() => window.open('https://vendai.digital', '_blank')}
+                className="flex-1 rounded-xl bg-gradient-to-r from-sky-500/90 via-cyan-400/90 to-indigo-500/90 text-slate-950 shadow-[0_18px_45px_-25px_rgba(56,189,248,0.85)]"
+              >
+                Learn More
+              </Button>
+            </div>
+          </motion.div>
         </div>
       )}
     </div>

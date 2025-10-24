@@ -11,7 +11,7 @@ declare global {
 }
 
 interface LocationPickerWithMapProps {
-  onLocationSelect: (location: string, coordinates?: { lat: number; lng: number }) => void;
+  onLocationSelect: (location: string, coordinates?: { lat: number; lng: number }, placeData?: { website?: string; placeId?: string; name?: string }) => void;
   value: string;
   placeholder?: string;
 }
@@ -102,7 +102,7 @@ export function LocationPickerWithMap({ onLocationSelect, value, placeholder }: 
           // Initialize autocomplete
           const autocompleteInstance = new window.google.maps.places.Autocomplete(inputRef.current, {
             types: ['establishment', 'geocode'],
-            fields: ['place_id', 'formatted_address', 'geometry', 'name'],
+            fields: ['place_id', 'formatted_address', 'geometry', 'name', 'website'],
             componentRestrictions: { country: 'ke' }
           });
 
@@ -117,6 +117,16 @@ export function LocationPickerWithMap({ onLocationSelect, value, placeholder }: 
                 lng: place.geometry.location.lng()
               };
 
+              // Extract place data including website
+              const placeData = {
+                website: place.website,
+                placeId: place.place_id,
+                name: place.name
+              };
+
+              // Use place name instead of full formatted address for establishment name
+              const displayName = place.name || place.formatted_address;
+
               // Update map and marker
               mapInstance.setCenter(position);
               mapInstance.setZoom(15);
@@ -127,9 +137,9 @@ export function LocationPickerWithMap({ onLocationSelect, value, placeholder }: 
                 markerInstance.setAnimation(null);
               }, 1400);
 
-              // Update state
+              // Update state - pass the name but keep full address in location field
               setCurrentLocation(position);
-              onLocationSelect(place.formatted_address, position);
+              onLocationSelect(displayName, position, placeData);
             }
           });
 

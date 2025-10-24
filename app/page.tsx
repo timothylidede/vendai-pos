@@ -12,6 +12,14 @@ import { NotificationDots } from "@/components/notification-dots"
 import { Sidebar } from "@/components/sidebar"
 import { UniversalLoading } from "@/components/universal-loading"
 
+const resolvePostAuthRoute = (role?: string | null, onboardingCompleted?: boolean) => {
+  if (!onboardingCompleted) {
+    return '/onboarding/choose'
+  }
+
+  return role === 'distributor' ? '/modules/inventory' : '/modules'
+}
+
 export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
@@ -25,6 +33,7 @@ export default function HomePage() {
 
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
       if (authUser) {
+        setUser(authUser)
         try {
           // Check if user has completed onboarding
           const userDocRef = doc(db!, 'users', authUser.uid)
@@ -32,27 +41,25 @@ export default function HomePage() {
           
           if (userDoc.exists()) {
             const userData = userDoc.data()
-            const hasRole = userData.role
-            const onboardingCompleted = userData.onboardingCompleted
+            const rawRole = typeof userData.role === 'string' ? userData.role.toLowerCase() : null
+            const normalizedRole = rawRole === 'distributor' ? 'distributor' : 'retailer'
+            const onboardingCompleted = Boolean(userData.onboardingCompleted)
+            const destination = resolvePostAuthRoute(normalizedRole, onboardingCompleted)
             
-            if (hasRole && onboardingCompleted) {
-              // User is authenticated and onboarded - redirect to modules
-              router.push('/modules')
-              return
-            } else {
-              // User exists but hasn't completed onboarding
-              router.push('/onboarding/choose')
-              return
-            }
+            router.replace(destination)
+            setIsLoading(false)
+            return
           } else {
             // User document doesn't exist - redirect to onboarding chooser
-            router.push('/onboarding/choose')
+            router.replace('/onboarding/choose')
+            setIsLoading(false)
             return
           }
         } catch (error) {
           console.error('Error checking user data:', error)
           // On error, redirect to onboarding chooser to be safe
-          router.push('/onboarding/choose')
+          router.replace('/onboarding/choose')
+          setIsLoading(false)
           return
         }
       } else {

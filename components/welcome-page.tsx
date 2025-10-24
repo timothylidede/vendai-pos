@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from './ui/button';
 import { motion } from 'framer-motion';
-import { signInWithRedirect, signInWithCredential, GoogleAuthProvider, getRedirectResult } from 'firebase/auth';
+import { signInWithRedirect, signInWithPopup, signInWithCredential, GoogleAuthProvider, getRedirectResult } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '@/lib/firebase';
 import { useEffect, useState } from 'react';
@@ -31,6 +31,14 @@ type ElectronOAuthResult = {
     idToken?: string | null;
     accessToken?: string | null;
   };
+};
+
+const resolvePostAuthRoute = (role?: string | null, onboardingCompleted?: boolean) => {
+  if (!onboardingCompleted) {
+    return '/onboarding/choose';
+  }
+
+  return role === 'distributor' ? '/modules/inventory' : '/modules';
 };
 
 export function WelcomePage() {
@@ -99,15 +107,15 @@ export function WelcomePage() {
 
     setIsElectron(detectedElectron);
 
-    // Handle redirect result from Google Sign-In with timeout
+    // Only check for redirect result in case popup was blocked and we fell back to redirect
+    // This is now a fallback mechanism only, primary flow is popup
     if (!detectedElectron) {
-      // Set a timeout to prevent hanging on redirect check
       const redirectTimeout = setTimeout(() => {
         if (isLoading) {
           console.warn('⚠️ Redirect check timeout, proceeding...');
           setIsLoading(false);
         }
-      }, 3000); // 3 second timeout for redirect check
+      }, 2000); // Reduced timeout since popup is primary
 
       handleRedirectResult().finally(() => {
         clearTimeout(redirectTimeout);
@@ -153,10 +161,12 @@ export function WelcomePage() {
     if (electronUser && !user) {
       console.log('🔄 Found Electron user in context, checking authentication status...');
       // The user was previously authenticated, redirect to appropriate page
-      const role = localStorage.getItem('vendai-user-role') || 'retailer';
+      const storedRole = localStorage.getItem('vendai-user-role') || 'retailer';
+      const normalizedRole = storedRole.toLowerCase() === 'distributor' ? 'distributor' : 'retailer';
       const isFirstLogin = localStorage.getItem('vendai-first-login') === 'true';
+  const targetRoute = resolvePostAuthRoute(normalizedRole, !isFirstLogin);
       setIsRedirecting(true);
-      router.push(isFirstLogin ? '/onboarding/choose' : '/modules');
+      router.replace(targetRoute);
     }
 
     // Set up OAuth completion listener for Electron
@@ -185,12 +195,12 @@ export function WelcomePage() {
     if (!isMounted || authLoading) return;
     if (!user) return;
 
-    const hasCompletedOnboarding = Boolean(userData?.onboardingCompleted);
-    const targetRoute = hasCompletedOnboarding ? '/modules' : '/onboarding/choose';
+    const normalizedRole = userData?.role?.toLowerCase() === 'distributor' ? 'distributor' : 'retailer';
+    const targetRoute = resolvePostAuthRoute(normalizedRole, userData?.onboardingCompleted);
 
     setIsRedirecting(true);
     router.replace(targetRoute);
-  }, [authLoading, isMounted, router, user, userData?.onboardingCompleted]);
+  }, [authLoading, isMounted, router, user, userData?.onboardingCompleted, userData?.role]);
 
   const getErrorMessage = (error: any): string => {
     if (error?.code === 'auth/unauthorized-domain') {
@@ -272,21 +282,25 @@ export function WelcomePage() {
     }
 
     try {
-      // Don't sign out before redirect - this can cause issues
-      // The redirect will handle the auth flow cleanly
-      
-      // Use redirect flow - goes directly to Google account picker
-      // This is the recommended approach for web apps:
-      // - No popup blockers
-      // - Direct to Google (no Firebase handler intermediary)
-      // - Better mobile experience
-      console.log('🔄 Starting Google sign-in redirect...');
+      // Use popup flow - preserves page context and state
+      // This prevents the redirect loop issue where context is lost
+      console.log('🔄 Starting Google sign-in popup...');
       console.log('- Auth domain:', auth.app.options.authDomain);
-      await signInWithRedirect(auth, googleProvider);
-      // User will be redirected to Google, then back to our app
-      // Result is handled in handleRedirectResult
-    } catch (error) {
-      throw error;
+      
+      const result = await signInWithPopup(auth, googleProvider);
+      
+      if (result?.user) {
+        console.log('✅ Popup authentication successful', result.user.email);
+        await handleUserAuthentication(result.user);
+      }
+    } catch (error: any) {
+      // If popup is blocked, fallback to redirect
+      if (error?.code === 'auth/popup-blocked') {
+        console.log('⚠️ Popup blocked, falling back to redirect...');
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        throw error;
+      }
     }
   };
 
@@ -372,12 +386,13 @@ export function WelcomePage() {
 
       if (snapshot.exists()) {
         const userData = snapshot.data() as { role?: string; onboardingCompleted?: boolean };
-        const role = userData.role || 'retailer';
+  const normalizedRole = userData.role?.toLowerCase() === 'distributor' ? 'distributor' : 'retailer';
         const onboardingCompleted = Boolean(userData.onboardingCompleted);
+        const destination = resolvePostAuthRoute(normalizedRole, onboardingCompleted);
 
-        localStorage.setItem('vendai-user-role', role);
+        localStorage.setItem('vendai-user-role', normalizedRole);
         localStorage.setItem('vendai-first-login', onboardingCompleted ? 'false' : 'true');
-        router.push(onboardingCompleted ? '/modules' : '/onboarding/choose');
+        router.replace(destination);
       } else {
         await setDoc(userDocRef, {
           uid: user.uid,
@@ -389,8 +404,9 @@ export function WelcomePage() {
           role: 'retailer',
         });
 
+        localStorage.setItem('vendai-user-role', 'retailer');
         localStorage.setItem('vendai-first-login', 'true');
-        router.push('/onboarding/choose');
+        router.replace('/onboarding/choose');
       }
     } catch (error) {
       setIsRedirecting(false);
@@ -408,7 +424,7 @@ export function WelcomePage() {
       localStorage.setItem('vendai-first-login', 'true');
       localStorage.setItem('vendai-electron-user', JSON.stringify(googleUser));
       setIsRedirecting(true);
-      router.push('/onboarding/choose');
+      router.replace('/onboarding/choose');
       return;
     }
 
@@ -418,17 +434,18 @@ export function WelcomePage() {
 
       if (snapshot.exists()) {
         const data = snapshot.data() as { role?: string; onboardingCompleted?: boolean };
-        const role = data.role || 'retailer';
+  const normalizedRole = data.role?.toLowerCase() === 'distributor' ? 'distributor' : 'retailer';
         const onboardingCompleted = Boolean(data.onboardingCompleted);
+        const destination = resolvePostAuthRoute(normalizedRole, onboardingCompleted);
 
-        console.log('✅ Existing user found, role:', role, 'onboarding completed:', onboardingCompleted);
+        console.log('✅ Existing user found, role:', normalizedRole, 'onboarding completed:', onboardingCompleted);
 
-        localStorage.setItem('vendai-user-role', role);
+        localStorage.setItem('vendai-user-role', normalizedRole);
         localStorage.setItem('vendai-first-login', onboardingCompleted ? 'false' : 'true');
         localStorage.setItem('vendai-electron-user', JSON.stringify(googleUser));
         
         setIsRedirecting(true);
-        router.push(onboardingCompleted ? '/modules' : '/onboarding/choose');
+        router.replace(destination);
         return;
       }
 
@@ -444,17 +461,18 @@ export function WelcomePage() {
         role: 'retailer',
       });
 
+      localStorage.setItem('vendai-user-role', 'retailer');
       localStorage.setItem('vendai-first-login', 'true');
       localStorage.setItem('vendai-electron-user', JSON.stringify(googleUser));
       setIsRedirecting(true);
-      router.push('/onboarding/choose');
+      router.replace('/onboarding/choose');
     } catch (firestoreError) {
       console.error('Firestore operation failed, proceeding with local storage only:', firestoreError);
       localStorage.setItem('vendai-user-role', 'retailer');
       localStorage.setItem('vendai-first-login', 'true');
       localStorage.setItem('vendai-electron-user', JSON.stringify(googleUser));
       setIsRedirecting(true);
-      router.push('/onboarding/choose');
+      router.replace('/onboarding/choose');
     }
   };
 

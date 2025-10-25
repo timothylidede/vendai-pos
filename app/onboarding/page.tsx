@@ -1253,7 +1253,6 @@ export default function OnboardingPage() {
                                     type="text"
                                     value={data.instagramHandle || ''}
                                     onChange={(e) => setData({ ...data, instagramHandle: e.target.value.replace('@', '') })}
-                                    placeholder="yourhandle"
                                     className="w-full rounded-2xl border border-white/15 bg-white/[0.06] pl-[130px] pr-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25"
                                   />
                                 </div>
@@ -1391,25 +1390,9 @@ export default function OnboardingPage() {
                         transition={{ duration: 0.3 }}
                         className="space-y-7"
                       >
-                        <div className="text-center">
-                          <div className="mb-3 flex items-center justify-center gap-2">
-                            <h2 className="text-xl font-semibold text-slate-100">Fulfillment email</h2>
-                            <div className="group relative">
-                              <div className="flex h-5 w-5 items-center justify-center rounded-full border border-slate-400/40 bg-slate-500/20 cursor-help">
-                                <svg className="h-3 w-3 text-slate-300" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                </svg>
-                              </div>
-                              <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
-                                <div className="rounded-xl border border-white/20 bg-slate-900/95 p-4 shadow-xl backdrop-blur-xl">
-                                  <p className="text-xs leading-relaxed text-slate-200">
-                                    This email is used for all order related activity
-                                  </p>
-                                  <div className="absolute bottom-0 left-1/2 h-2 w-2 -translate-x-1/2 translate-y-1/2 rotate-45 border-b border-r border-white/20 bg-slate-900/95"></div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
+                        <div className="text-center space-y-2">
+                          <h2 className="text-xl font-semibold text-slate-100">Fulfillment email</h2>
+                          <p className="text-sm text-slate-400">For order confirmations and shipping updates</p>
                         </div>
                         <div>
                           <input

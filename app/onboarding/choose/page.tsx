@@ -120,12 +120,12 @@ export default function ChooseOnboardingPage() {
       {/* Right side - Form content */}
       <div className="flex-1 flex items-stretch justify-center px-4 py-8 lg:px-8 lg:py-12">
   <div className="scrollbar-thin relative z-10 flex w-full max-w-2xl flex-col gap-8 pr-3 lg:h-full lg:overflow-y-auto lg:pr-2">
-          <div className="flex flex-col gap-4">
-            <span className="inline-flex w-fit items-center justify-center rounded-full border border-white/10 bg-white/10 px-4 py-1 text-xs font-medium uppercase tracking-[0.35em] text-slate-200/80 backdrop-blur-md">
+          <div className="flex flex-col gap-3">
+            <span className="inline-flex w-fit items-center justify-center rounded-full border border-white/10 bg-white/10 px-3 py-0.5 text-[10px] font-medium uppercase tracking-[0.35em] text-slate-200/80 backdrop-blur-md">
               onboarding
             </span>
-            <h1 className="text-3xl font-semibold text-slate-100 md:text-4xl">Let&rsquo;s get started</h1>
-            <p className="text-sm text-slate-300/80 md:text-base">Spin up a fresh workspace or join your team in one tap.</p>
+            <h1 className="text-2xl font-semibold text-slate-100 md:text-3xl">Let&rsquo;s get started</h1>
+            <p className="text-xs text-slate-300/80 md:text-sm">Spin up a fresh workspace or join your team in one tap.</p>
           </div>
 
           <div className="flex flex-col gap-6">
@@ -134,24 +134,24 @@ export default function ChooseOnboardingPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: 'easeOut' }}
             >
-              <Card className="group relative overflow-hidden rounded-3xl border border-white/12 bg-white/[0.06] px-8 py-9 shadow-[0_30px_90px_-45px_rgba(10,17,31,0.9)] backdrop-blur-3xl transition-all duration-500 hover:border-sky-200/30 hover:bg-white/[0.09]">
-                <div className="pointer-events-none absolute inset-px rounded-[calc(1.5rem-1px)] bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.22),transparent_60%)] opacity-70 transition-opacity duration-500 group-hover:opacity-100" />
-                <div className="relative z-10 flex flex-col gap-8">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-sky-200/30 bg-sky-500/15 text-sky-200">
-                      <Building className="h-7 w-7" />
+              <Card className="group relative overflow-hidden rounded-2xl border border-white/12 bg-white/[0.06] px-6 py-6 shadow-[0_30px_90px_-45px_rgba(10,17,31,0.9)] backdrop-blur-3xl transition-all duration-500 hover:border-sky-200/30 hover:bg-white/[0.09]">
+                <div className="pointer-events-none absolute inset-px rounded-[calc(1rem-1px)] bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.22),transparent_60%)] opacity-70 transition-opacity duration-500 group-hover:opacity-100" />
+                <div className="relative z-10 flex flex-col gap-5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-sky-200/30 bg-sky-500/15 text-sky-200">
+                      <Building className="h-5 w-5" />
                     </div>
                     <div className="text-left">
-                      <h2 className="text-xl font-semibold text-slate-100">Setup a new organization</h2>
-                      <p className="text-sm text-slate-300/75">Set your team up with a clean slate and tailor Vendai to your workflows.</p>
+                      <h2 className="text-base font-semibold text-slate-100">Setup a new organization</h2>
+                      <p className="text-xs text-slate-300/75">Set your team up with a clean slate and tailor Vendai to your workflows.</p>
                     </div>
                   </div>
 
                   <Button
                     onClick={() => router.push('/onboarding')}
-                    className="group/button inline-flex items-center justify-center gap-2 rounded-2xl bg-sky-500/80 px-6 py-3 text-sm font-medium text-slate-950 shadow-[0_10px_30px_-12px_rgba(56,189,248,0.8)] transition hover:bg-sky-400"
+                    className="group/button inline-flex items-center justify-center gap-2 rounded-xl bg-sky-500/80 px-5 py-2.5 text-xs font-medium text-slate-950 shadow-[0_10px_30px_-12px_rgba(56,189,248,0.8)] transition hover:bg-sky-400"
                   >
-                    <Sparkles className="h-4 w-4 transition-transform group-hover/button:translate-x-0.5" />
+                    <Sparkles className="h-3.5 w-3.5 transition-transform group-hover/button:translate-x-0.5" />
                     <span>Setup organization</span>
                   </Button>
                 </div>
@@ -163,36 +163,36 @@ export default function ChooseOnboardingPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: 'easeOut', delay: 0.1 }}
             >
-              <Card className="group relative overflow-hidden rounded-3xl border border-white/12 bg-white/[0.06] px-8 py-9 shadow-[0_30px_90px_-45px_rgba(10,17,31,0.9)] backdrop-blur-3xl transition-all duration-500 hover:border-sky-200/30 hover:bg-white/[0.09]">
-                <div className="pointer-events-none absolute inset-px rounded-[calc(1.5rem-1px)] bg-[radial-gradient(circle_at_top_right,rgba(165,243,252,0.25),transparent_60%)] opacity-70 transition-opacity duration-500 group-hover:opacity-100" />
-                <div className="relative z-10 flex flex-col gap-6">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-200/30 bg-cyan-500/15 text-cyan-100">
-                      <Mail className="h-7 w-7" />
+              <Card className="group relative overflow-hidden rounded-2xl border border-white/12 bg-white/[0.06] px-6 py-6 shadow-[0_30px_90px_-45px_rgba(10,17,31,0.9)] backdrop-blur-3xl transition-all duration-500 hover:border-sky-200/30 hover:bg-white/[0.09]">
+                <div className="pointer-events-none absolute inset-px rounded-[calc(1rem-1px)] bg-[radial-gradient(circle_at_top_right,rgba(165,243,252,0.25),transparent_60%)] opacity-70 transition-opacity duration-500 group-hover:opacity-100" />
+                <div className="relative z-10 flex flex-col gap-5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-200/30 bg-cyan-500/15 text-cyan-100">
+                      <Mail className="h-5 w-5" />
                     </div>
                     <div className="text-left">
-                      <h2 className="text-xl font-semibold text-slate-100">Join an organization</h2>
-                      <p className="text-sm text-slate-300/75">Accept an invite to jump into the workspace your team already set up.</p>
+                      <h2 className="text-base font-semibold text-slate-100">Join an organization</h2>
+                      <p className="text-xs text-slate-300/75">Accept an invite to jump into the workspace your team already set up.</p>
                     </div>
                   </div>
 
                   {loadingInvites ? (
-                    <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200/80">
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200/30 border-t-transparent" />
+                    <div className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs text-slate-200/80">
+                      <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-200/30 border-t-transparent" />
                       Loading invitations…
                     </div>
                   ) : hasInvites ? (
-                    <div className="thin-scroll space-y-3">
+                    <div className="thin-scroll space-y-2.5">
                       {invites!.map((inv) => (
-                        <div key={inv.id} className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/10 p-4 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
-                          <div className="space-y-1">
-                            <div className="text-sm font-medium text-slate-100">{inv.organizationName}</div>
-                            <div className="text-xs text-slate-300/70">Role: {inv.role} • Invited by {inv.inviterName}</div>
+                        <div key={inv.id} className="flex flex-col gap-2.5 rounded-xl border border-white/8 bg-white/10 p-3.5 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+                          <div className="space-y-0.5">
+                            <div className="text-xs font-medium text-slate-100">{inv.organizationName}</div>
+                            <div className="text-[10px] text-slate-300/70">Role: {inv.role} • Invited by {inv.inviterName}</div>
                           </div>
                           <Button
                             onClick={() => onAccept(inv)}
                             disabled={acceptingId === inv.id}
-                            className="h-9 shrink-0 rounded-xl bg-cyan-500/80 px-4 text-sm font-medium text-slate-950 transition hover:bg-cyan-400 disabled:opacity-70"
+                            className="h-8 shrink-0 rounded-lg bg-cyan-500/80 px-3.5 text-xs font-medium text-slate-950 transition hover:bg-cyan-400 disabled:opacity-70"
                           >
                             {acceptingId === inv.id ? 'Accepting…' : 'Accept invite'}
                           </Button>
@@ -200,8 +200,8 @@ export default function ChooseOnboardingPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-slate-300/75">
-                      <ClipboardList className="mx-auto mb-3 h-5 w-5 text-slate-300/60" />
+                    <div className="rounded-xl border border-dashed border-white/10 bg-white/5 px-3.5 py-5 text-center text-xs text-slate-300/75">
+                      <ClipboardList className="mx-auto mb-2.5 h-4 w-4 text-slate-300/60" />
                       No invitations found for your account yet.
                     </div>
                   )}

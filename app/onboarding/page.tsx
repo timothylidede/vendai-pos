@@ -87,6 +87,57 @@ export default function OnboardingPage() {
 
   const [showRetailerWarning, setShowRetailerWarning] = useState(false);
 
+  // LocalStorage key for caching onboarding data
+  const ONBOARDING_CACHE_KEY = 'vendai_onboarding_cache';
+
+  // Load cached data on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem(ONBOARDING_CACHE_KEY);
+        if (cached) {
+          const { data: cachedData, step: cachedStep } = JSON.parse(cached);
+          // Only restore if we haven't started onboarding yet
+          if (cachedData && !data.role) {
+            setData(cachedData);
+            setCurrentStep(cachedStep || 0);
+            console.log('Restored onboarding data from cache');
+          }
+        }
+      } catch (error) {
+        console.error('Error loading cached onboarding data:', error);
+      }
+    }
+  }, []);
+
+  // Save data to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined' && data.role) {
+      try {
+        const cacheData = {
+          data,
+          step: currentStep,
+          timestamp: Date.now()
+        };
+        localStorage.setItem(ONBOARDING_CACHE_KEY, JSON.stringify(cacheData));
+      } catch (error) {
+        console.error('Error saving onboarding data to cache:', error);
+      }
+    }
+  }, [data, currentStep]);
+
+  // Clear cache on successful completion
+  const clearOnboardingCache = () => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(ONBOARDING_CACHE_KEY);
+        console.log('Cleared onboarding cache');
+      } catch (error) {
+        console.error('Error clearing onboarding cache:', error);
+      }
+    }
+  };
+
   // Store categories for retailer onboarding
   const storeCategories = [
     { id: 'general-trade', label: 'General Trade' },
@@ -403,6 +454,9 @@ export default function OnboardingPage() {
         console.error('Failed to send welcome email:', emailError);
         // Don't block onboarding if email fails
       }
+      
+      // Clear cached onboarding data after successful completion
+      clearOnboardingCache();
       
       router.push('/modules');
     } catch (error) {
@@ -1102,31 +1156,55 @@ export default function OnboardingPage() {
                             </>
                           )}
 
-                          {/* Distributor: Regular organization name */}
+                          {/* Distributor: Regular organization name + optional website */}
                           {data.role === 'distributor' && (
-                            <div>
-                              <div className="mb-3 flex items-center gap-3">
-                                <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
-                                  <Building className="h-4 w-4 text-slate-200" />
+                            <>
+                              <div>
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                                    <Building className="h-4 w-4 text-slate-200" />
+                                  </div>
+                                  <label className="text-sm font-medium text-slate-200">Organization name</label>
                                 </div>
-                                <label className="text-sm font-medium text-slate-200">Organization name</label>
+                                <input
+                                  type="text"
+                                  value={data.organizationName}
+                                  onChange={(e) => setData({ ...data, organizationName: e.target.value })}
+                                  placeholder="e.g. Fresh Foods Distribution"
+                                  className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                                    data.organizationName && !validateOrganizationName(data.organizationName)
+                                      ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                      : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                                  }`}
+                                  autoFocus
+                                />
+                                {data.organizationName && !validateOrganizationName(data.organizationName) && (
+                                  <p className="mt-2 text-xs text-red-300/80">Organization name must be at least 2 characters long.</p>
+                                )}
                               </div>
-                              <input
-                                type="text"
-                                value={data.organizationName}
-                                onChange={(e) => setData({ ...data, organizationName: e.target.value })}
-                                placeholder="e.g. Fresh Foods Distribution"
-                                className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
-                                  data.organizationName && !validateOrganizationName(data.organizationName)
-                                    ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
-                                    : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
-                                }`}
-                                autoFocus
-                              />
-                              {data.organizationName && !validateOrganizationName(data.organizationName) && (
-                                <p className="mt-2 text-xs text-red-300/80">Organization name must be at least 2 characters long.</p>
-                              )}
-                            </div>
+                              <div>
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                                    <Building className="h-4 w-4 text-slate-200" />
+                                  </div>
+                                  <label className="text-sm font-medium text-slate-200">Website <span className="text-slate-400">(optional)</span></label>
+                                </div>
+                                <input
+                                  type="url"
+                                  value={data.website || ''}
+                                  onChange={(e) => setData({ ...data, website: e.target.value })}
+                                  placeholder="e.g. https://yourcompany.com"
+                                  className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                                    data.website && !validateURL(data.website)
+                                      ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                      : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                                  }`}
+                                />
+                                {data.website && !validateURL(data.website) && (
+                                  <p className="mt-2 text-xs text-red-300/80">Please enter a valid URL</p>
+                                )}
+                              </div>
+                            </>
                           )}
                         </div>
                       </motion.div>

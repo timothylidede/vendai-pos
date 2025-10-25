@@ -1,40 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server';
+require('dotenv').config({ path: '.env.local' });
+const nodemailer = require('nodemailer');
 
-export async function POST(request: NextRequest) {
+async function sendTestEmail() {
   try {
-    const { email, displayName, storeName } = await request.json();
-
-    if (!email || !displayName) {
-      return NextResponse.json(
-        { error: 'Email and display name are required' },
-        { status: 400 }
-      );
-    }
-
-    // Check if SMTP is configured
-    if (!process.env.SMTP_PASSWORD) {
-      console.warn('SMTP not configured - skipping welcome email');
-      return NextResponse.json({ 
-        success: false, 
-        message: 'SMTP not configured. Please set SMTP_USER and SMTP_PASSWORD environment variables.' 
-      });
-    }
-
-    // Dynamic import of nodemailer to avoid build-time errors if not installed
-    const nodemailer = await import('nodemailer');
-
-    // Create transporter using Zoho Mail SMTP
-    const transporter = nodemailer.default.createTransport({
+    // Create transporter
+    const transporter = nodemailer.createTransport({
       host: 'smtp.zoho.com',
       port: 465,
-      secure: true, // use SSL
+      secure: true,
       auth: {
         user: process.env.SMTP_USER || 'hello@vendai.digital',
         pass: process.env.SMTP_PASSWORD,
       },
     });
 
-    // Email HTML content matching the Faire style
+    console.log('Testing SMTP connection...');
+    await transporter.verify();
+    console.log('✅ SMTP connection successful!');
+
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -51,7 +34,7 @@ export async function POST(request: NextRequest) {
                   <!-- Header -->
                   <tr>
                     <td style="padding: 40px 40px 20px 40px; text-align: center; border-bottom: 1px solid #e9ecef;">
-                      <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #1a1a1a; letter-spacing: 2px;">VENDAI</h1>
+                      <img src="https://app.vendai.digital/images/logo-icon-remove-black.png" alt="Vendai" style="height: 40px; width: auto;" />
                     </td>
                   </tr>
                   
@@ -59,7 +42,7 @@ export async function POST(request: NextRequest) {
                   <tr>
                     <td style="padding: 40px;">
                       <p style="margin: 0 0 16px 0; font-size: 16px; line-height: 1.5; color: #333333;">
-                        Hi ${displayName.split(' ')[0] || displayName},
+                        Hi Timothy,
                       </p>
                       
                       <p style="margin: 0 0 16px 0; font-size: 16px; line-height: 1.5; color: #333333;">
@@ -86,7 +69,7 @@ export async function POST(request: NextRequest) {
                       <table width="100%" cellpadding="0" cellspacing="0">
                         <tr>
                           <td align="center">
-                            <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://vendai.digital'}/modules" 
+                            <a href="https://app.vendai.digital/modules" 
                                style="display: inline-block; padding: 14px 32px; background-color: #1a1a1a; color: #ffffff; text-decoration: none; border-radius: 4px; font-size: 16px; font-weight: 500;">
                               Start shopping
                             </a>
@@ -104,11 +87,11 @@ export async function POST(request: NextRequest) {
                   <tr>
                     <td style="padding: 20px 40px; text-align: center; border-top: 1px solid #e9ecef; background-color: #f8f9fa;">
                       <p style="margin: 0 0 8px 0; font-size: 14px; color: #6c757d;">
-                        <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://vendai.digital'}/help" style="color: #6c757d; text-decoration: none; margin: 0 8px;">Help Center</a>
+                        <a href="https://vendai.digital/help" style="color: #6c757d; text-decoration: none; margin: 0 8px;">Help Center</a>
                         <span style="color: #dee2e6;">|</span>
-                        <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://vendai.digital'}/contact" style="color: #6c757d; text-decoration: none; margin: 0 8px;">Contact Us</a>
+                        <a href="https://vendai.digital/contact" style="color: #6c757d; text-decoration: none; margin: 0 8px;">Contact Us</a>
                         <span style="color: #dee2e6;">|</span>
-                        <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://vendai.digital'}/privacy" style="color: #6c757d; text-decoration: none; margin: 0 8px;">Privacy Policy</a>
+                        <a href="https://vendai.digital/privacy" style="color: #6c757d; text-decoration: none; margin: 0 8px;">Privacy Policy</a>
                       </p>
                       <p style="margin: 8px 0 0 0; font-size: 12px; color: #adb5bd;">
                         Nairobi, Kenya
@@ -123,20 +106,21 @@ export async function POST(request: NextRequest) {
       </html>
     `;
 
-    // Send email
-    await transporter.sendMail({
+    console.log('Sending test welcome email...');
+    const info = await transporter.sendMail({
       from: '"Vendai" <hello@vendai.digital>',
-      to: email,
+      to: 'timothyliidede@gmail.com',
       subject: 'Welcome to the Vendai community!',
       html: htmlContent,
     });
 
-    return NextResponse.json({ success: true, message: 'Welcome email sent successfully' });
+    console.log('✅ Test email sent successfully!');
+    console.log('Message ID:', info.messageId);
+    console.log('\nCheck your inbox at: timothyliidede@gmail.com');
   } catch (error) {
-    console.error('Error sending welcome email:', error);
-    return NextResponse.json(
-      { error: 'Failed to send welcome email', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    console.error('❌ Error:', error);
+    process.exit(1);
   }
 }
+
+sendTestEmail();

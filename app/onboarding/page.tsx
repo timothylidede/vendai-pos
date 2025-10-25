@@ -38,6 +38,11 @@ interface OnboardingData {
   subCounty?: string;
   storeCategory?: string;
   openingYear?: string;
+  // Distributor-specific fields
+  wholesaleProductCount?: string;
+  storeCount?: string;
+  primaryCategory?: string;
+  hearAboutUs?: string;
 }
 
 interface UserProfileDocument {
@@ -82,7 +87,11 @@ export default function OnboardingPage() {
     county: '',
     subCounty: '',
     storeCategory: '',
-    openingYear: ''
+    openingYear: '',
+    wholesaleProductCount: '',
+    storeCount: '',
+    primaryCategory: '',
+    hearAboutUs: ''
   });
 
   const [showRetailerWarning, setShowRetailerWarning] = useState(false);
@@ -226,8 +235,8 @@ export default function OnboardingPage() {
 
   // When joining existing org, show a single confirm/contact screen
   // Retailers: role -> sales channels -> store details -> category -> opening year -> payment terms (6 steps, indices 0-5)
-  // Distributors: role -> org name -> contact -> location (4 steps, indices 0-3)
-  const totalSteps = data.isJoiningExisting ? 1 : data.role === 'retailer' ? 6 : 4;
+  // Distributors: role -> org name+website -> product count -> store count -> primary category -> hear about us (6 steps, indices 0-5)
+  const totalSteps = data.isJoiningExisting ? 1 : data.role === 'retailer' ? 6 : 6;
   const progress = data.isJoiningExisting 
     ? 100 
     : currentStep === 0 
@@ -400,6 +409,7 @@ export default function OnboardingPage() {
         organizationDisplayName = displayName; // Store for email
         
         // For retailers, use sensible defaults for contact and location if not set
+        // For distributors, use sensible defaults as well
         const contactNumber = data.contactNumber || user.email || 'Not provided';
         const location = data.location || data.organizationName || 'Kenya';
         const coordinates = data.coordinates || { lat: -1.2921, lng: 36.8219 }; // Nairobi default
@@ -421,6 +431,10 @@ export default function OnboardingPage() {
           subCounty: data.subCounty || '',
           storeCategory: data.storeCategory || '',
           openingYear: data.openingYear || '',
+          wholesaleProductCount: data.wholesaleProductCount || '',
+          storeCount: data.storeCount || '',
+          primaryCategory: data.primaryCategory || '',
+          hearAboutUs: data.hearAboutUs || '',
           onboardingCompleted: true,
           isOrganizationCreator: true,
           createdAt: new Date().toISOString(),
@@ -490,7 +504,7 @@ export default function OnboardingPage() {
         if (data.role === 'retailer') {
           return (data.salesChannels?.length || 0) > 0;
         }
-        // For distributors, step 1 is organization name
+        // For distributors, step 1 is organization name (website optional)
         return validateOrganizationName(data.organizationName);
       case 2:
         // For retailers, step 2 is store name + validation based on sales channel
@@ -521,23 +535,25 @@ export default function OnboardingPage() {
           }
           return validateOrganizationName(data.organizationName);
         }
-        // For distributors, step 2 is contact number
-        return data.contactNumber.trim() !== '' && validateContactNumber(data.contactNumber);
+        // For distributors, step 2 is wholesale product count
+        return data.wholesaleProductCount?.trim() !== '';
       case 3:
         // For retailers, step 3 is store category
         if (data.role === 'retailer') {
           return data.storeCategory?.trim() !== '';
         }
-        // For distributors, step 3 is location
-        return data.location.trim() !== '' && !!data.coordinates;
+        // For distributors, step 3 is store count
+        return data.storeCount?.trim() !== '';
       case 4:
         // For retailers, step 4 is opening year
         if (data.role === 'retailer') {
           return data.openingYear?.trim() !== '';
         }
-        return false;
+        // For distributors, step 4 is primary category
+        return data.primaryCategory?.trim() !== '';
       case 5:
-        // For retailers only, step 5 is payment terms (always can proceed)
+        // For retailers, step 5 is payment terms (always can proceed)
+        // For distributors, step 5 is "how did you hear about us" (optional, always can proceed)
         return true;
       default:
         return false;
@@ -1327,10 +1343,10 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 2 for Distributors: Contact Number */}
+                    {/* Step 2 for Distributors: Wholesale Product Count */}
                     {!data.isJoiningExisting && currentStep === 2 && data.role === 'distributor' && (
                       <motion.div
-                        key="contact"
+                        key="product-count"
                         variants={slideVariants}
                         custom={direction}
                         initial="enter"
@@ -1340,37 +1356,30 @@ export default function OnboardingPage() {
                         className="space-y-7"
                       >
                         <div className="text-center">
-                          <h2 className="mb-2 text-xl font-semibold text-slate-100">What&rsquo;s your contact number?</h2>
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">How many wholesale products do you sell?</h2>
                         </div>
                         <div>
-                          <div className="mb-3 flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
-                              <Phone className="h-4 w-4 text-slate-200" />
-                            </div>
-                            <label className="text-sm font-medium text-slate-200">Contact number</label>
-                          </div>
-                          <input
-                            type="tel"
-                            value={data.contactNumber}
-                            onChange={(e) => setData({ ...data, contactNumber: e.target.value })}
-                            placeholder="e.g. +254 700 000 000"
-                            className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
-                              data.contactNumber && !validateContactNumber(data.contactNumber)
-                                ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
-                                : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
-                            }`}
-                          />
-                          {data.contactNumber && !validateContactNumber(data.contactNumber) && (
-                            <p className="mt-2 text-xs text-red-300/80">Please enter a valid phone number (at least 9 digits).</p>
-                          )}
+                          <select
+                            value={data.wholesaleProductCount || ''}
+                            onChange={(e) => setData({ ...data, wholesaleProductCount: e.target.value })}
+                            className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 [&>option]:text-slate-950"
+                          >
+                            <option value="">Select an option</option>
+                            <option value="none">I do not currently sell wholesale products</option>
+                            <option value="1-10">1-10</option>
+                            <option value="11-25">11-25</option>
+                            <option value="26-50">26-50</option>
+                            <option value="51-100">51-100</option>
+                            <option value="100+">More than 100</option>
+                          </select>
                         </div>
                       </motion.div>
                     )}
 
-                    {/* Step 3 for Distributors: Location with Map */}
+                    {/* Step 3 for Distributors: Store Count */}
                     {!data.isJoiningExisting && currentStep === 3 && data.role === 'distributor' && (
                       <motion.div
-                        key="location"
+                        key="store-count"
                         variants={slideVariants}
                         custom={direction}
                         initial="enter"
@@ -1380,22 +1389,97 @@ export default function OnboardingPage() {
                         className="space-y-7"
                       >
                         <div className="text-center">
-                          <h2 className="mb-2 text-xl font-semibold text-slate-100">Where is your business located?</h2>
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">How many independent stores do you work with?</h2>
                         </div>
                         <div>
-                          <div className="mb-3 flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
-                              <MapPin className="h-4 w-4 text-slate-200" />
-                            </div>
-                            <label className="text-sm font-medium text-slate-200">Organization location</label>
-                          </div>
-                          <GoogleMapsWrapper apiKey={mapsApiKey}>
-                            <LocationPickerWithMap
-                              value={data.location}
-                              onLocationSelect={(location: string, coordinates?: { lat: number; lng: number }) => setData({ ...data, location, coordinates })}
-                              placeholder="Search your distribution center…"
-                            />
-                          </GoogleMapsWrapper>
+                          <select
+                            value={data.storeCount || ''}
+                            onChange={(e) => setData({ ...data, storeCount: e.target.value })}
+                            className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 [&>option]:text-slate-950"
+                          >
+                            <option value="">Select an option</option>
+                            <option value="new">I am new to wholesale</option>
+                            <option value="1-10">1-10</option>
+                            <option value="11-25">11-25</option>
+                            <option value="26-50">26-50</option>
+                            <option value="51-100">51-100</option>
+                            <option value="101-250">101-250</option>
+                            <option value="251-500">251-500</option>
+                            <option value="500-1000">500-1000</option>
+                            <option value="1000+">More than 1000</option>
+                          </select>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Step 4 for Distributors: Primary Category */}
+                    {!data.isJoiningExisting && currentStep === 4 && data.role === 'distributor' && (
+                      <motion.div
+                        key="primary-category"
+                        variants={slideVariants}
+                        custom={direction}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3 }}
+                        className="space-y-7"
+                      >
+                        <div className="text-center">
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">Primary Category</h2>
+                        </div>
+                        <div>
+                          <select
+                            value={data.primaryCategory || ''}
+                            onChange={(e) => setData({ ...data, primaryCategory: e.target.value })}
+                            className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 [&>option]:text-slate-950"
+                          >
+                            <option value="">Select a category</option>
+                            <option value="home-decor">Home Decor</option>
+                            <option value="beauty-wellness">Beauty & Wellness</option>
+                            <option value="cbd-thc">CBD/THC</option>
+                            <option value="food-drink">Food & Drink</option>
+                            <option value="jewelry">Jewelry</option>
+                            <option value="kids-baby-apparel">Kids & Baby - Apparel</option>
+                            <option value="kids-baby-toys-gear">Kids & Baby - Toys & Gear</option>
+                            <option value="mens-apparel-accessories">Men's Apparel & Accessories</option>
+                            <option value="paper-party-supplies">Paper & Party Supplies</option>
+                            <option value="pet">Pet</option>
+                            <option value="wellness">Wellness</option>
+                            <option value="womens-accessories">Women's Accessories</option>
+                            <option value="womens-apparel">Women's Apparel</option>
+                          </select>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Step 5 for Distributors: How Did You Hear About Us (Optional) */}
+                    {!data.isJoiningExisting && currentStep === 5 && data.role === 'distributor' && (
+                      <motion.div
+                        key="hear-about-us"
+                        variants={slideVariants}
+                        custom={direction}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3 }}
+                        className="space-y-7"
+                      >
+                        <div className="text-center">
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">How did you hear about us? (Optional)</h2>
+                        </div>
+                        <div>
+                          <select
+                            value={data.hearAboutUs || ''}
+                            onChange={(e) => setData({ ...data, hearAboutUs: e.target.value })}
+                            className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 [&>option]:text-slate-950"
+                          >
+                            <option value="">Select an option</option>
+                            <option value="social-media">Social Media</option>
+                            <option value="another-brand">Another Brand</option>
+                            <option value="retailer">A Retailer</option>
+                            <option value="vendai-employee">A Vendai employee</option>
+                            <option value="other">Other</option>
+                          </select>
                         </div>
                       </motion.div>
                     )}

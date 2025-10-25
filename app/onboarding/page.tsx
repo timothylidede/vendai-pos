@@ -43,6 +43,8 @@ interface OnboardingData {
   storeCount?: string;
   primaryCategory?: string;
   hearAboutUs?: string;
+  instagramHandle?: string;
+  fulfillmentEmail?: string;
 }
 
 interface UserProfileDocument {
@@ -91,7 +93,9 @@ export default function OnboardingPage() {
     wholesaleProductCount: '',
     storeCount: '',
     primaryCategory: '',
-    hearAboutUs: ''
+    hearAboutUs: '',
+    instagramHandle: '',
+    fulfillmentEmail: ''
   });
 
   const [showRetailerWarning, setShowRetailerWarning] = useState(false);
@@ -235,8 +239,8 @@ export default function OnboardingPage() {
 
   // When joining existing org, show a single confirm/contact screen
   // Retailers: role -> sales channels -> store details -> category -> opening year -> payment terms (6 steps, indices 0-5)
-  // Distributors: role -> org name+website -> product count -> store count -> primary category -> hear about us (6 steps, indices 0-5)
-  const totalSteps = data.isJoiningExisting ? 1 : data.role === 'retailer' ? 6 : 6;
+  // Distributors: role -> org name+website+instagram -> fulfillment email -> product count -> store count -> primary category -> hear about us (7 steps, indices 0-6)
+  const totalSteps = data.isJoiningExisting ? 1 : data.role === 'retailer' ? 6 : 7;
   const progress = data.isJoiningExisting 
     ? 100 
     : currentStep === 0 
@@ -435,6 +439,8 @@ export default function OnboardingPage() {
           storeCount: data.storeCount || '',
           primaryCategory: data.primaryCategory || '',
           hearAboutUs: data.hearAboutUs || '',
+          instagramHandle: data.instagramHandle || '',
+          fulfillmentEmail: data.fulfillmentEmail || '',
           onboardingCompleted: true,
           isOrganizationCreator: true,
           createdAt: new Date().toISOString(),
@@ -491,6 +497,10 @@ export default function OnboardingPage() {
       return false;
     }
   };
+
+  const validateEmail = (email: string) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
   
   const canProceed = () => {
     if (data.isJoiningExisting) {
@@ -504,8 +514,10 @@ export default function OnboardingPage() {
         if (data.role === 'retailer') {
           return (data.salesChannels?.length || 0) > 0;
         }
-        // For distributors, step 1 is organization name (website optional)
-        return validateOrganizationName(data.organizationName);
+        // For distributors, step 1 is organization name + website (required) + instagram (optional)
+        return validateOrganizationName(data.organizationName) && 
+               data.website?.trim() !== '' && 
+               validateURL(data.website || '');
       case 2:
         // For retailers, step 2 is store name + validation based on sales channel
         if (data.role === 'retailer') {
@@ -535,25 +547,31 @@ export default function OnboardingPage() {
           }
           return validateOrganizationName(data.organizationName);
         }
-        // For distributors, step 2 is wholesale product count
-        return data.wholesaleProductCount?.trim() !== '';
+        // For distributors, step 2 is fulfillment email
+        return data.fulfillmentEmail?.trim() !== '' && validateEmail(data.fulfillmentEmail || '');
       case 3:
         // For retailers, step 3 is store category
         if (data.role === 'retailer') {
           return data.storeCategory?.trim() !== '';
         }
-        // For distributors, step 3 is store count
-        return data.storeCount?.trim() !== '';
+        // For distributors, step 3 is wholesale product count
+        return data.wholesaleProductCount?.trim() !== '';
       case 4:
         // For retailers, step 4 is opening year
         if (data.role === 'retailer') {
           return data.openingYear?.trim() !== '';
         }
-        // For distributors, step 4 is primary category
-        return data.primaryCategory?.trim() !== '';
+        // For distributors, step 4 is store count
+        return data.storeCount?.trim() !== '';
       case 5:
         // For retailers, step 5 is payment terms (always can proceed)
-        // For distributors, step 5 is "how did you hear about us" (optional, always can proceed)
+        if (data.role === 'retailer') {
+          return true;
+        }
+        // For distributors, step 5 is primary category
+        return data.primaryCategory?.trim() !== '';
+      case 6:
+        // For distributors, step 6 is "how did you hear about us" (optional, always can proceed)
         return true;
       default:
         return false;
@@ -936,7 +954,7 @@ export default function OnboardingPage() {
                                       onChange={(e) => {
                                         setData({ ...data, county: e.target.value, subCounty: '' });
                                       }}
-                                      className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 [&>option]:text-slate-950"
+                                      className="w-full rounded-2xl border border-sky-300/30 bg-gradient-to-br from-white/[0.07] to-white/[0.02] px-4 py-3 text-sm text-white backdrop-blur-xl transition-all duration-200 hover:border-sky-300/50 hover:from-white/[0.09] hover:to-white/[0.04] focus:border-sky-300/60 focus:from-white/[0.10] focus:to-white/[0.05] focus:ring-2 focus:ring-sky-400/25 focus:outline-none [&>option]:bg-slate-900 [&>option]:text-slate-100"
                                     >
                                       <option value="">Select county</option>
                                       {kenyanCounties.map(county => (
@@ -950,7 +968,7 @@ export default function OnboardingPage() {
                                       value={data.subCounty || ''}
                                       onChange={(e) => setData({ ...data, subCounty: e.target.value })}
                                       disabled={!data.county || data.county === 'manual'}
-                                      className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 disabled:opacity-50 [&>option]:text-slate-950"
+                                      className="w-full rounded-2xl border border-sky-300/30 bg-gradient-to-br from-white/[0.07] to-white/[0.02] px-4 py-3 text-sm text-white backdrop-blur-xl transition-all duration-200 hover:border-sky-300/50 hover:from-white/[0.09] hover:to-white/[0.04] focus:border-sky-300/60 focus:from-white/[0.10] focus:to-white/[0.05] focus:ring-2 focus:ring-sky-400/25 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed [&>option]:bg-slate-900 [&>option]:text-slate-100"
                                     >
                                       <option value="">Select sub-county</option>
                                       {data.county && data.county !== 'manual' && kenyanCounties.find(c => c.name === data.county)?.subCounties.map(sub => (
@@ -1070,7 +1088,7 @@ export default function OnboardingPage() {
                                     onChange={(e) => {
                                       setData({ ...data, county: e.target.value, subCounty: '' });
                                     }}
-                                    className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 [&>option]:text-slate-950"
+                                    className="w-full rounded-2xl border border-sky-300/30 bg-gradient-to-br from-white/[0.07] to-white/[0.02] px-4 py-3 text-sm text-white backdrop-blur-xl transition-all duration-200 hover:border-sky-300/50 hover:from-white/[0.09] hover:to-white/[0.04] focus:border-sky-300/60 focus:from-white/[0.10] focus:to-white/[0.05] focus:ring-2 focus:ring-sky-400/25 focus:outline-none [&>option]:bg-slate-900 [&>option]:text-slate-100"
                                   >
                                     <option value="">Select county</option>
                                     {kenyanCounties.map(county => (
@@ -1084,7 +1102,7 @@ export default function OnboardingPage() {
                                     value={data.subCounty || ''}
                                     onChange={(e) => setData({ ...data, subCounty: e.target.value })}
                                     disabled={!data.county}
-                                    className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 disabled:opacity-50 [&>option]:text-slate-950"
+                                    className="w-full rounded-2xl border border-sky-300/30 bg-gradient-to-br from-white/[0.07] to-white/[0.02] px-4 py-3 text-sm text-white backdrop-blur-xl transition-all duration-200 hover:border-sky-300/50 hover:from-white/[0.09] hover:to-white/[0.04] focus:border-sky-300/60 focus:from-white/[0.10] focus:to-white/[0.05] focus:ring-2 focus:ring-sky-400/25 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed [&>option]:bg-slate-900 [&>option]:text-slate-100"
                                   >
                                     <option value="">Select sub-county</option>
                                     {data.county && kenyanCounties.find(c => c.name === data.county)?.subCounties.map(sub => (
@@ -1172,7 +1190,7 @@ export default function OnboardingPage() {
                             </>
                           )}
 
-                          {/* Distributor: Regular organization name + optional website */}
+                          {/* Distributor: organization name + website (required) + instagram (optional) */}
                           {data.role === 'distributor' && (
                             <>
                               <div>
@@ -1203,7 +1221,7 @@ export default function OnboardingPage() {
                                   <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
                                     <Building className="h-4 w-4 text-slate-200" />
                                   </div>
-                                  <label className="text-sm font-medium text-slate-200">Website <span className="text-slate-400">(optional)</span></label>
+                                  <label className="text-sm font-medium text-slate-200">Website</label>
                                 </div>
                                 <input
                                   type="url"
@@ -1219,6 +1237,26 @@ export default function OnboardingPage() {
                                 {data.website && !validateURL(data.website) && (
                                   <p className="mt-2 text-xs text-red-300/80">Please enter a valid URL</p>
                                 )}
+                              </div>
+                              <div>
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                                    <svg className="h-4 w-4 text-slate-200" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                                    </svg>
+                                  </div>
+                                  <label className="text-sm font-medium text-slate-200">Instagram <span className="text-slate-400">(optional)</span></label>
+                                </div>
+                                <div className="relative">
+                                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-slate-400">instagram.com/</span>
+                                  <input
+                                    type="text"
+                                    value={data.instagramHandle || ''}
+                                    onChange={(e) => setData({ ...data, instagramHandle: e.target.value.replace('@', '') })}
+                                    placeholder="yourhandle"
+                                    className="w-full rounded-2xl border border-white/15 bg-white/[0.06] pl-[130px] pr-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25"
+                                  />
+                                </div>
                               </div>
                             </>
                           )}
@@ -1286,25 +1324,23 @@ export default function OnboardingPage() {
                         <div className="text-center">
                           <h2 className="mb-2 text-xl font-semibold text-slate-100">When did your store open?</h2>
                         </div>
-                        <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
                           {openingYearOptions.map((option) => {
                             const isSelected = data.openingYear === option.id;
                             return (
                               <button
                                 key={option.id}
                                 onClick={() => setData({ ...data, openingYear: option.id })}
-                                className={`w-full rounded-2xl border px-5 py-4 text-left transition-all duration-200 ${
+                                className={`relative rounded-xl border px-4 py-3 text-center transition-all duration-200 ${
                                   isSelected
-                                    ? 'border-sky-300/60 bg-sky-500/15 shadow-[0_18px_45px_-25px_rgba(56,189,248,0.65)]'
+                                    ? 'border-sky-300/60 bg-sky-500/15 shadow-[0_12px_35px_-20px_rgba(56,189,248,0.65)]'
                                     : 'border-white/12 bg-white/6 hover:border-sky-200/40 hover:bg-sky-400/10'
                                 }`}
                               >
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm font-medium text-slate-100">{option.label}</span>
-                                  {isSelected && (
-                                    <CheckCircle className="h-5 w-5 text-sky-200" />
-                                  )}
-                                </div>
+                                <span className="text-sm font-medium text-slate-100">{option.label}</span>
+                                {isSelected && (
+                                  <CheckCircle className="absolute top-2 right-2 h-4 w-4 text-sky-200" />
+                                )}
                               </button>
                             );
                           })}
@@ -1343,8 +1379,59 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 2 for Distributors: Wholesale Product Count */}
+                    {/* Step 2 for Distributors: Fulfillment Email */}
                     {!data.isJoiningExisting && currentStep === 2 && data.role === 'distributor' && (
+                      <motion.div
+                        key="fulfillment-email"
+                        variants={slideVariants}
+                        custom={direction}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3 }}
+                        className="space-y-7"
+                      >
+                        <div className="text-center">
+                          <div className="mb-3 flex items-center justify-center gap-2">
+                            <h2 className="text-xl font-semibold text-slate-100">Fulfillment email</h2>
+                            <div className="group relative">
+                              <div className="flex h-5 w-5 items-center justify-center rounded-full border border-slate-400/40 bg-slate-500/20 cursor-help">
+                                <svg className="h-3 w-3 text-slate-300" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                              <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+                                <div className="rounded-xl border border-white/20 bg-slate-900/95 p-4 shadow-xl backdrop-blur-xl">
+                                  <p className="text-xs leading-relaxed text-slate-200">
+                                    This email is used for all order related activity
+                                  </p>
+                                  <div className="absolute bottom-0 left-1/2 h-2 w-2 -translate-x-1/2 translate-y-1/2 rotate-45 border-b border-r border-white/20 bg-slate-900/95"></div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <input
+                            type="email"
+                            value={data.fulfillmentEmail || ''}
+                            onChange={(e) => setData({ ...data, fulfillmentEmail: e.target.value })}
+                            placeholder="e.g. orders@yourcompany.com"
+                            className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                              data.fulfillmentEmail && !validateEmail(data.fulfillmentEmail)
+                                ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                            }`}
+                          />
+                          {data.fulfillmentEmail && !validateEmail(data.fulfillmentEmail) && (
+                            <p className="mt-2 text-xs text-red-300/80">Please enter a valid email address</p>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Step 3 for Distributors: Wholesale Product Count */}
+                    {!data.isJoiningExisting && currentStep === 3 && data.role === 'distributor' && (
                       <motion.div
                         key="product-count"
                         variants={slideVariants}
@@ -1362,7 +1449,7 @@ export default function OnboardingPage() {
                           <select
                             value={data.wholesaleProductCount || ''}
                             onChange={(e) => setData({ ...data, wholesaleProductCount: e.target.value })}
-                            className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 [&>option]:text-slate-950"
+                            className="w-full rounded-2xl border border-sky-300/30 bg-gradient-to-br from-white/[0.07] to-white/[0.02] px-4 py-3 text-sm text-white backdrop-blur-xl transition-all duration-200 hover:border-sky-300/50 hover:from-white/[0.09] hover:to-white/[0.04] focus:border-sky-300/60 focus:from-white/[0.10] focus:to-white/[0.05] focus:ring-2 focus:ring-sky-400/25 focus:outline-none [&>option]:bg-slate-900 [&>option]:text-slate-100"
                           >
                             <option value="">Select an option</option>
                             <option value="none">I do not currently sell wholesale products</option>
@@ -1376,8 +1463,8 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 3 for Distributors: Store Count */}
-                    {!data.isJoiningExisting && currentStep === 3 && data.role === 'distributor' && (
+                    {/* Step 4 for Distributors: Store Count */}
+                    {!data.isJoiningExisting && currentStep === 4 && data.role === 'distributor' && (
                       <motion.div
                         key="store-count"
                         variants={slideVariants}
@@ -1395,7 +1482,7 @@ export default function OnboardingPage() {
                           <select
                             value={data.storeCount || ''}
                             onChange={(e) => setData({ ...data, storeCount: e.target.value })}
-                            className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 [&>option]:text-slate-950"
+                            className="w-full rounded-2xl border border-sky-300/30 bg-gradient-to-br from-white/[0.07] to-white/[0.02] px-4 py-3 text-sm text-white backdrop-blur-xl transition-all duration-200 hover:border-sky-300/50 hover:from-white/[0.09] hover:to-white/[0.04] focus:border-sky-300/60 focus:from-white/[0.10] focus:to-white/[0.05] focus:ring-2 focus:ring-sky-400/25 focus:outline-none [&>option]:bg-slate-900 [&>option]:text-slate-100"
                           >
                             <option value="">Select an option</option>
                             <option value="new">I am new to wholesale</option>
@@ -1412,8 +1499,8 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 4 for Distributors: Primary Category */}
-                    {!data.isJoiningExisting && currentStep === 4 && data.role === 'distributor' && (
+                    {/* Step 5 for Distributors: Primary Category */}
+                    {!data.isJoiningExisting && currentStep === 5 && data.role === 'distributor' && (
                       <motion.div
                         key="primary-category"
                         variants={slideVariants}
@@ -1431,7 +1518,7 @@ export default function OnboardingPage() {
                           <select
                             value={data.primaryCategory || ''}
                             onChange={(e) => setData({ ...data, primaryCategory: e.target.value })}
-                            className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 [&>option]:text-slate-950"
+                            className="w-full rounded-2xl border border-sky-300/30 bg-gradient-to-br from-white/[0.07] to-white/[0.02] px-4 py-3 text-sm text-white backdrop-blur-xl transition-all duration-200 hover:border-sky-300/50 hover:from-white/[0.09] hover:to-white/[0.04] focus:border-sky-300/60 focus:from-white/[0.10] focus:to-white/[0.05] focus:ring-2 focus:ring-sky-400/25 focus:outline-none [&>option]:bg-slate-900 [&>option]:text-slate-100"
                           >
                             <option value="">Select a category</option>
                             <option value="home-decor">Home Decor</option>
@@ -1452,8 +1539,8 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 5 for Distributors: How Did You Hear About Us (Optional) */}
-                    {!data.isJoiningExisting && currentStep === 5 && data.role === 'distributor' && (
+                    {/* Step 6 for Distributors: How Did You Hear About Us (Optional) */}
+                    {!data.isJoiningExisting && currentStep === 6 && data.role === 'distributor' && (
                       <motion.div
                         key="hear-about-us"
                         variants={slideVariants}
@@ -1471,7 +1558,7 @@ export default function OnboardingPage() {
                           <select
                             value={data.hearAboutUs || ''}
                             onChange={(e) => setData({ ...data, hearAboutUs: e.target.value })}
-                            className="w-full rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-3 text-sm text-white transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25 [&>option]:text-slate-950"
+                            className="w-full rounded-2xl border border-sky-300/30 bg-gradient-to-br from-white/[0.07] to-white/[0.02] px-4 py-3 text-sm text-white backdrop-blur-xl transition-all duration-200 hover:border-sky-300/50 hover:from-white/[0.09] hover:to-white/[0.04] focus:border-sky-300/60 focus:from-white/[0.10] focus:to-white/[0.05] focus:ring-2 focus:ring-sky-400/25 focus:outline-none [&>option]:bg-slate-900 [&>option]:text-slate-100"
                           >
                             <option value="">Select an option</option>
                             <option value="social-media">Social Media</option>

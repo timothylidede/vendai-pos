@@ -361,21 +361,15 @@ export function ModulesDashboard() {
   };
 
   return (
-    <motion.div 
-      className="module-background flex flex-col h-[calc(100vh-2.5rem)] p-6 overflow-hidden"
-      initial={{
-        opacity: 0,
-        y: isEntering ? -300 : 0
-      }}
-      animate={{
-        opacity: 1,
-        y: 0
-      }}
-      transition={{
-        duration: 0.08,
-        ease: [0.4, 0.0, 0.2, 1] as any
-      }}
-    >
+    <div className="module-background flex h-screen overflow-hidden">
+      {/* Background gradients */}
+      <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute inset-0 bg-slate-950/55 backdrop-blur-[120px]" />
+        <div className="absolute -top-36 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-sky-500/18 blur-[120px]" />
+        <div className="absolute bottom-[-20%] right-[-10%] h-96 w-96 rounded-full bg-indigo-500/18 blur-[140px]" />
+        <div className="absolute top-1/3 -left-32 h-64 w-64 rounded-full bg-cyan-400/14 blur-[120px]" />
+      </div>
+
       {/* Exit Overlay */}
       {isExiting && (
         <motion.div
@@ -386,56 +380,103 @@ export function ModulesDashboard() {
         />
       )}
       
-      {/* Header */}
-      <div className="flex justify-between items-center mb-12">
+      {/* Left Sidebar - Navigation */}
+      <div className="flex flex-col w-20 relative z-10">
         {/* Logo */}
-        <div className="flex items-center">
+        <div className="flex items-center justify-center h-16">
           <a
             href="https://vendai.digital"
             target="_blank"
             rel="noopener noreferrer"
-            className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
+            className="group w-10 h-10 flex items-center justify-center transition-transform duration-700 hover:rotate-[360deg]"
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-sky-500/[0.03] via-transparent to-cyan-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
             <img
               src="/images/logo-icon-remove.png"
               alt="Vendai"
-              className="relative w-6 h-6 transition-transform duration-700 group-hover:rotate-[360deg]"
+              className="w-10 h-10"
             />
           </a>
         </div>
 
-        {/* Search Bar */}
-        <div className="flex-1 max-w-2xl mx-8">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search products and brands"
-              className="w-full rounded-2xl border border-white/15 bg-gradient-to-br from-white/[0.08] to-white/[0.04] backdrop-blur-xl pl-12 pr-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 hover:border-sky-200/30 focus:border-sky-300/50 focus:ring-2 focus:ring-sky-400/20 focus:outline-none shadow-[0_4px_16px_-8px_rgba(0,0,0,0.3)]"
-            />
-          </div>
-        </div>
-        
-        <div className="flex items-center space-x-4">
-          <NotificationSystem />
-          
-          <button 
-            onClick={() => setShowOrgSettings(true)}
-            className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] via-transparent to-blue-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
-            <Settings className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
+        {/* Navigation Items */}
+        <div className="flex flex-col items-center space-y-6 py-8">
+          <button className="group flex flex-col items-center justify-center space-y-1.5 text-slate-400 hover:text-white transition-colors">
+            <svg className="w-10 h-10 p-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+            <span className="text-[10px] font-medium">Chat</span>
           </button>
 
-          <div className="relative profile-dropdown-container">
+          <button className="group flex flex-col items-center justify-center space-y-1.5 text-slate-400 hover:text-white transition-colors">
+            <svg className="w-10 h-10 p-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            <span className="text-[10px] font-medium">Filters</span>
+          </button>
+
+          <button className="group flex flex-col items-center justify-center space-y-1.5 text-slate-400 hover:text-white transition-colors">
+            <svg className="w-10 h-10 p-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span className="text-[10px] font-medium">New</span>
+          </button>
+
+          <button 
+            onClick={() => setShowOrgSettings(true)}
+            className="group flex flex-col items-center justify-center space-y-1.5 text-slate-400 hover:text-white transition-colors"
+          >
+            <div className="w-10 h-10 flex items-center justify-center">
+              <Settings className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] font-medium">Settings</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Chat Area */}
+      <div className="flex flex-col w-80 relative z-10">
+        <div className="flex items-center justify-center h-16 px-4">
+          <h3 className="text-sm font-medium text-slate-300">Chat</h3>
+        </div>
+        <div className="flex-1 p-4">
+          {/* Chat content will go here */}
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col relative z-10">
+        {/* Header */}
+        <div className="flex justify-between items-center px-6 h-16">
+          {/* Search Bar */}
+          <div className="flex-1 max-w-2xl">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search products and brands"
+                className="w-full h-10 rounded-2xl border border-white/15 bg-gradient-to-br from-white/[0.08] to-white/[0.04] backdrop-blur-xl pl-12 pr-4 text-sm text-white placeholder-slate-400 transition-all duration-200 hover:border-sky-200/30 focus:border-sky-300/50 focus:ring-2 focus:ring-sky-400/20 focus:outline-none shadow-[0_4px_16px_-8px_rgba(0,0,0,0.3)]"
+              />
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-4 ml-6">
+            <NotificationSystem />
+            
             <button 
-              onClick={toggleProfileDropdown}
               className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.03] via-transparent to-pink-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
-              <UserCircle className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] via-transparent to-blue-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+              <ShoppingCart className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
             </button>
+
+            <div className="relative profile-dropdown-container">
+              <button 
+                onClick={toggleProfileDropdown}
+                className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/[0.03] via-transparent to-pink-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+                <UserCircle className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
+              </button>
 
             {/* Glassmorphic Profile Dropdown */}
             {showProfileDropdown && (
@@ -549,13 +590,21 @@ export function ModulesDashboard() {
                   <div className="absolute -top-2 right-4 w-4 h-4 bg-gradient-to-br from-white/[0.12] to-white/[0.08] border-l border-t border-white/[0.12] rotate-45"></div>
                 </div>
               </motion.div>
-            )}
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Products Layout Area */}
+        <div className="flex-1 p-3 overflow-auto">
+          <div className="h-full rounded-2xl bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-blue-950/80 p-6">
+            {/* Product content will go here */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {/* Placeholder product cards */}
+            </div>
           </div>
         </div>
       </div>
-
-      {/* First-time user welcome banner */}
-      {/* First-time user welcome banner removed per request */}
 
       {/* Modules Grid - Hidden */}
       {false && (
@@ -779,6 +828,6 @@ export function ModulesDashboard() {
           <UniversalLoading message="Signing you out..." type="auth" />
         </div>
       )}
-    </motion.div>
+    </div>
   )
 }

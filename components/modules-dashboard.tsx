@@ -20,6 +20,7 @@ import { hasInventory } from '@/lib/pos-operations'
 import { getOrgSettings } from '@/lib/org-operations'
 import { LoadingSpinner } from './loading-spinner'
 import { UniversalLoading } from './universal-loading'
+import { ProductsGrid } from './products-grid'
 
 const retailerModules = [
   {
@@ -434,12 +435,12 @@ export function ModulesDashboard() {
         </div>
         
         {/* Chat Input - Fixed at bottom */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="relative">
+        <div className="absolute bottom-0 left-0 right-0 p-4">
+          <div className="relative rounded-xl border border-white/15 bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-blue-950/80 backdrop-blur-xl shadow-lg">
             <input
               type="text"
               placeholder="Ask a follow-up..."
-              className="w-full rounded-xl border border-white/15 bg-white/[0.08] backdrop-blur-xl pl-4 pr-32 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 hover:border-sky-200/30 focus:border-sky-300/50 focus:ring-2 focus:ring-sky-400/20 focus:outline-none"
+              className="w-full bg-transparent pl-4 pr-32 py-3 text-sm text-white placeholder-slate-400 focus:outline-none"
             />
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
               <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
@@ -470,14 +471,14 @@ export function ModulesDashboard() {
       {/* Main Content Area */}
       <div className={`flex-1 flex flex-col relative z-10 transition-all duration-300 ${isProductsExpanded ? 'ml-3' : ''}`}>
         {/* Header */}
-        <div className="flex justify-between items-center px-6 h-16">
-          {/* Toggle Arrow Button */}
+        <div className="flex items-center px-6 h-16 gap-4">
+          {/* Toggle Arrow Button - Aligned with products tab */}
           <button
             onClick={() => setIsProductsExpanded(!isProductsExpanded)}
-            className="mr-4 p-2 rounded-lg hover:bg-white/10 transition-colors"
+            className="flex-shrink-0 h-10 w-10 rounded-xl bg-slate-800/50 backdrop-blur-sm transition-colors hover:bg-slate-700/50 flex items-center justify-center"
           >
             <svg 
-              className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${isProductsExpanded ? 'rotate-180' : ''}`}
+              className={`h-5 w-5 text-slate-300 transition-transform duration-300 ${isProductsExpanded ? 'rotate-180' : ''}`}
               fill="none" 
               stroke="currentColor" 
               viewBox="0 0 24 24"
@@ -635,12 +636,10 @@ export function ModulesDashboard() {
         </div>
 
         {/* Products Layout Area */}
-        <div className="flex-1 pl-3 pr-3 pb-3 pt-2 overflow-auto">
-          <div className="h-full rounded-2xl bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-blue-950/80 p-6">
-            {/* Product content will go here */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {/* Placeholder product cards */}
-            </div>
+        <div className="flex-1 pl-3 pr-3 pb-3 pt-2 overflow-hidden">
+          <div className="relative h-full rounded-2xl bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-blue-950/80 products-scrollbar overflow-y-auto">
+            {/* Products Grid */}
+            <ProductsGrid isExpanded={isProductsExpanded} />
           </div>
         </div>
       </div>

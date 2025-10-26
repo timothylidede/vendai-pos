@@ -263,6 +263,27 @@
   background: rgba(56, 189, 248, 0.5);
 }
 
+/* Products tab custom scrollbar - glassmorphic */
+.products-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, 0.2) transparent;
+}
+.products-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.products-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.products-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(59, 130, 246, 0.25));
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.products-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.4), rgba(59, 130, 246, 0.4));
+}
+
 /* Cyclic wheel effects */
 .cyclic-wheel {
   position: relative;

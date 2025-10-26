@@ -165,6 +165,7 @@ export function ModulesDashboard() {
   const [showOrgSettings, setShowOrgSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isProductsExpanded, setIsProductsExpanded] = useState(false);
   const router = useRouter();
   const [needsInventory, setNeedsInventory] = useState(false)
   const orgId = useMemo(() => userData?.organizationName || 'default', [userData?.organizationName])
@@ -381,44 +382,37 @@ export function ModulesDashboard() {
       )}
       
       {/* Left Sidebar - Navigation */}
-      <div className="flex flex-col w-20 relative z-10">
+      <div className={`flex flex-col w-20 relative z-10 transition-all duration-300 ${isProductsExpanded ? 'opacity-0 pointer-events-none -ml-20' : 'opacity-100'}`}>
         {/* Logo */}
         <div className="flex items-center justify-center h-16">
           <a
             href="https://vendai.digital"
             target="_blank"
             rel="noopener noreferrer"
-            className="group w-10 h-10 flex items-center justify-center transition-transform duration-700 hover:rotate-[360deg]"
+            className="group flex items-center justify-center transition-transform duration-700 hover:rotate-[360deg]"
           >
             <img
               src="/images/logo-icon-remove.png"
               alt="Vendai"
-              className="w-10 h-10"
+              className="h-8 w-auto"
             />
           </a>
         </div>
 
         {/* Navigation Items */}
-        <div className="flex flex-col items-center space-y-6 py-8">
-          <button className="group flex flex-col items-center justify-center space-y-1.5 text-slate-400 hover:text-white transition-colors">
+        <div className="flex flex-col items-center space-y-6 mt-2">
+          <button className="group flex flex-col items-center justify-center space-y-1.5 text-sky-400 transition-colors">
             <svg className="w-10 h-10 p-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
             </svg>
-            <span className="text-[10px] font-medium">Chat</span>
+            <span className="text-xs font-medium">Chat</span>
           </button>
 
           <button className="group flex flex-col items-center justify-center space-y-1.5 text-slate-400 hover:text-white transition-colors">
             <svg className="w-10 h-10 p-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
             </svg>
-            <span className="text-[10px] font-medium">Filters</span>
-          </button>
-
-          <button className="group flex flex-col items-center justify-center space-y-1.5 text-slate-400 hover:text-white transition-colors">
-            <svg className="w-10 h-10 p-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            <span className="text-[10px] font-medium">New</span>
+            <span className="text-xs font-medium">Filters</span>
           </button>
 
           <button 
@@ -428,27 +422,72 @@ export function ModulesDashboard() {
             <div className="w-10 h-10 flex items-center justify-center">
               <Settings className="w-5 h-5" />
             </div>
-            <span className="text-[10px] font-medium">Settings</span>
+            <span className="text-xs font-medium">Settings</span>
           </button>
         </div>
       </div>
 
       {/* Chat Area */}
-      <div className="flex flex-col w-80 relative z-10">
-        <div className="flex items-center justify-center h-16 px-4">
-          <h3 className="text-sm font-medium text-slate-300">Chat</h3>
+      <div className={`flex flex-col w-80 relative z-10 transition-all duration-300 ${isProductsExpanded ? 'opacity-0 pointer-events-none -ml-80' : 'opacity-100'}`}>
+        <div className="flex-1 pt-16 pb-20 px-4 overflow-auto">
+          {/* Chat messages will go here */}
         </div>
-        <div className="flex-1 p-4">
-          {/* Chat content will go here */}
+        
+        {/* Chat Input - Fixed at bottom */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Ask a follow-up..."
+              className="w-full rounded-xl border border-white/15 bg-white/[0.08] backdrop-blur-xl pl-4 pr-32 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 hover:border-sky-200/30 focus:border-sky-300/50 focus:ring-2 focus:ring-sky-400/20 focus:outline-none"
+            />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+              <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+              </button>
+              <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </button>
+              <button className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col relative z-10">
+      <div className={`flex-1 flex flex-col relative z-10 transition-all duration-300 ${isProductsExpanded ? 'ml-3' : ''}`}>
         {/* Header */}
         <div className="flex justify-between items-center px-6 h-16">
+          {/* Toggle Arrow Button */}
+          <button
+            onClick={() => setIsProductsExpanded(!isProductsExpanded)}
+            className="mr-4 p-2 rounded-lg hover:bg-white/10 transition-colors"
+          >
+            <svg 
+              className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${isProductsExpanded ? 'rotate-180' : ''}`}
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
           {/* Search Bar */}
-          <div className="flex-1 max-w-2xl">
+          <div className={`flex-1 transition-all duration-300 ${isProductsExpanded ? 'max-w-4xl mx-auto' : 'max-w-2xl'}`}>
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
@@ -596,7 +635,7 @@ export function ModulesDashboard() {
         </div>
 
         {/* Products Layout Area */}
-        <div className="flex-1 p-3 overflow-auto">
+        <div className="flex-1 pl-3 pr-3 pb-3 pt-2 overflow-auto">
           <div className="h-full rounded-2xl bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-blue-950/80 p-6">
             {/* Product content will go here */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

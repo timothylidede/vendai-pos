@@ -59,8 +59,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </HardwareProvider>
           </AuthProvider>
           
-          {/* vendai Panel */}
-          <VendaiPanel />
+          {/* vendai Panel - Hidden */}
+          {/* <VendaiPanel /> */}
           
           {/* AI Assistant is hosted by VendaiPanel */}
           <Toaster />

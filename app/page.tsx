@@ -79,5 +79,5 @@ export default function HomePage() {
   }
 
   // Fallback - show loading while redirecting to modules dashboard
-  return <UniversalLoading type="auth" message="Redirecting to modules..." />
+  return <UniversalLoading type="auth" message="Let's go" />
 }

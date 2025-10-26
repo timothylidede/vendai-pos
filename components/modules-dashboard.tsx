@@ -7,7 +7,7 @@ import {
   ShoppingCart, Package, HeartHandshake, Truck, Users,
   ArrowRightCircle, TrendingUp,
   Settings, UserCircle, ChevronDown, 
-  User, Mail, MapPin, LogOut, X
+  User, Mail, MapPin, LogOut, X, Search
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { signOut } from 'firebase/auth'
@@ -388,7 +388,34 @@ export function ModulesDashboard() {
       
       {/* Header */}
       <div className="flex justify-between items-center mb-12">
-        <div className="flex-1" /> {/* Spacer */}
+        {/* Logo */}
+        <div className="flex items-center">
+          <a
+            href="https://vendai.digital"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-sky-500/[0.03] via-transparent to-cyan-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+            <img
+              src="/images/logo-icon-remove.png"
+              alt="Vendai"
+              className="relative w-6 h-6 transition-transform duration-700 group-hover:rotate-[360deg]"
+            />
+          </a>
+        </div>
+
+        {/* Search Bar */}
+        <div className="flex-1 max-w-2xl mx-8">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search products and brands"
+              className="w-full rounded-2xl border border-white/15 bg-gradient-to-br from-white/[0.08] to-white/[0.04] backdrop-blur-xl pl-12 pr-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 hover:border-sky-200/30 focus:border-sky-300/50 focus:ring-2 focus:ring-sky-400/20 focus:outline-none shadow-[0_4px_16px_-8px_rgba(0,0,0,0.3)]"
+            />
+          </div>
+        </div>
         
         <div className="flex items-center space-x-4">
           <NotificationSystem />
@@ -530,7 +557,8 @@ export function ModulesDashboard() {
       {/* First-time user welcome banner */}
       {/* First-time user welcome banner removed per request */}
 
-      {/* Modules Grid */}
+      {/* Modules Grid - Hidden */}
+      {false && (
       <div className="flex flex-col items-center mb-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 max-w-6xl w-full place-items-center">
           {currentModules.map((module, index) => {
@@ -664,6 +692,7 @@ export function ModulesDashboard() {
           })}
         </div>
       </div>
+      )}
 
       {/* Logout Confirmation Modal */}
       {showLogoutModal && (

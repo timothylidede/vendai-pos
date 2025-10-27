@@ -488,7 +488,7 @@ export function ModulesDashboard() {
           </button>
 
           {/* Search Bar */}
-          <div className={`flex-1 transition-all duration-300 ${isProductsExpanded ? 'max-w-4xl mx-auto' : 'max-w-2xl'}`}>
+          <div className={`flex-1 min-w-[16rem] transition-[max-width] duration-300 ease-out ${isProductsExpanded ? 'max-w-4xl' : 'max-w-2xl'}`}>
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
@@ -499,7 +499,7 @@ export function ModulesDashboard() {
             </div>
           </div>
           
-          <div className="flex items-center space-x-4 ml-6">
+          <div className="flex items-center space-x-4 ml-6 flex-shrink-0">
             <NotificationSystem />
             
             <button 

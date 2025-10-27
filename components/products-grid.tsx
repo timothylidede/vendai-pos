@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import Image from "next/image"
 import type { CSSProperties, TransitionEvent } from "react"
+import { motion } from "framer-motion"
 
 type Rect = {
   top: number
@@ -243,11 +244,16 @@ export function ProductsGrid({ isExpanded }: ProductsGridProps) {
         {recentlyViewed.length > 0 && (
           <section className="mb-10">
             <h2 className="mb-4 text-lg font-semibold text-white">Recently viewed</h2>
-            <div className={`grid gap-4 transition-all duration-500 ease-in-out ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}>
+            <motion.div
+              layout
+              transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
+              className={`grid gap-4 ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}
+            >
               {recentlyViewed.map((product) => {
                 const refKey = `recent-${product.id}`
                 return (
-                  <button
+                  <motion.button
+                    layout
                     key={refKey}
                     onClick={() => handleProductClick(product, refKey)}
                     className="group relative flex flex-col transition-transform hover:scale-105"
@@ -265,21 +271,26 @@ export function ProductsGrid({ isExpanded }: ProductsGridProps) {
                     </div>
                     <h3 className="text-xs text-slate-300 line-clamp-2">{product.name}</h3>
                     <p className="text-sm font-semibold text-white">KES {product.price.toLocaleString()}</p>
-                  </button>
+                  </motion.button>
                 )
               })}
-            </div>
+            </motion.div>
           </section>
         )}
 
         {/* New from brands you follow */}
         <section className="mb-10">
           <h2 className="mb-4 text-lg font-semibold text-white">New from brands you follow</h2>
-          <div className={`grid gap-4 transition-all duration-500 ease-in-out ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}>
+          <motion.div
+            layout
+            transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
+            className={`grid gap-4 ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}
+          >
             {newProducts.map((product) => {
               const refKey = `new-${product.id}`
               return (
-                <button
+                <motion.button
+                  layout
                   key={refKey}
                   onClick={() => handleProductClick(product, refKey)}
                   className="group relative flex flex-col transition-transform hover:scale-105"
@@ -297,20 +308,25 @@ export function ProductsGrid({ isExpanded }: ProductsGridProps) {
                   </div>
                   <h3 className="text-xs text-slate-300 line-clamp-2">{product.name}</h3>
                   <p className="text-sm font-semibold text-white">KES {product.price.toLocaleString()}</p>
-                </button>
+                </motion.button>
               )
             })}
-          </div>
+          </motion.div>
         </section>
 
         {/* Popular with shops like yours */}
         <section className="mb-10">
           <h2 className="mb-4 text-lg font-semibold text-white">Popular with shops like yours</h2>
-          <div className={`grid gap-4 transition-all duration-500 ease-in-out ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}>
+          <motion.div
+            layout
+            transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
+            className={`grid gap-4 ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}
+          >
             {popularProducts.map((product) => {
               const refKey = `popular-${product.id}`
               return (
-                <button
+                <motion.button
+                  layout
                   key={refKey}
                   onClick={() => handleProductClick(product, refKey)}
                   className="group relative flex flex-col transition-transform hover:scale-105"
@@ -328,18 +344,22 @@ export function ProductsGrid({ isExpanded }: ProductsGridProps) {
                   </div>
                   <h3 className="text-xs text-slate-300 line-clamp-2">{product.name}</h3>
                   <p className="text-sm font-semibold text-white">KES {product.price.toLocaleString()}</p>
-                </button>
+                </motion.button>
               )
             })}
-          </div>
+          </motion.div>
         </section>
 
         {/* Brands you might like */}
         <section className="mb-10">
           <h2 className="mb-4 text-lg font-semibold text-white">Brands you might like</h2>
-          <div className={`grid gap-4 transition-all duration-500 ease-in-out ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}>
+          <motion.div
+            layout
+            transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
+            className={`grid gap-4 ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}
+          >
             {BRANDS.map((brand) => (
-              <div key={brand.name} className="group rounded-lg border border-white/10 bg-slate-800/30 p-4 transition hover:border-sky-400/30 hover:bg-slate-800/50">
+              <motion.div layout key={brand.name} className="group rounded-lg border border-white/10 bg-slate-800/30 p-4 transition hover:border-sky-400/30 hover:bg-slate-800/50">
                 <div className="mb-2 flex h-16 items-center justify-center rounded-lg bg-slate-700/50">
                   <span className="text-lg font-semibold text-white">{brand.name.slice(0, 2)}</span>
                 </div>
@@ -351,19 +371,24 @@ export function ProductsGrid({ isExpanded }: ProductsGridProps) {
                   <span>{brand.rating}</span>
                 </div>
                 <p className="text-xs text-slate-500">Min ${brand.minOrder}</p>
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         </section>
 
         {/* Products you might like */}
         <section className="mb-10">
           <h2 className="mb-4 text-lg font-semibold text-white">Products you might like</h2>
-          <div className={`grid gap-4 transition-all duration-500 ease-in-out ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}>
+          <motion.div
+            layout
+            transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
+            className={`grid gap-4 ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}
+          >
             {recommendedProducts.map((product) => {
               const refKey = `recommended-${product.id}`
               return (
-                <button
+                <motion.button
+                  layout
                   key={refKey}
                   onClick={() => handleProductClick(product, refKey)}
                   className="group relative flex flex-col transition-transform hover:scale-105"
@@ -381,10 +406,10 @@ export function ProductsGrid({ isExpanded }: ProductsGridProps) {
                   </div>
                   <h3 className="text-xs text-slate-300 line-clamp-2">{product.name}</h3>
                   <p className="text-sm font-semibold text-white">KES {product.price.toLocaleString()}</p>
-                </button>
+                </motion.button>
               )
             })}
-          </div>
+          </motion.div>
         </section>
       </div>
 

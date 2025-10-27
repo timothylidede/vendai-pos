@@ -34,11 +34,11 @@ type ProductDetailOverlayProps = {
 
 // Mock product data
 const MOCK_PRODUCTS: Product[] = [
-  { id: "1", name: "Premium Rice 25kg", price: 3500, brand: "Mahitaji", image: "/images/products/rice.png", category: "food" },
-  { id: "2", name: "Cooking Oil 5L", price: 1200, brand: "Fresh", image: "/images/products/oil.png", category: "food" },
-  { id: "3", name: "Maize Flour 10kg", price: 850, brand: "Soko", image: "/images/products/flour.png", category: "food" },
-  { id: "4", name: "Sugar 50kg", price: 5500, brand: "Sweet Co", category: "food" },
-  { id: "5", name: "Laundry Soap 800g", price: 120, brand: "Clean Pro", category: "household" },
+  { id: "1", name: "Premium Rice 25kg", price: 3500, brand: "Mahitaji", image: "/products/rice.png", category: "food" },
+  { id: "2", name: "Cooking Oil 5L", price: 1200, brand: "Fresh", image: "/products/cooking-oil.png", category: "food" },
+  { id: "3", name: "Maize Flour 10kg", price: 850, brand: "Soko", image: "/products/maize-flour.png", category: "food" },
+  { id: "4", name: "Wheat Flour 25kg", price: 2800, brand: "Soko", image: "/products/wheat-flour.png", category: "food" },
+  { id: "5", name: "Sugar 50kg", price: 5500, brand: "Sweet Co", image: "/products/sugar.png", category: "food" },
   { id: "6", name: "Tea Leaves 500g", price: 450, brand: "Chai Plus", category: "beverages" },
   { id: "7", name: "Bottled Water 24pk", price: 480, brand: "Pure", category: "beverages" },
   { id: "8", name: "Washing Powder 2kg", price: 380, brand: "Fresh", category: "household" },
@@ -155,22 +155,19 @@ function ProductDetailOverlay({ product, originRect, isClosing, onCloseComplete 
         }`}
         style={detailsStyle}
       >
-        <div className="rounded-xl border border-white/10 bg-slate-900/60 p-6 backdrop-blur-xl">
-          <p className="mb-1 text-xs text-slate-400">{product.brand}</p>
-          <h2 className="mb-3 text-xl font-semibold text-white">{product.name}</h2>
-          <p className="mb-6 text-2xl font-bold text-sky-400">KES {product.price.toLocaleString()}</p>
-          
-          <div className="flex gap-3">
-            <button className="flex-1 rounded-lg bg-sky-500/80 px-4 py-3 text-sm font-medium text-white transition hover:bg-sky-400">
-              Add to cart
-            </button>
-            <button className="rounded-lg border border-white/20 bg-white/5 px-4 py-3 text-white transition hover:bg-white/10">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-              </svg>
-            </button>
-          </div>
-        </div>
+        <h2 className="mb-1 text-[11px] font-light uppercase tracking-[0.3em] text-white/90">
+          {product.name}
+        </h2>
+        <p className="mb-1 text-[9px] font-extralight uppercase tracking-[0.25em] text-white/60">
+          {product.brand}
+        </p>
+        <p className="mb-6 text-lg font-light text-white">
+          KES {product.price.toLocaleString()}
+        </p>
+        
+        <button className="mx-auto rounded-lg bg-white px-8 py-2.5 text-[10px] font-normal uppercase tracking-[0.2em] text-slate-900 transition-all duration-300 hover:bg-white/90 hover:shadow-lg">
+          Add to cart
+        </button>
       </div>
     </>
   )

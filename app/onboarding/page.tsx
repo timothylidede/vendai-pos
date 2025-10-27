@@ -729,12 +729,16 @@ export default function OnboardingPage() {
                             }`}
                           >
                             <div className="flex items-center gap-4">
-                              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${
+                              <div className={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border ${
                                 data.role === 'retailer'
-                                  ? 'border-sky-200/50 bg-sky-500/20 text-sky-100'
-                                  : 'border-white/10 bg-white/8 text-slate-200'
+                                  ? 'border-sky-200/50 bg-sky-500/20'
+                                  : 'border-white/10 bg-white/8'
                               }`}>
-                                <Store className="h-6 w-6" />
+                                <img 
+                                  src="/retailer.jpg" 
+                                  alt="Retailer" 
+                                  className="h-full w-full object-cover"
+                                />
                               </div>
                               <div className="flex-1">
                                 <div className="text-base font-semibold text-slate-100">Retailer</div>
@@ -754,12 +758,16 @@ export default function OnboardingPage() {
                             }`}
                           >
                             <div className="flex items-center gap-4">
-                              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${
+                              <div className={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border ${
                                 data.role === 'distributor'
-                                  ? 'border-indigo-200/50 bg-indigo-500/20 text-indigo-100'
-                                  : 'border-white/10 bg-white/8 text-slate-200'
+                                  ? 'border-indigo-200/50 bg-indigo-500/20'
+                                  : 'border-white/10 bg-white/8'
                               }`}>
-                                <Truck className="h-6 w-6" />
+                                <img 
+                                  src="/distributor.jpg" 
+                                  alt="Distributor" 
+                                  className="h-full w-full object-cover"
+                                />
                               </div>
                               <div className="flex-1">
                                 <div className="text-base font-semibold text-slate-100">Distributor / Wholesaler / Supplier</div>

@@ -363,7 +363,7 @@ export function ModulesDashboard() {
   };
 
   return (
-    <div className="module-background flex h-screen overflow-hidden">
+    <div className="module-background flex h-screen overflow-hidden" style={{ fontFamily: '"Neue Haas Grotesk Display Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif' }}>
       {/* Background gradients */}
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute inset-0 bg-slate-950/55 backdrop-blur-[120px]" />
@@ -437,32 +437,40 @@ export function ModulesDashboard() {
         {/* Chat Input - Fixed at bottom */}
         <div className="absolute bottom-0 left-0 right-0 p-4">
           <div className="relative rounded-xl border border-white/15 bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-blue-950/80 backdrop-blur-xl shadow-lg">
-            <input
-              type="text"
-              placeholder="Ask a follow-up..."
-              className="w-full bg-transparent pl-4 pr-32 py-3 text-sm text-white placeholder-slate-400 focus:outline-none"
-            />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
-              <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
-                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-              <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
-                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-              </button>
-              <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
-                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
-              </button>
-              <button className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                </svg>
-              </button>
+            {/* Ask a follow-up text */}
+            <div className="px-4 pt-3 pb-2">
+              <span className="text-xs text-slate-400">Ask a follow-up...</span>
+            </div>
+            
+            {/* Input and icons */}
+            <div className="relative px-4 pb-3">
+              <input
+                type="text"
+                placeholder=""
+                className="w-full bg-transparent pr-32 py-2 text-sm text-white placeholder-slate-400 focus:outline-none"
+              />
+              <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                  <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+                <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                  <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                </button>
+                <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                  <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </button>
+                <button className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>

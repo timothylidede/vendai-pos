@@ -86,7 +86,7 @@ export default function ChooseOnboardingPage() {
   }
 
   return (
-    <div className="module-background relative flex min-h-screen w-full overflow-hidden lg:h-screen">
+    <div className="module-background relative flex min-h-screen w-full overflow-hidden lg:h-screen" style={{ fontFamily: '"Neue Haas Grotesk Display Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif' }}>
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute inset-0 bg-slate-950/55 backdrop-blur-[120px]" />
         <div className="absolute -top-36 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-sky-500/18 blur-[120px]" />

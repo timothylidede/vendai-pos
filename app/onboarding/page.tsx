@@ -17,6 +17,7 @@ import { getInvitation, acceptInvitation } from '@/lib/invitation-operations';
 import { createOrgScaffold, ensureUniqueOrgId } from '@/lib/org-operations';
 import { notifyInvitationAccepted, notifyMemberJoined } from '@/lib/notification-operations';
 import { UniversalLoading } from '@/components/universal-loading';
+import { useAuth } from '@/contexts/auth-context';
 import localFont from 'next/font/local';
 
 const neueHaas = localFont({
@@ -90,6 +91,7 @@ interface UserProfileDocument {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { refreshUserData } = useAuth();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -501,6 +503,13 @@ export default function OnboardingPage() {
         }
       }
       
+      try {
+        // Ensure downstream guards read the updated onboarding flag before navigation
+        await refreshUserData();
+      } catch (refreshError) {
+        console.warn('Post-onboarding user data refresh failed:', refreshError);
+      }
+
       // Send welcome email after successful onboarding
       try {
         if (data.role === 'distributor') {

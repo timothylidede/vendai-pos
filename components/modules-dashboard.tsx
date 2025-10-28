@@ -161,6 +161,7 @@ export function ModulesDashboard() {
   const [isEntering, setIsEntering] = useState(true);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [isFirstTime, setIsFirstTime] = useState(false);
   const [showTooltip, setShowTooltip] = useState<string | null>(null);
   const [showOrgSettings, setShowOrgSettings] = useState(false);
@@ -218,6 +219,13 @@ export function ModulesDashboard() {
         if (isNewUser) {
           // Mark first-login consumed without showing any tooltips/banners
           localStorage.setItem('vendai-first-login', 'false');
+        }
+        
+        // Check if this is first time seeing welcome modal
+        const hasSeenWelcome = localStorage.getItem('hasSeenRetailerWelcome');
+        if (!hasSeenWelcome && userData.role === 'retailer') {
+          setShowWelcomeModal(true);
+          localStorage.setItem('hasSeenRetailerWelcome', 'true');
         }
       }
     }
@@ -371,6 +379,43 @@ export function ModulesDashboard() {
         <div className="absolute bottom-[-20%] right-[-10%] h-96 w-96 rounded-full bg-indigo-500/18 blur-[140px]" />
         <div className="absolute top-1/3 -left-32 h-64 w-64 rounded-full bg-cyan-400/14 blur-[120px]" />
       </div>
+
+      {/* Welcome Modal */}
+      {showWelcomeModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-white/12 bg-slate-900/95 p-8 shadow-2xl backdrop-blur-xl"
+          >
+            <div className="mb-6 flex justify-center">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-green-500">
+                <ShoppingCart className="h-10 w-10 text-white" />
+              </div>
+            </div>
+            
+            <h2 className="mb-3 text-center text-3xl font-bold text-slate-100">
+              Welcome to Vendai! 🎉
+            </h2>
+            
+            <p className="mb-8 text-center text-slate-300">
+              Your all-in-one platform to manage sales, inventory, and suppliers. Let's get started!
+            </p>
+            
+            <button
+              onClick={() => setShowWelcomeModal(false)}
+              className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 py-3 text-white shadow-lg hover:shadow-xl transition-all font-medium"
+            >
+              Get Started
+            </button>
+          </motion.div>
+        </motion.div>
+      )}
 
       {/* Exit Overlay */}
       {isExiting && (

@@ -521,8 +521,15 @@ export default function OnboardingPage() {
       // Clear cached onboarding data after successful completion
       clearOnboardingCache();
       
-      // Redirect based on role (both go to modules for now)
-      router.push('/modules');
+      // Show loading state for a few seconds before redirect
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Redirect based on role
+      if (data.role === 'distributor') {
+        router.push('/distributor-dashboard');
+      } else {
+        router.push('/modules');
+      }
     } catch (error) {
       console.error('Error completing onboarding:', error);
       setError(error instanceof Error ? error.message : 'Failed to complete onboarding. Please try again.');

@@ -11,7 +11,7 @@ declare global {
 }
 
 interface LocationPickerWithMapProps {
-  onLocationSelect: (location: string, coordinates?: { lat: number; lng: number }, placeData?: { website?: string; placeId?: string; name?: string }) => void;
+  onLocationSelect: (location: string, coordinates?: { lat: number; lng: number }, placeData?: { website?: string; placeId?: string; name?: string; county?: string; subCounty?: string }) => void;
   value: string;
   placeholder?: string;
 }
@@ -102,7 +102,7 @@ export function LocationPickerWithMap({ onLocationSelect, value, placeholder }: 
           // Initialize autocomplete
           const autocompleteInstance = new window.google.maps.places.Autocomplete(inputRef.current, {
             types: ['establishment', 'geocode'],
-            fields: ['place_id', 'formatted_address', 'geometry', 'name', 'website'],
+            fields: ['place_id', 'formatted_address', 'geometry', 'name', 'website', 'address_components'],
             componentRestrictions: { country: 'ke' }
           });
 
@@ -117,11 +117,31 @@ export function LocationPickerWithMap({ onLocationSelect, value, placeholder }: 
                 lng: place.geometry.location.lng()
               };
 
-              // Extract place data including website
+              // Extract county and subcounty from address components
+              let county = '';
+              let subCounty = '';
+              
+              if (place.address_components) {
+                for (const component of place.address_components) {
+                  // County is usually administrative_area_level_1
+                  if (component.types.includes('administrative_area_level_1')) {
+                    county = component.long_name;
+                  }
+                  // Sub-county could be administrative_area_level_2 or locality
+                  if (component.types.includes('administrative_area_level_2') || 
+                      (component.types.includes('locality') && !subCounty)) {
+                    subCounty = component.long_name;
+                  }
+                }
+              }
+
+              // Extract place data including website, county, and subcounty
               const placeData = {
                 website: place.website,
                 placeId: place.place_id,
-                name: place.name
+                name: place.name,
+                county: county || undefined,
+                subCounty: subCounty || undefined
               };
 
               // Use place name instead of full formatted address for establishment name

@@ -561,10 +561,15 @@ export default function OnboardingPage() {
         if (data.role === 'retailer') {
           return (data.salesChannels?.length || 0) > 0;
         }
-        // For distributors, step 2 is brand name + website (required) + instagram (optional) + facebook (optional)
-        return validateOrganizationName(data.organizationName) && 
-               data.website?.trim() !== '' && 
-               validateURL(data.website || '');
+        // For distributors, step 2 is brand name + website (required) + county/subcounty if manual entry
+        if (data.county && data.county !== 'manual') {
+          // Manual entry mode: require name, county, and sub-county
+          return validateOrganizationName(data.organizationName) && 
+                 data.county.trim() !== '' && 
+                 data.subCounty?.trim() !== '';
+        }
+        // Map picker mode or no mode selected: just require name and coordinates
+        return validateOrganizationName(data.organizationName) && !!data.coordinates;
       case 3:
         // For retailers, step 3 is store name + validation based on sales channel
         if (data.role === 'retailer') {
@@ -628,7 +633,23 @@ export default function OnboardingPage() {
   const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
   return (
-    <div className={`module-background relative min-h-screen w-full overflow-hidden px-6 py-16 sm:px-10 lg:px-16 ${neueHaas.className}`}>
+    <>
+      <style jsx global>{`
+        ::-webkit-scrollbar {
+          width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+          background: rgba(15, 23, 42, 0.3);
+        }
+        ::-webkit-scrollbar-thumb {
+          background: rgba(56, 189, 248, 0.5);
+          border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: rgba(56, 189, 248, 0.7);
+        }
+      `}</style>
+      <div className={`module-background relative min-h-screen w-full overflow-hidden px-6 py-16 sm:px-10 lg:px-16 ${neueHaas.className}`}>
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[140px]" />
         <div className="absolute -top-32 left-1/2 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-sky-500/18 blur-[160px]" />
@@ -993,7 +1014,7 @@ export default function OnboardingPage() {
                                   <GoogleMapsWrapper apiKey={mapsApiKey}>
                                     <LocationPickerWithMap
                                       value={data.organizationName}
-                                      onLocationSelect={(location: string, coordinates?: { lat: number; lng: number }, placeData?: { website?: string; placeId?: string; name?: string }) => {
+                                      onLocationSelect={(location: string, coordinates?: { lat: number; lng: number }, placeData?: { website?: string; placeId?: string; name?: string; county?: string; subCounty?: string }) => {
                                         const updates: Partial<OnboardingData> = { 
                                           organizationName: location, 
                                           location, 
@@ -1002,6 +1023,13 @@ export default function OnboardingPage() {
                                         // Autofill website if available from Google Places
                                         if (placeData?.website && !data.website) {
                                           updates.website = placeData.website;
+                                        }
+                                        // Autofill county and subcounty if available
+                                        if (placeData?.county) {
+                                          updates.county = placeData.county;
+                                        }
+                                        if (placeData?.subCounty) {
+                                          updates.subCounty = placeData.subCounty;
                                         }
                                         setData({ ...data, ...updates });
                                       }}
@@ -1295,22 +1323,97 @@ export default function OnboardingPage() {
                                   </div>
                                   <label className="text-sm font-medium text-slate-200">Brand name</label>
                                 </div>
-                                <input
-                                  type="text"
-                                  value={data.organizationName}
-                                  onChange={(e) => setData({ ...data, organizationName: e.target.value })}
-                                  placeholder="e.g. Fresh Foods"
-                                  className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
-                                    data.organizationName && !validateOrganizationName(data.organizationName)
-                                      ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
-                                      : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
-                                  }`}
-                                  autoFocus
-                                />
-                                {data.organizationName && !validateOrganizationName(data.organizationName) && (
+                                {!data.county ? (
+                                  <GoogleMapsWrapper apiKey={mapsApiKey}>
+                                    <LocationPickerWithMap
+                                      value={data.organizationName}
+                                      onLocationSelect={(location: string, coordinates?: { lat: number; lng: number }, placeData?: { website?: string; placeId?: string; name?: string; county?: string; subCounty?: string }) => {
+                                        const updates: Partial<OnboardingData> = { 
+                                          organizationName: location, 
+                                          location, 
+                                          coordinates 
+                                        };
+                                        // Autofill website if available from Google Places
+                                        if (placeData?.website && !data.website) {
+                                          updates.website = placeData.website;
+                                        }
+                                        // Autofill county and subcounty if available
+                                        if (placeData?.county) {
+                                          updates.county = placeData.county;
+                                        }
+                                        if (placeData?.subCounty) {
+                                          updates.subCounty = placeData.subCounty;
+                                        }
+                                        setData({ ...data, ...updates });
+                                      }}
+                                      placeholder="Search for your brand location..."
+                                    />
+                                  </GoogleMapsWrapper>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={data.organizationName}
+                                    onChange={(e) => setData({ ...data, organizationName: e.target.value })}
+                                    placeholder="e.g. Fresh Foods"
+                                    className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                                      data.organizationName && !validateOrganizationName(data.organizationName)
+                                        ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                        : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                                    }`}
+                                    autoFocus
+                                  />
+                                )}
+                                {data.organizationName && data.county && !validateOrganizationName(data.organizationName) && (
                                   <p className="mt-2 text-xs text-red-300/80">Brand name must be at least 2 characters long.</p>
                                 )}
+                                <button
+                                  onClick={() => {
+                                    if (data.county) {
+                                      // Switch back to map picker
+                                      setData({ ...data, county: '', subCounty: '', organizationName: '', coordinates: undefined });
+                                    } else {
+                                      // Enable manual entry
+                                      setData({ ...data, county: 'manual' });
+                                    }
+                                  }}
+                                  className="mt-2 text-sm text-sky-300 underline transition hover:text-sky-200"
+                                >
+                                  {data.county ? 'Use location search instead' : 'Enter manually'}
+                                </button>
                               </div>
+                              {data.county && data.county !== 'manual' && (
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="mb-2 block text-sm font-medium text-slate-200">County</label>
+                                    <select
+                                      value={data.county || ''}
+                                      onChange={(e) => {
+                                        setData({ ...data, county: e.target.value, subCounty: '' });
+                                      }}
+                                      className="w-full rounded-2xl border border-sky-300/30 bg-gradient-to-br from-white/[0.07] to-white/[0.02] px-4 py-3 text-sm text-white backdrop-blur-xl transition-all duration-200 hover:border-sky-300/50 hover:from-white/[0.09] hover:to-white/[0.04] focus:border-sky-300/60 focus:from-white/[0.10] focus:to-white/[0.05] focus:ring-2 focus:ring-sky-400/25 focus:outline-none [&>option]:bg-slate-900 [&>option]:text-slate-100"
+                                    >
+                                      <option value="">Select county</option>
+                                      {kenyanCounties.map(county => (
+                                        <option key={county.code} value={county.name}>{county.name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="mb-2 block text-sm font-medium text-slate-200">Sub-County</label>
+                                    <select
+                                      value={data.subCounty || ''}
+                                      onChange={(e) => setData({ ...data, subCounty: e.target.value })}
+                                      disabled={!data.county || data.county === 'manual'}
+                                      className="w-full rounded-2xl border border-sky-300/30 bg-gradient-to-br from-white/[0.07] to-white/[0.02] px-4 py-3 text-sm text-white backdrop-blur-xl transition-all duration-200 hover:border-sky-300/50 hover:from-white/[0.09] hover:to-white/[0.04] focus:border-sky-300/60 focus:from-white/[0.10] focus:to-white/[0.05] focus:ring-2 focus:ring-sky-400/25 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed [&>option]:bg-slate-900 [&>option]:text-slate-100"
+                                    >
+                                      <option value="">Select sub-county</option>
+                                      {data.county && data.county !== 'manual' && kenyanCounties.find(c => c.name === data.county)?.subCounties.map(sub => (
+                                        <option key={sub} value={sub}>{sub}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+                              )}
                               <div>
                                 <div className="mb-3 flex items-center gap-3">
                                   <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
@@ -1797,6 +1900,7 @@ export default function OnboardingPage() {
           </motion.div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

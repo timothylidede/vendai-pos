@@ -11,6 +11,28 @@ import { auth, googleProvider, db } from '@/lib/firebase';
 import { useEffect, useState } from 'react';
 import { UniversalLoading } from './universal-loading';
 import { useAuth } from '@/contexts/auth-context';
+import localFont from 'next/font/local';
+
+const neueHaas = localFont({
+  src: [
+    {
+      path: '../public/fonts/Neue Haas Grotesk Display Pro 55 Roman.woff2',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/Neue Haas Grotesk Display Pro 65 Medium.woff2',
+      weight: '500',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/Neue Haas Grotesk Display Pro 75 Bold.woff2',
+      weight: '700',
+      style: 'normal',
+    },
+  ],
+  variable: '--font-neue-haas'
+});
 
 type FirebaseUser = {
   uid: string;
@@ -36,6 +58,11 @@ type ElectronOAuthResult = {
 const resolvePostAuthRoute = (role?: string | null, onboardingCompleted?: boolean) => {
   if (!onboardingCompleted) {
     return '/onboarding/choose';
+  }
+
+  // Route distributors to distributor dashboard, retailers to modules
+  if (role?.toLowerCase() === 'distributor') {
+    return '/distributor-dashboard';
   }
 
   return '/modules';
@@ -487,7 +514,7 @@ export function WelcomePage() {
   }
 
   return (
-    <div className="module-background flex min-h-screen w-full items-center justify-center p-6">
+    <div className={`module-background flex min-h-screen w-full items-center justify-center p-6 ${neueHaas.className}`}>
       <div className="max-w-sm w-full">
         <motion.div
           initial={{ opacity: 0, y: 16 }}

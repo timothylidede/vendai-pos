@@ -213,6 +213,9 @@ export function ModulesDashboard() {
         router.push('/onboarding/choose');
       } else if (!userData.onboardingCompleted) {
         router.push('/onboarding/choose');
+      } else if (userData.role === 'distributor') {
+        // Redirect distributors to their dashboard
+        router.push('/distributor-dashboard');
       } else {
         const isNewUser = localStorage.getItem('vendai-first-login') !== 'false';
         setIsFirstTime(isNewUser);

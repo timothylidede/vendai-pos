@@ -17,6 +17,28 @@ import { getInvitation, acceptInvitation } from '@/lib/invitation-operations';
 import { createOrgScaffold, ensureUniqueOrgId } from '@/lib/org-operations';
 import { notifyInvitationAccepted, notifyMemberJoined } from '@/lib/notification-operations';
 import { UniversalLoading } from '@/components/universal-loading';
+import localFont from 'next/font/local';
+
+const neueHaas = localFont({
+  src: [
+    {
+      path: '../../public/fonts/Neue Haas Grotesk Display Pro 55 Roman.woff2',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../../public/fonts/Neue Haas Grotesk Display Pro 65 Medium.woff2',
+      weight: '500',
+      style: 'normal',
+    },
+    {
+      path: '../../public/fonts/Neue Haas Grotesk Display Pro 75 Bold.woff2',
+      weight: '700',
+      style: 'normal',
+    },
+  ],
+  variable: '--font-neue-haas'
+});
 
 type UserRole = 'retailer' | 'distributor' | null;
 
@@ -24,6 +46,7 @@ interface OnboardingData {
   role: UserRole;
   organizationName: string;
   contactNumber: string;
+  phoneNumber?: string;
   location: string;
   coordinates?: { lat: number; lng: number };
   invitationId?: string;
@@ -45,6 +68,7 @@ interface OnboardingData {
   hearAboutUs?: string;
   instagramHandle?: string;
   fulfillmentEmail?: string;
+  facebookHandle?: string;
 }
 
 interface UserProfileDocument {
@@ -77,6 +101,7 @@ export default function OnboardingPage() {
     role: null,
     organizationName: '',
     contactNumber: '',
+    phoneNumber: '',
     location: '',
     coordinates: undefined,
     invitationId: undefined,
@@ -95,7 +120,8 @@ export default function OnboardingPage() {
     primaryCategory: '',
     hearAboutUs: '',
     instagramHandle: '',
-    fulfillmentEmail: ''
+    fulfillmentEmail: '',
+    facebookHandle: ''
   });
 
   const [showRetailerWarning, setShowRetailerWarning] = useState(false);
@@ -238,9 +264,9 @@ export default function OnboardingPage() {
   ];
 
   // When joining existing org, show a single confirm/contact screen
-  // Retailers: role -> sales channels -> store details -> category -> opening year -> payment terms (6 steps, indices 0-5)
-  // Distributors: role -> org name+website+instagram -> fulfillment email -> product count -> store count -> primary category -> hear about us (7 steps, indices 0-6)
-  const totalSteps = data.isJoiningExisting ? 1 : data.role === 'retailer' ? 6 : 7;
+  // Retailers: role -> phone number -> sales channels -> store details -> category -> opening year -> payment terms (7 steps, indices 0-6)
+  // Distributors: role -> phone number -> brand name+website+instagram+facebook -> fulfillment email -> product count -> store count -> primary category -> hear about us (8 steps, indices 0-7)
+  const totalSteps = data.isJoiningExisting ? 1 : data.role === 'retailer' ? 7 : 8;
   const progress = data.isJoiningExisting 
     ? 100 
     : currentStep === 0 
@@ -356,6 +382,7 @@ export default function OnboardingPage() {
           role: data.role,
           organizationName: data.organizationName,
           contactNumber: data.contactNumber,
+          phoneNumber: data.phoneNumber || '',
           location: data.location,
           coordinates: data.coordinates,
           onboardingCompleted: true,
@@ -426,6 +453,7 @@ export default function OnboardingPage() {
           organizationName: orgId,
           organizationDisplayName: displayName,
           contactNumber,
+          phoneNumber: data.phoneNumber || '',
           location,
           coordinates,
           salesChannels: data.salesChannels || [],
@@ -440,6 +468,7 @@ export default function OnboardingPage() {
           primaryCategory: data.primaryCategory || '',
           hearAboutUs: data.hearAboutUs || '',
           instagramHandle: data.instagramHandle || '',
+          facebookHandle: data.facebookHandle || '',
           fulfillmentEmail: data.fulfillmentEmail || '',
           onboardingCompleted: true,
           isOrganizationCreator: true,
@@ -461,15 +490,29 @@ export default function OnboardingPage() {
       
       // Send welcome email after successful onboarding
       try {
-        await fetch('/api/send-welcome-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: user.email,
-            displayName: user.displayName || user.email?.split('@')[0] || 'there',
-            storeName: organizationDisplayName
-          })
-        });
+        if (data.role === 'distributor') {
+          // Send distributor-specific welcome email
+          await fetch('/api/send-distributor-welcome-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: user.email,
+              displayName: user.displayName || user.email?.split('@')[0] || 'there',
+              brandName: organizationDisplayName
+            })
+          });
+        } else {
+          // Send retailer welcome email
+          await fetch('/api/send-welcome-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: user.email,
+              displayName: user.displayName || user.email?.split('@')[0] || 'there',
+              storeName: organizationDisplayName
+            })
+          });
+        }
       } catch (emailError) {
         console.error('Failed to send welcome email:', emailError);
         // Don't block onboarding if email fails
@@ -478,6 +521,7 @@ export default function OnboardingPage() {
       // Clear cached onboarding data after successful completion
       clearOnboardingCache();
       
+      // Redirect based on role (both go to modules for now)
       router.push('/modules');
     } catch (error) {
       console.error('Error completing onboarding:', error);
@@ -510,16 +554,19 @@ export default function OnboardingPage() {
       case 0:
         return data.role !== null;
       case 1:
-        // For retailers, step 1 is sales channels
+        // Step 1 for both: Phone number
+        return data.phoneNumber?.trim() !== '' && validateContactNumber(data.phoneNumber || '');
+      case 2:
+        // For retailers, step 2 is sales channels
         if (data.role === 'retailer') {
           return (data.salesChannels?.length || 0) > 0;
         }
-        // For distributors, step 1 is organization name + website (required) + instagram (optional)
+        // For distributors, step 2 is brand name + website (required) + instagram (optional) + facebook (optional)
         return validateOrganizationName(data.organizationName) && 
                data.website?.trim() !== '' && 
                validateURL(data.website || '');
-      case 2:
-        // For retailers, step 2 is store name + validation based on sales channel
+      case 3:
+        // For retailers, step 3 is store name + validation based on sales channel
         if (data.role === 'retailer') {
           const hasBrickMortar = data.salesChannels?.includes('brick-mortar');
           const hasOnline = data.salesChannels?.includes('online');
@@ -547,31 +594,31 @@ export default function OnboardingPage() {
           }
           return validateOrganizationName(data.organizationName);
         }
-        // For distributors, step 2 is fulfillment email
+        // For distributors, step 3 is fulfillment email
         return data.fulfillmentEmail?.trim() !== '' && validateEmail(data.fulfillmentEmail || '');
-      case 3:
-        // For retailers, step 3 is store category
+      case 4:
+        // For retailers, step 4 is store category
         if (data.role === 'retailer') {
           return data.storeCategory?.trim() !== '';
         }
-        // For distributors, step 3 is wholesale product count
+        // For distributors, step 4 is wholesale product count
         return data.wholesaleProductCount?.trim() !== '';
-      case 4:
-        // For retailers, step 4 is opening year
+      case 5:
+        // For retailers, step 5 is opening year
         if (data.role === 'retailer') {
           return data.openingYear?.trim() !== '';
         }
-        // For distributors, step 4 is store count
+        // For distributors, step 5 is store count
         return data.storeCount?.trim() !== '';
-      case 5:
-        // For retailers, step 5 is payment terms (always can proceed)
+      case 6:
+        // For retailers, step 6 is payment terms (always can proceed)
         if (data.role === 'retailer') {
           return true;
         }
-        // For distributors, step 5 is primary category
+        // For distributors, step 6 is primary category
         return data.primaryCategory?.trim() !== '';
-      case 6:
-        // For distributors, step 6 is "how did you hear about us" (optional, always can proceed)
+      case 7:
+        // For distributors, step 7 is "how did you hear about us" (optional, always can proceed)
         return true;
       default:
         return false;
@@ -581,7 +628,7 @@ export default function OnboardingPage() {
   const mapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
   return (
-    <div className="module-background relative min-h-screen w-full overflow-hidden px-6 py-16 sm:px-10 lg:px-16">
+    <div className={`module-background relative min-h-screen w-full overflow-hidden px-6 py-16 sm:px-10 lg:px-16 ${neueHaas.className}`}>
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[140px]" />
         <div className="absolute -top-32 left-1/2 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-sky-500/18 blur-[160px]" />
@@ -722,17 +769,17 @@ export default function OnboardingPage() {
                         <div className="space-y-4">
                           <button
                             onClick={() => setData({ ...data, role: 'retailer' })}
-                            className={`group w-full rounded-2xl border px-5 py-4 text-left transition-all duration-300 ${
+                            className={`group w-full rounded-2xl border overflow-hidden text-left transition-all duration-300 ${
                               data.role === 'retailer'
-                                ? 'border-sky-300/60 bg-sky-500/15 text-white shadow-[0_25px_55px_-35px_rgba(56,189,248,0.85)]'
+                                ? 'border-sky-300/60 bg-sky-500/15 text-white shadow-[0_8px_24px_-8px_rgba(56,189,248,0.3)]'
                                 : 'border-white/12 bg-white/6 text-slate-200 hover:border-sky-200/40 hover:bg-sky-400/10'
                             }`}
                           >
-                            <div className="flex items-center gap-4">
-                              <div className={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border ${
+                            <div className="flex items-stretch">
+                              <div className={`w-1/2 flex-shrink-0 ${
                                 data.role === 'retailer'
-                                  ? 'border-sky-200/50 bg-sky-500/20'
-                                  : 'border-white/10 bg-white/8'
+                                  ? 'bg-sky-500/20'
+                                  : 'bg-white/8'
                               }`}>
                                 <img 
                                   src="/retailer.jpg" 
@@ -740,28 +787,30 @@ export default function OnboardingPage() {
                                   className="h-full w-full object-cover"
                                 />
                               </div>
-                              <div className="flex-1">
-                                <div className="text-base font-semibold text-slate-100">Retailer</div>
-                                <div className="text-sm text-slate-300/80">We sell to end consumers, we want to buy wholesale items on Vendai</div>
+                              <div className="flex flex-1 items-center px-5 py-4">
+                                <div className="flex-1">
+                                  <div className="text-base font-semibold text-slate-100">Retailer</div>
+                                  <div className="text-sm text-slate-300/80">We sell to end consumers, we want to buy wholesale items on Vendai</div>
+                                </div>
+                                {data.role === 'retailer' && (
+                                  <CheckCircle className="ml-4 h-5 w-5 flex-shrink-0 text-sky-200" />
+                                )}
                               </div>
-                              {data.role === 'retailer' && (
-                                <CheckCircle className="ml-auto h-5 w-5 text-sky-200" />
-                              )}
                             </div>
                           </button>
                           <button
                             onClick={() => setData({ ...data, role: 'distributor' })}
-                            className={`group w-full rounded-2xl border px-5 py-4 text-left transition-all duration-300 ${
+                            className={`group w-full rounded-2xl border overflow-hidden text-left transition-all duration-300 ${
                               data.role === 'distributor'
-                                ? 'border-indigo-300/60 bg-indigo-500/15 text-white shadow-[0_25px_55px_-35px_rgba(99,102,241,0.85)]'
+                                ? 'border-indigo-300/60 bg-indigo-500/15 text-white shadow-[0_8px_24px_-8px_rgba(99,102,241,0.3)]'
                                 : 'border-white/12 bg-white/6 text-slate-200 hover:border-indigo-200/45 hover:bg-indigo-400/10'
                             }`}
                           >
-                            <div className="flex items-center gap-4">
-                              <div className={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border ${
+                            <div className="flex items-stretch">
+                              <div className={`w-1/2 flex-shrink-0 ${
                                 data.role === 'distributor'
-                                  ? 'border-indigo-200/50 bg-indigo-500/20'
-                                  : 'border-white/10 bg-white/8'
+                                  ? 'bg-indigo-500/20'
+                                  : 'bg-white/8'
                               }`}>
                                 <img 
                                   src="/distributor.jpg" 
@@ -769,21 +818,59 @@ export default function OnboardingPage() {
                                   className="h-full w-full object-cover"
                                 />
                               </div>
-                              <div className="flex-1">
-                                <div className="text-base font-semibold text-slate-100">Distributor / Wholesaler / Supplier</div>
-                                <div className="text-sm text-slate-300/80">We sell to retailers, we want to sell wholesale items on Vendai</div>
+                              <div className="flex flex-1 items-center px-5 py-4">
+                                <div className="flex-1">
+                                  <div className="text-base font-semibold text-slate-100">Distributor / Wholesaler / Supplier</div>
+                                  <div className="text-sm text-slate-300/80">We sell to retailers, we want to sell wholesale items on Vendai</div>
+                                </div>
+                                {data.role === 'distributor' && (
+                                  <CheckCircle className="ml-4 h-5 w-5 flex-shrink-0 text-indigo-200" />
+                                )}
                               </div>
-                              {data.role === 'distributor' && (
-                                <CheckCircle className="ml-auto h-5 w-5 text-indigo-200" />
-                              )}
                             </div>
                           </button>
                         </div>
                       </motion.div>
                     )}
 
-                    {/* Step 1 for Retailers: Sales Channels */}
-                    {!data.isJoiningExisting && currentStep === 1 && data.role === 'retailer' && (
+                    {/* Step 1 for Both: Phone Number */}
+                    {!data.isJoiningExisting && currentStep === 1 && (
+                      <motion.div
+                        key="phone-number"
+                        variants={slideVariants}
+                        custom={direction}
+                        initial="enter"
+                        animate="center"
+                        exit="exit"
+                        transition={{ duration: 0.3 }}
+                        className="space-y-7"
+                      >
+                        <div className="text-center space-y-2">
+                          <h2 className="text-xl font-semibold text-slate-100">What's your phone number?</h2>
+                          <p className="text-sm text-slate-400">We'll use this to contact you about your orders</p>
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-sm font-medium text-slate-200">Phone Number</label>
+                          <input
+                            type="tel"
+                            value={data.phoneNumber || ''}
+                            onChange={(e) => setData({ ...data, phoneNumber: e.target.value })}
+                            placeholder="e.g. +254712345678"
+                            className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
+                              data.phoneNumber && !validateContactNumber(data.phoneNumber)
+                                ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
+                                : 'border-white/15 bg-white/[0.06] hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25'
+                            }`}
+                          />
+                          {data.phoneNumber && !validateContactNumber(data.phoneNumber) && (
+                            <p className="mt-2 text-xs text-red-400">Please enter a valid phone number (e.g. +254712345678)</p>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Step 2 for Retailers: Sales Channels */}
+                    {!data.isJoiningExisting && currentStep === 2 && data.role === 'retailer' && (
                       <motion.div
                         key="sales-channels"
                         variants={slideVariants}
@@ -873,9 +960,9 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 1 for Distributors / Step 2 for Retailers: Store/Organization Name */}
+                    {/* Step 2 for Distributors / Step 3 for Retailers: Store/Brand Name */}
                     {!data.isJoiningExisting && 
-                     ((currentStep === 1 && data.role === 'distributor') || (currentStep === 2 && data.role === 'retailer')) && (
+                     ((currentStep === 2 && data.role === 'distributor') || (currentStep === 3 && data.role === 'retailer')) && (
                       <motion.div
                         key="org-name"
                         variants={slideVariants}
@@ -888,7 +975,7 @@ export default function OnboardingPage() {
                       >
                         <div className="text-center">
                           <h2 className="mb-2 text-xl font-semibold text-slate-100">
-                            {data.role === 'retailer' ? "What's your store's name?" : "What's your organization name?"}
+                            {data.role === 'retailer' ? "What's your store's name?" : "What's your brand name?"}
                           </h2>
                         </div>
                         <div className="space-y-6">
@@ -1198,7 +1285,7 @@ export default function OnboardingPage() {
                             </>
                           )}
 
-                          {/* Distributor: organization name + website (required) + instagram (optional) */}
+                          {/* Distributor: brand name + website (required) + instagram (optional) + facebook (optional) */}
                           {data.role === 'distributor' && (
                             <>
                               <div>
@@ -1206,13 +1293,13 @@ export default function OnboardingPage() {
                                   <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
                                     <Building className="h-4 w-4 text-slate-200" />
                                   </div>
-                                  <label className="text-sm font-medium text-slate-200">Organization name</label>
+                                  <label className="text-sm font-medium text-slate-200">Brand name</label>
                                 </div>
                                 <input
                                   type="text"
                                   value={data.organizationName}
                                   onChange={(e) => setData({ ...data, organizationName: e.target.value })}
-                                  placeholder="e.g. Fresh Foods Distribution"
+                                  placeholder="e.g. Fresh Foods"
                                   className={`w-full rounded-2xl border px-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg ${
                                     data.organizationName && !validateOrganizationName(data.organizationName)
                                       ? 'border-red-500/40 bg-red-500/10 focus:border-red-400/70 focus:ring-1 focus:ring-red-400/20'
@@ -1221,7 +1308,7 @@ export default function OnboardingPage() {
                                   autoFocus
                                 />
                                 {data.organizationName && !validateOrganizationName(data.organizationName) && (
-                                  <p className="mt-2 text-xs text-red-300/80">Organization name must be at least 2 characters long.</p>
+                                  <p className="mt-2 text-xs text-red-300/80">Brand name must be at least 2 characters long.</p>
                                 )}
                               </div>
                               <div>
@@ -1265,14 +1352,33 @@ export default function OnboardingPage() {
                                   />
                                 </div>
                               </div>
+                              <div>
+                                <div className="mb-3 flex items-center gap-3">
+                                  <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/8">
+                                    <svg className="h-4 w-4 text-slate-200" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                                    </svg>
+                                  </div>
+                                  <label className="text-sm font-medium text-slate-200">Facebook <span className="text-slate-400">(optional)</span></label>
+                                </div>
+                                <div className="relative">
+                                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-slate-400">facebook.com/</span>
+                                  <input
+                                    type="text"
+                                    value={data.facebookHandle || ''}
+                                    onChange={(e) => setData({ ...data, facebookHandle: e.target.value })}
+                                    className="w-full rounded-2xl border border-white/15 bg-white/[0.06] pl-[125px] pr-4 py-3 text-sm text-white placeholder-slate-400 transition-all duration-200 backdrop-blur-lg hover:border-sky-200/40 focus:border-sky-300/60 focus:ring-1 focus:ring-sky-300/25"
+                                  />
+                                </div>
+                              </div>
                             </>
                           )}
                         </div>
                       </motion.div>
                     )}
 
-                    {/* Step 3 for Retailers: Store Category */}
-                    {!data.isJoiningExisting && currentStep === 3 && data.role === 'retailer' && (
+                    {/* Step 4 for Retailers: Store Category */}
+                    {!data.isJoiningExisting && currentStep === 4 && data.role === 'retailer' && (
                       <motion.div
                         key="category"
                         variants={slideVariants}
@@ -1316,8 +1422,8 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 4 for Retailers: Opening Year */}
-                    {!data.isJoiningExisting && currentStep === 4 && data.role === 'retailer' && (
+                    {/* Step 5 for Retailers: Opening Year */}
+                    {!data.isJoiningExisting && currentStep === 5 && data.role === 'retailer' && (
                       <motion.div
                         key="opening-year"
                         variants={slideVariants}
@@ -1355,8 +1461,8 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 5 for Retailers: Payment Terms */}
-                    {!data.isJoiningExisting && currentStep === 5 && data.role === 'retailer' && (
+                    {/* Step 6 for Retailers: Payment Terms */}
+                    {!data.isJoiningExisting && currentStep === 6 && data.role === 'retailer' && (
                       <motion.div
                         key="payment-terms"
                         variants={slideVariants}
@@ -1373,21 +1479,50 @@ export default function OnboardingPage() {
                             This means you can buy inventory today and pay up to 60 days later—interest-free.
                           </p>
                         </div>
-                        <div className="rounded-2xl border border-white/8 bg-gradient-to-br from-amber-50/5 to-orange-50/5 p-8 backdrop-blur-xl">
-                          <div className="text-center">
-                            <div className="mb-3 text-sm font-medium text-slate-400">{data.organizationName || 'Your Store'}</div>
-                            <div className="mb-4 text-5xl font-bold tracking-tight text-slate-100">KES 20,000</div>
-                            <div className="text-sm text-slate-300/80">Your available payment terms</div>
+                        
+                        {/* Credit Card Style */}
+                        <div className="mx-auto max-w-md">
+                          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-900 to-black p-8 shadow-2xl">
+                            {/* Card shine effect */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent" />
+                            
+                            {/* Card content */}
+                            <div className="relative z-10">
+                              <div className="mb-8 flex items-center justify-between">
+                                <div className="text-xs font-medium uppercase tracking-wider text-slate-400">Payment Terms</div>
+                                <div className="flex gap-1">
+                                  <div className="h-8 w-8 rounded-full bg-red-500/80" />
+                                  <div className="h-8 w-8 -ml-3 rounded-full bg-orange-500/80" />
+                                </div>
+                              </div>
+                              
+                              <div className="mb-6">
+                                <div className="mb-2 text-sm font-medium text-slate-400">Available Credit</div>
+                                <div className="text-5xl font-bold tracking-tight text-green-400">KES 20,000</div>
+                              </div>
+                              
+                              <div className="flex items-end justify-between">
+                                <div>
+                                  <div className="mb-1 text-xs text-slate-500">Store Name</div>
+                                  <div className="text-sm font-medium text-slate-200">{data.organizationName || 'Your Store'}</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="mb-1 text-xs text-slate-500">Valid Thru</div>
+                                  <div className="text-sm font-medium text-slate-200">12/26</div>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
+                        
                         <div className="text-center text-xs text-slate-400">
                           We use manual and automated processes to verify all retailers on Vendai.
                         </div>
                       </motion.div>
                     )}
 
-                    {/* Step 2 for Distributors: Fulfillment Email */}
-                    {!data.isJoiningExisting && currentStep === 2 && data.role === 'distributor' && (
+                    {/* Step 3 for Distributors: Fulfillment Email */}
+                    {!data.isJoiningExisting && currentStep === 3 && data.role === 'distributor' && (
                       <motion.div
                         key="fulfillment-email"
                         variants={slideVariants}
@@ -1421,8 +1556,8 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 3 for Distributors: Wholesale Product Count */}
-                    {!data.isJoiningExisting && currentStep === 3 && data.role === 'distributor' && (
+                    {/* Step 4 for Distributors: Wholesale Product Count */}
+                    {!data.isJoiningExisting && currentStep === 4 && data.role === 'distributor' && (
                       <motion.div
                         key="product-count"
                         variants={slideVariants}
@@ -1454,8 +1589,8 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 4 for Distributors: Store Count */}
-                    {!data.isJoiningExisting && currentStep === 4 && data.role === 'distributor' && (
+                    {/* Step 5 for Distributors: Store Count */}
+                    {!data.isJoiningExisting && currentStep === 5 && data.role === 'distributor' && (
                       <motion.div
                         key="store-count"
                         variants={slideVariants}
@@ -1490,8 +1625,8 @@ export default function OnboardingPage() {
                       </motion.div>
                     )}
 
-                    {/* Step 5 for Distributors: Primary Category */}
-                    {!data.isJoiningExisting && currentStep === 5 && data.role === 'distributor' && (
+                    {/* Step 6 for Distributors: Primary Category */}
+                    {!data.isJoiningExisting && currentStep === 6 && data.role === 'distributor' && (
                       <motion.div
                         key="primary-category"
                         variants={slideVariants}
@@ -1503,35 +1638,40 @@ export default function OnboardingPage() {
                         className="space-y-7"
                       >
                         <div className="text-center">
-                          <h2 className="mb-2 text-xl font-semibold text-slate-100">Primary Category</h2>
+                          <h2 className="mb-2 text-xl font-semibold text-slate-100">Which of these best describes your products?</h2>
                         </div>
-                        <div>
-                          <select
-                            value={data.primaryCategory || ''}
-                            onChange={(e) => setData({ ...data, primaryCategory: e.target.value })}
-                            className="w-full rounded-2xl border border-sky-300/30 bg-gradient-to-br from-white/[0.07] to-white/[0.02] px-4 py-3 text-sm text-white backdrop-blur-xl transition-all duration-200 hover:border-sky-300/50 hover:from-white/[0.09] hover:to-white/[0.04] focus:border-sky-300/60 focus:from-white/[0.10] focus:to-white/[0.05] focus:ring-2 focus:ring-sky-400/25 focus:outline-none [&>option]:bg-slate-900 [&>option]:text-slate-100"
-                          >
-                            <option value="">Select a category</option>
-                            <option value="home-decor">Home Decor</option>
-                            <option value="beauty-wellness">Beauty & Wellness</option>
-                            <option value="cbd-thc">CBD/THC</option>
-                            <option value="food-drink">Food & Drink</option>
-                            <option value="jewelry">Jewelry</option>
-                            <option value="kids-baby-apparel">Kids & Baby - Apparel</option>
-                            <option value="kids-baby-toys-gear">Kids & Baby - Toys & Gear</option>
-                            <option value="mens-apparel-accessories">Men's Apparel & Accessories</option>
-                            <option value="paper-party-supplies">Paper & Party Supplies</option>
-                            <option value="pet">Pet</option>
-                            <option value="wellness">Wellness</option>
-                            <option value="womens-accessories">Women's Accessories</option>
-                            <option value="womens-apparel">Women's Apparel</option>
-                          </select>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {storeCategories.map((category) => {
+                            const isSelected = data.primaryCategory === category.id;
+                            return (
+                              <button
+                                key={category.id}
+                                onClick={() => setData({ ...data, primaryCategory: category.id })}
+                                className={`relative rounded-xl border px-4 py-3 text-center transition-all duration-200 ${
+                                  isSelected
+                                    ? 'border-sky-300/60 bg-sky-500/15 shadow-[0_12px_35px_-20px_rgba(56,189,248,0.65)]'
+                                    : 'border-white/12 bg-white/6 hover:border-sky-200/40 hover:bg-sky-400/10'
+                                }`}
+                              >
+                                <div className={`text-sm font-medium ${
+                                  isSelected ? 'text-slate-100' : 'text-slate-200'
+                                }`}>
+                                  {category.label}
+                                </div>
+                                {isSelected && (
+                                  <div className="absolute top-2 right-2">
+                                    <CheckCircle className="h-4 w-4 text-sky-200" />
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
                       </motion.div>
                     )}
 
-                    {/* Step 6 for Distributors: How Did You Hear About Us (Optional) */}
-                    {!data.isJoiningExisting && currentStep === 6 && data.role === 'distributor' && (
+                    {/* Step 7 for Distributors: How Did You Hear About Us (Optional) */}
+                    {!data.isJoiningExisting && currentStep === 7 && data.role === 'distributor' && (
                       <motion.div
                         key="hear-about-us"
                         variants={slideVariants}

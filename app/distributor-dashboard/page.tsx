@@ -135,7 +135,7 @@ export default function DistributorDashboard() {
     { id: 'marketing' as TabType, label: 'Marketing', icon: TrendingUp, hasDropdown: true },
     { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart3, hasDropdown: true },
     { id: 'myshop' as TabType, label: 'My shop', icon: Store, hasDropdown: true },
-    { id: 'settings' as TabType, label: 'Settings', icon: Settings, hasDropdown: true },
+    { id: 'settings' as TabType, label: 'Settings', icon: Settings, hasDropdown: true, route: '/distributor-dashboard/settings' },
   ];
 
   if (loading) {
@@ -182,7 +182,13 @@ export default function DistributorDashboard() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    if (tab.route) {
+                      router.push(tab.route);
+                    } else {
+                      setActiveTab(tab.id);
+                    }
+                  }}
                   className={`group mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-all ${
                     isActive
                       ? 'bg-sky-500/10 text-sky-300 font-medium'

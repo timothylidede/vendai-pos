@@ -318,8 +318,14 @@ export default function OnboardingPage() {
           const userDocRef = doc(db!, 'users', user.uid);
           const userDoc = await getDoc(userDocRef);
           const userData = userDoc.data();
-          if (userDoc.exists() && userData?.onboardingCompleted) {
-            router.push('/modules');
+          // Only redirect to modules if onboarding is complete AND we're not currently submitting
+          if (userDoc.exists() && userData?.onboardingCompleted && !isSubmitting) {
+            // Check role and redirect accordingly
+            if (userData.role === 'distributor') {
+              router.push('/distributor-dashboard');
+            } else {
+              router.push('/modules');
+            }
             return;
           }
           await checkInvitation();
@@ -335,7 +341,7 @@ export default function OnboardingPage() {
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [router, isSubmitting]);
 
   const handleNext = async () => {
     setError(null);
@@ -524,7 +530,7 @@ export default function OnboardingPage() {
       // Show loading state for a few seconds before redirect
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Redirect based on role
+      // Redirect based on role (keep isSubmitting true to prevent re-routing)
       if (data.role === 'distributor') {
         router.push('/distributor-dashboard');
       } else {
@@ -533,7 +539,6 @@ export default function OnboardingPage() {
     } catch (error) {
       console.error('Error completing onboarding:', error);
       setError(error instanceof Error ? error.message : 'Failed to complete onboarding. Please try again.');
-    } finally {
       setIsSubmitting(false);
     }
   };

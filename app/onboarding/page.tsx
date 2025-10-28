@@ -97,6 +97,7 @@ export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [data, setData] = useState<OnboardingData>({
     role: null,
     organizationName: '',
@@ -318,8 +319,14 @@ export default function OnboardingPage() {
           const userDocRef = doc(db!, 'users', user.uid);
           const userDoc = await getDoc(userDocRef);
           const userData = userDoc.data();
+          // If we're in the middle of submitting or already redirecting, avoid additional navigation checks
+          if (isSubmitting || isRedirecting) {
+            setUser(user);
+            setLoading(false);
+            return;
+          }
           // Only redirect to modules if onboarding is complete AND we're not currently submitting
-          if (userDoc.exists() && userData?.onboardingCompleted && !isSubmitting) {
+          if (userDoc.exists() && userData?.onboardingCompleted) {
             // Check role and redirect accordingly
             if (userData.role === 'distributor') {
               router.push('/distributor-dashboard');
@@ -341,7 +348,7 @@ export default function OnboardingPage() {
     });
 
     return () => unsubscribe();
-  }, [router, isSubmitting]);
+  }, [router, isSubmitting, isRedirecting]);
 
   const handleNext = async () => {
     setError(null);
@@ -530,7 +537,8 @@ export default function OnboardingPage() {
       // Show loading state for a few seconds before redirect
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Redirect based on role (keep isSubmitting true to prevent re-routing)
+      // Redirect based on role (keep flags true to prevent re-routing)
+      setIsRedirecting(true);
       if (data.role === 'distributor') {
         router.push('/distributor-dashboard');
       } else {
@@ -540,6 +548,7 @@ export default function OnboardingPage() {
       console.error('Error completing onboarding:', error);
       setError(error instanceof Error ? error.message : 'Failed to complete onboarding. Please try again.');
       setIsSubmitting(false);
+      setIsRedirecting(false);
     }
   };
 

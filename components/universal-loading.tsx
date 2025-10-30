@@ -2,6 +2,28 @@
 
 import Image from 'next/image';
 import { motion } from 'framer-motion';
+import localFont from 'next/font/local';
+
+const neueHaas = localFont({
+  src: [
+    {
+      path: '../public/fonts/Neue Haas Grotesk Display Pro 55 Roman.woff2',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/Neue Haas Grotesk Display Pro 65 Medium.woff2',
+      weight: '500',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/Neue Haas Grotesk Display Pro 75 Bold.woff2',
+      weight: '700',
+      style: 'normal',
+    },
+  ],
+  variable: '--font-neue-haas'
+});
 
 interface UniversalLoadingProps {
   message?: string;
@@ -28,7 +50,7 @@ export function UniversalLoading({
 
   const displayMessage = message || defaultMessages[type];
   return (
-    <div className={`min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/40 to-slate-950 flex items-center justify-center p-6 ${className}`}>
+    <div className={`min-h-screen w-full bg-gradient-to-br from-slate-900 via-slate-900/40 to-slate-950 flex items-center justify-center p-6 ${className} ${neueHaas.className}`}>
       <div className="max-w-sm w-full">
         <motion.div
           initial={{ opacity: 0, y: 16 }}

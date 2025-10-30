@@ -1843,7 +1843,7 @@ export default function OnboardingPage() {
                         onClick={handleBack}
                         variant="outline"
                         disabled={isSubmitting}
-                        className="group flex items-center gap-2 rounded-xl border border-white/12 bg-white/8 px-6 py-3 text-slate-200 transition hover:border-sky-200/40 hover:bg-white/12 disabled:opacity-40"
+                        className="group flex items-center gap-2 rounded-xl border border-white/12 bg-white/8 px-6 py-3 text-slate-200 transition hover:border-sky-200/40 hover:bg-white/12 disabled:opacity-40 cursor-pointer"
                       >
                         <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
                         Back
@@ -1855,7 +1855,7 @@ export default function OnboardingPage() {
                     <Button
                       onClick={handleNext}
                       disabled={!canProceed() || isSubmitting}
-                      className={`flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-all duration-200 ${
+                      className={`flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-all duration-200 cursor-pointer ${
                         canProceed() && !isSubmitting
                           ? 'bg-gradient-to-r from-sky-500/90 via-cyan-400/90 to-indigo-500/90 text-slate-950 shadow-[0_18px_45px_-25px_rgba(56,189,248,0.85)] hover:shadow-[0_25px_55px_-25px_rgba(56,189,248,0.95)]'
                           : 'border border-white/10 bg-white/6 text-slate-400 cursor-not-allowed'

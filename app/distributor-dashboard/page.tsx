@@ -278,7 +278,7 @@ function ProductsContent({
               className="group rounded-2xl backdrop-blur-xl bg-white/5 border border-white/10 hover:border-white/20 transition-all duration-300 overflow-hidden cursor-pointer hover:shadow-2xl hover:shadow-blue-500/10"
             >
               {/* Product Image */}
-              <div className="aspect-square bg-gradient-to-br from-slate-800 to-slate-900 relative overflow-hidden">
+              <div className="aspect-square relative overflow-hidden bg-white">
                 {product.images && product.images.length > 0 ? (
                   <img
                     src={product.images[0]}
@@ -286,8 +286,8 @@ function ProductsContent({
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <ImageIcon className="w-20 h-20 text-slate-600" />
+                  <div className="w-full h-full flex items-center justify-center bg-slate-100">
+                    <ImageIcon className="w-20 h-20 text-slate-400" />
                   </div>
                 )}
                 
@@ -848,7 +848,7 @@ export default function DistributorDashboard() {
                       Import your catalog from Etsy, WooCommerce, etc.
                     </p>
                     
-                    <Button variant="outline" className="w-full rounded-lg border-white/20 text-slate-200 hover:bg-white/10">
+                    <Button variant="outline" className="w-full rounded-lg border-white/20 text-slate-200 hover:bg-white/10 cursor-pointer">
                       <Upload className="mr-2 h-4 w-4" />
                       Upload file
                     </Button>
@@ -869,7 +869,7 @@ export default function DistributorDashboard() {
                       Seamlessly import your product catalog
                     </p>
                     
-                    <Button variant="outline" className="w-full rounded-lg border-white/20 text-slate-200 hover:bg-white/10">
+                    <Button variant="outline" className="w-full rounded-lg border-white/20 text-slate-200 hover:bg-white/10 cursor-pointer">
                       Import from Shopify
                     </Button>
                   </motion.div>
@@ -889,7 +889,7 @@ export default function DistributorDashboard() {
                       Create products one by one
                     </p>
                     
-                    <Button variant="outline" className="w-full rounded-lg border-white/20 text-slate-200 hover:bg-white/10">
+                    <Button variant="outline" className="w-full rounded-lg border-white/20 text-slate-200 hover:bg-white/10 cursor-pointer">
                       Add product
                     </Button>
                   </motion.div>
@@ -950,7 +950,7 @@ export default function DistributorDashboard() {
               
               <Button
                 onClick={() => setShowWelcome(false)}
-                className="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 py-3 text-white shadow-lg hover:shadow-xl transition-all"
+                className="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 py-3 text-white shadow-lg hover:shadow-xl transition-all cursor-pointer"
               >
                 Get Started
               </Button>

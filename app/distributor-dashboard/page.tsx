@@ -950,7 +950,7 @@ export default function DistributorDashboard() {
               
               <Button
                 onClick={() => setShowWelcome(false)}
-                className="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 py-3 text-white shadow-lg hover:shadow-xl transition-all cursor-pointer"
+                className="w-full rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 py-3 text-white shadow-lg hover:shadow-xl transition-all"
               >
                 Get Started
               </Button>

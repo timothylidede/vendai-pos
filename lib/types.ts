@@ -113,6 +113,7 @@ export interface UserData {
   email: string | null
   phone: string | null
   photoURL: string | null
+  organizationId?: string
   provider: string
   address?: string
   city?: string

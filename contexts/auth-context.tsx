@@ -10,6 +10,7 @@ interface UserData {
   email: string;
   displayName?: string;
   role: 'retailer' | 'distributor';
+  organizationId?: string;
   organizationName: string;
   organizationDisplayName?: string;
   contactNumber?: string;
@@ -240,7 +241,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     electronUser,
     loading,
     isElectron,
-    organization: userData ? { id: userData.organizationName, name: userData.organizationDisplayName || userData.organizationName } : null,
+    // prefer explicit organizationId when available
+    organization: userData ? { id: userData.organizationId || userData.organizationName, name: userData.organizationDisplayName || userData.organizationName } : null,
     refreshUserData,
     clearUserData
   };

@@ -10,6 +10,10 @@ import {
   User, Mail, MapPin, LogOut, X, Search, Plus,
   MessageSquare, Filter, Bell, ShoppingBag, Globe
 } from 'lucide-react'
+import { Checkbox } from './ui/checkbox'
+import { RadioGroup, RadioGroupItem } from './ui/radio-group'
+import { Label } from './ui/label'
+import { Input } from './ui/input'
 import { motion } from 'framer-motion'
 import { signOut } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
@@ -168,14 +172,18 @@ export function ModulesDashboard() {
   const [showOrgSettings, setShowOrgSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isProductsExpanded, setIsProductsExpanded] = useState(false);
+  const [isProductsExpanded, setIsProductsExpanded] = useState(true);
   const [viewMode, setViewMode] = useState<'products' | 'brands'>('products');
+  const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', content: string}>>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const router = useRouter();
   const [needsInventory, setNeedsInventory] = useState(false)
   const orgId = useMemo(() => userData?.organizationName || 'default', [userData?.organizationName])
   const prefetchedRoutesRef = useRef<Set<string>>(new Set())
   const prefetchedBundlesRef = useRef<Set<string>>(new Set())
   const initialPrefetchDoneRef = useRef(false)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
 
   const currentModules = useMemo(() => {
     if (!userData?.role) return []
@@ -263,11 +271,60 @@ export function ModulesDashboard() {
     return () => { active = false }
   }, [user, userData, orgId])
   
+  // Auto-scroll chat to bottom when messages change
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [chatMessages, isLoading]);
+  
   const toggleBot = useCallback(() => {
     setIsSpinning(true);
     setShowChatbot(prev => !prev);
     setTimeout(() => setIsSpinning(false), 2000);
   }, []);
+
+  const handleSendMessage = useCallback(async (message: string) => {
+    if (!message.trim() || isLoading) return;
+    
+    // Add user message to chat
+    const userMessage = { role: 'user' as const, content: message };
+    setChatMessages(prev => [...prev, userMessage]);
+    setIsLoading(true);
+    
+    try {
+      // Use Firebase-based chat instead of OpenAI
+      const response = await fetch('/api/chat-firebase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message,
+          context: {
+            role: userData?.role,
+            organizationName: userData?.organizationName
+          }
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || data.details || 'Failed to get response');
+      }
+      
+      const assistantMessage = { role: 'assistant' as const, content: data.message };
+      setChatMessages(prev => [...prev, assistantMessage]);
+    } catch (error: any) {
+      console.error('Chat error:', error);
+      const errorMessage = { 
+        role: 'assistant' as const, 
+        content: `I'm having trouble connecting right now. Please try asking about your products, inventory, or sales.` 
+      };
+      setChatMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isLoading, userData]);
 
   const handleLogout = useCallback(async () => {
     setShowLogoutModal(false);
@@ -453,109 +510,360 @@ export function ModulesDashboard() {
         {/* Navigation Items */}
         <div className="flex flex-col items-center space-y-6 mt-2">
           <motion.button 
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-            className="group relative flex items-center justify-center text-sky-400 transition-colors"
+            onClick={() => setShowFilters(false)}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.98 }}
+            className={`group relative flex items-center justify-center transition-colors ${
+              !showFilters ? 'text-sky-400' : 'text-slate-400 hover:text-white'
+            }`}
           >
-            <MessageSquare className="w-6 h-6 transition-transform group-hover:rotate-12" />
+            <MessageSquare className="w-6 h-6" />
             <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Chat</span>
           </motion.button>
 
           <motion.button 
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-            className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+            onClick={() => setShowFilters(true)}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.98 }}
+            className={`group relative flex items-center justify-center transition-colors ${
+              showFilters ? 'text-sky-400' : 'text-slate-400 hover:text-white'
+            }`}
           >
-            <Filter className="w-6 h-6 transition-transform group-hover:rotate-12" />
+            <Filter className="w-6 h-6" />
             <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Filters</span>
           </motion.button>
 
           <motion.button 
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.98 }}
             className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors"
           >
-            <Bell className="w-6 h-6 transition-transform group-hover:rotate-12" />
+            <Bell className="w-6 h-6" />
             <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Notifications</span>
           </motion.button>
 
           <motion.button 
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.98 }}
             className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors"
           >
-            <ShoppingCart className="w-6 h-6 transition-transform group-hover:rotate-12" />
+            <ShoppingCart className="w-6 h-6" />
             <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Cart</span>
           </motion.button>
 
           <motion.button 
             onClick={toggleProfileDropdown}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.98 }}
             className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors"
           >
-            <UserCircle className="w-6 h-6 transition-transform group-hover:rotate-12" />
+            <UserCircle className="w-6 h-6" />
             <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Profile</span>
           </motion.button>
 
           <motion.button 
             onClick={() => setShowOrgSettings(true)}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.98 }}
             className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors"
           >
-            <Settings className="w-6 h-6 transition-transform group-hover:rotate-12" />
+            <Settings className="w-6 h-6" />
             <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Settings</span>
           </motion.button>
         </div>
       </div>
 
-      {/* Chat Area */}
+      {/* Chat/Filter Area */}
       <div className={`flex flex-col w-80 relative z-10 transition-all duration-300 ${isProductsExpanded ? 'opacity-0 pointer-events-none -ml-80' : 'opacity-100'}`}>
-        <div className="flex-1 pt-16 pb-20 px-4 overflow-auto">
-          {/* Chat messages will go here */}
-        </div>
-        
-        {/* Chat Input - Fixed at bottom */}
-        <div className="absolute bottom-0 left-0 right-0 p-4">
-          <div className="relative rounded-xl border border-white/15 bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-blue-950/80 backdrop-blur-xl shadow-lg">
-            {/* Ask a follow-up text */}
-            <div className="px-4 pt-3 pb-2">
-              <span className="text-xs text-slate-400">Ask a follow-up...</span>
-            </div>
-            
-            {/* Input and icons */}
-            <div className="relative px-4 pb-3">
-              <input
-                type="text"
-                placeholder=""
-                className="w-full bg-transparent pr-32 py-2 text-sm text-white placeholder-slate-400 focus:outline-none"
-              />
-              <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
-                  <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
+        {/* Conditionally render chat or filters */}
+        {showFilters ? (
+          // Filter Panel
+          <div className="flex-1 pt-16 pb-4 px-4 overflow-auto scrollbar-hide">
+            <div className="space-y-6">
+              {/* 1 filter applied */}
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-slate-400">1 filter applied</span>
+                <button className="text-sm text-sky-400 hover:text-sky-300 transition-colors">
+                  Clear all
                 </button>
-                <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
-                  <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                  </svg>
+              </div>
+
+              {/* Brand minimum */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-white">Brand minimum</h3>
+                <RadioGroup defaultValue="all">
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="all" id="brand-all" className="border-slate-600 text-sky-400" />
+                    <Label htmlFor="brand-all" className="text-sm text-slate-300 cursor-pointer">All</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="100-or-less" id="brand-100" className="border-slate-600 text-sky-400" />
+                    <Label htmlFor="brand-100" className="text-sm text-slate-300 cursor-pointer">$100 or less</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="1000-or-less" id="brand-1000" className="border-slate-600 text-sky-400" />
+                    <Label htmlFor="brand-1000" className="text-sm text-slate-300 cursor-pointer">$1000 or less</Label>
+                  </div>
+                </RadioGroup>
+                <button className="text-sm text-sky-400 hover:text-sky-300 transition-colors">
+                  Show more
                 </button>
-                <button className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
-                  <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                  </svg>
+              </div>
+
+              {/* Ships from */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-white">Ships from</h3>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input 
+                    placeholder="Search"
+                    className="pl-10 bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="us" className="border-slate-600 data-[state=checked]:bg-sky-400 data-[state=checked]:border-sky-400" />
+                    <Label htmlFor="us" className="text-sm text-slate-300 cursor-pointer">United States</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="eu" className="border-slate-600 data-[state=checked]:bg-sky-400 data-[state=checked]:border-sky-400" />
+                    <Label htmlFor="eu" className="text-sm text-slate-300 cursor-pointer">European union</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="uk" className="border-slate-600 data-[state=checked]:bg-sky-400 data-[state=checked]:border-sky-400" />
+                    <Label htmlFor="uk" className="text-sm text-slate-300 cursor-pointer">United Kingdom</Label>
+                  </div>
+                </div>
+                <button className="text-sm text-sky-400 hover:text-sky-300 transition-colors">
+                  Show more
                 </button>
-                <button className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                  </svg>
+              </div>
+
+              {/* Made in */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-white">Made in</h3>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input 
+                    placeholder="Search"
+                    className="pl-10 bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="made-us" className="border-slate-600 data-[state=checked]:bg-sky-400 data-[state=checked]:border-sky-400" />
+                    <Label htmlFor="made-us" className="text-sm text-slate-300 cursor-pointer">United States</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="made-uk" className="border-slate-600 data-[state=checked]:bg-sky-400 data-[state=checked]:border-sky-400" />
+                    <Label htmlFor="made-uk" className="text-sm text-slate-300 cursor-pointer">United Kingdom</Label>
+                  </div>
+                </div>
+                <button className="text-sm text-sky-400 hover:text-sky-300 transition-colors">
+                  Show more
                 </button>
+              </div>
+
+              {/* Wholesale price */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-white">Wholesale price</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="price-10" className="border-slate-600 data-[state=checked]:bg-sky-400 data-[state=checked]:border-sky-400" />
+                    <Label htmlFor="price-10" className="text-sm text-slate-300 cursor-pointer">$0 - $10</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="price-25" className="border-slate-600 data-[state=checked]:bg-sky-400 data-[state=checked]:border-sky-400" />
+                    <Label htmlFor="price-25" className="text-sm text-slate-300 cursor-pointer">$10 - $25</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="price-50" className="border-slate-600 data-[state=checked]:bg-sky-400 data-[state=checked]:border-sky-400" />
+                    <Label htmlFor="price-50" className="text-sm text-slate-300 cursor-pointer">$25 - $50</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="price-100" className="border-slate-600 data-[state=checked]:bg-sky-400 data-[state=checked]:border-sky-400" />
+                    <Label htmlFor="price-100" className="text-sm text-slate-300 cursor-pointer">$50 - $100</Label>
+                  </div>
+                </div>
+                <button className="text-sm text-sky-400 hover:text-sky-300 transition-colors">
+                  Show more
+                </button>
+              </div>
+
+              {/* Ship window */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-white">Ship window</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="ship-asap" className="border-slate-600 data-[state=checked]:bg-sky-400 data-[state=checked]:border-sky-400" />
+                    <Label htmlFor="ship-asap" className="text-sm text-slate-300 cursor-pointer">Ships ASAP</Label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pre-order by month */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-white">Pre-order by month</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="nov-2025" className="border-slate-600 data-[state=checked]:bg-sky-400 data-[state=checked]:border-sky-400" />
+                    <Label htmlFor="nov-2025" className="text-sm text-slate-300 cursor-pointer">Nov 2025</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="dec-2025" className="border-slate-600 data-[state=checked]:bg-sky-400 data-[state=checked]:border-sky-400" />
+                    <Label htmlFor="dec-2025" className="text-sm text-slate-300 cursor-pointer">Dec 2025</Label>
+                  </div>
+                </div>
+                <button className="text-sm text-sky-400 hover:text-sky-300 transition-colors">
+                  Show more
+                </button>
+              </div>
+
+              {/* Lead time */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-white">Lead time</h3>
+                <RadioGroup defaultValue="any">
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="any" id="lead-any" className="border-slate-600 text-sky-400" />
+                    <Label htmlFor="lead-any" className="text-sm text-slate-300 cursor-pointer">Any time</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="2-days" id="lead-2" className="border-slate-600 text-sky-400" />
+                    <Label htmlFor="lead-2" className="text-sm text-slate-300 cursor-pointer">2 days or less</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="7-days" id="lead-7" className="border-slate-600 text-sky-400" />
+                    <Label htmlFor="lead-7" className="text-sm text-slate-300 cursor-pointer">7 days or less</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              {/* Product types */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-white">Product types</h3>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input 
+                    placeholder="Search"
+                    className="pl-10 bg-slate-900/50 border-slate-700 text-white placeholder:text-slate-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="book" className="border-slate-600 data-[state=checked]:bg-sky-400 data-[state=checked]:border-sky-400" />
+                    <Label htmlFor="book" className="text-sm text-slate-300 cursor-pointer">Book</Label>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        ) : (
+          // Chat Panel
+          <>
+            <div ref={chatContainerRef} className="flex-1 pt-16 pb-20 px-4 overflow-y-auto scrollbar-hide">
+              {/* Chat messages */}
+              <div className="space-y-4">
+                {chatMessages.map((msg, idx) => (
+                  <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                      msg.role === 'user' 
+                        ? 'bg-blue-600/80 text-white' 
+                        : 'bg-slate-800/80 text-slate-200 border border-white/10'
+                    }`}>
+                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    </div>
+                  </div>
+                ))}
+                {isLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-slate-800/80 text-slate-200 border border-white/10 rounded-lg px-4 py-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Chat Input - Fixed at bottom */}
+            <div className="absolute bottom-0 left-0 right-0 p-4">
+              <div className="relative rounded-xl border border-white/15 bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-blue-950/80 backdrop-blur-xl shadow-lg">
+                <div className="px-4 py-3">
+                  {/* Textarea on top */}
+                  <textarea
+                    placeholder="Ask.."
+                    rows={1}
+                    className="w-full bg-transparent py-2 text-sm text-white placeholder-slate-400 focus:outline-none resize-none overflow-hidden mb-2"
+                    style={{ minHeight: '2.5rem' }}
+                    onInput={(e) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      target.style.height = 'auto';
+                      target.style.height = target.scrollHeight + 'px';
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        // Handle send message
+                        const textarea = e.target as HTMLTextAreaElement;
+                        if (textarea.value.trim()) {
+                          handleSendMessage(textarea.value);
+                          textarea.value = '';
+                          textarea.style.height = 'auto';
+                        }
+                      }
+                    }}
+                  />
+                  
+                  {/* Icons on bottom */}
+                  <div className="flex items-center gap-2 justify-end">
+                    <button 
+                      onClick={() => {
+                        setChatMessages([]);
+                        const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
+                        if (textarea) {
+                          textarea.value = '';
+                          textarea.style.height = 'auto';
+                        }
+                      }}
+                      className="group relative p-1.5 hover:bg-white/10 rounded-lg transition-colors"
+                    >
+                      <Plus className="w-5 h-5 text-slate-400" />
+                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">
+                        New chat
+                      </span>
+                    </button>
+                    <button className="group relative p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+                      <MessageSquare className="w-5 h-5 text-slate-400" />
+                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">
+                        Chat history
+                      </span>
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
+                        if (textarea?.value.trim()) {
+                          handleSendMessage(textarea.value);
+                          textarea.value = '';
+                          textarea.style.height = 'auto';
+                        }
+                      }}
+                      disabled={isLoading}
+                      className="group relative p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ArrowRightCircle className="w-5 h-5 text-white" />
+                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">
+                        Send
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Main Content Area */}

@@ -297,6 +297,11 @@ export function ProductsGrid({ isExpanded, viewMode = 'products' }: ProductsGrid
                       </div>
                     )}
                   </div>
+                  {/* Product info on hover */}
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-950/95 via-slate-950/90 to-transparent pt-12 pb-3 px-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <p className="text-sm font-medium text-white truncate">{product.name}</p>
+                    <p className="text-xs text-slate-300 mt-0.5">${product.price?.toFixed(2)}</p>
+                  </div>
                 </motion.button>
               )
             })}

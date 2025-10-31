@@ -450,28 +450,54 @@ export function ModulesDashboard() {
 
         {/* Navigation Items */}
         <div className="flex flex-col items-center space-y-6 mt-2">
-          <button className="group flex flex-col items-center justify-center space-y-1.5 text-sky-400 transition-colors">
+          <button className="group relative flex items-center justify-center text-sky-400 transition-colors">
             <svg className="w-10 h-10 p-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
             </svg>
-            <span className="text-xs font-medium">Chat</span>
+            <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Chat</span>
           </button>
 
-          <button className="group flex flex-col items-center justify-center space-y-1.5 text-slate-400 hover:text-white transition-colors">
+          <button className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors">
             <svg className="w-10 h-10 p-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
             </svg>
-            <span className="text-xs font-medium">Filters</span>
+            <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Filters</span>
+          </button>
+
+          <button className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+            <div className="w-10 h-10 flex items-center justify-center">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </div>
+            <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Notifications</span>
+          </button>
+
+          <button className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+            <div className="w-10 h-10 flex items-center justify-center">
+              <ShoppingCart className="w-5 h-5" />
+            </div>
+            <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Cart</span>
+          </button>
+
+          <button 
+            onClick={toggleProfileDropdown}
+            className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+          >
+            <div className="w-10 h-10 flex items-center justify-center">
+              <UserCircle className="w-5 h-5" />
+            </div>
+            <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Profile</span>
           </button>
 
           <button 
             onClick={() => setShowOrgSettings(true)}
-            className="group flex flex-col items-center justify-center space-y-1.5 text-slate-400 hover:text-white transition-colors"
+            className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors"
           >
             <div className="w-10 h-10 flex items-center justify-center">
               <Settings className="w-5 h-5" />
             </div>
-            <span className="text-xs font-medium">Settings</span>
+            <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Settings</span>
           </button>
         </div>
       </div>
@@ -543,29 +569,8 @@ export function ModulesDashboard() {
             </svg>
           </button>
 
-          {/* Search Bar */}
-          <div className={`flex-1 min-w-[16rem] transition-[max-width] duration-300 ease-out ${isProductsExpanded ? 'max-w-4xl' : 'max-w-2xl'}`}>
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search products and brands"
-                className="w-full h-10 rounded-2xl border border-white/15 bg-gradient-to-br from-white/[0.08] to-white/[0.04] backdrop-blur-xl pl-12 pr-4 text-sm text-white placeholder-slate-400 transition-all duration-200 hover:border-sky-200/30 focus:border-sky-300/50 focus:ring-2 focus:ring-sky-400/20 focus:outline-none shadow-[0_4px_16px_-8px_rgba(0,0,0,0.3)]"
-              />
-            </div>
-          </div>
-          
-          <div className="flex items-center space-x-4 ml-6 flex-shrink-0">
-            <NotificationSystem />
-            
-            <button 
-              className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] via-transparent to-blue-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
-              <ShoppingCart className="relative w-5 h-5 text-slate-300 group-hover:text-white transition-colors duration-300" />
-            </button>
-
-            <div className="relative profile-dropdown-container">
+          <div className="relative profile-dropdown-container ml-auto">
+            <div className="opacity-0 pointer-events-none">
               <button 
                 onClick={toggleProfileDropdown}
                 className="group relative w-10 h-10 rounded-xl backdrop-blur-md bg-gradient-to-br from-white/[0.12] to-white/[0.06] border border-white/[0.08] hover:border-white/[0.15] flex items-center justify-center transition-all duration-300 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.4)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.3)] hover:scale-105"
@@ -693,7 +698,7 @@ export function ModulesDashboard() {
 
         {/* Products Layout Area */}
         <div className="flex-1 pl-3 pr-3 pb-3 pt-2 overflow-hidden">
-          <div className="relative h-full rounded-2xl bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-blue-950/80 products-scrollbar overflow-y-auto">
+          <div className="relative h-full rounded-2xl products-scrollbar overflow-y-auto">
             {/* Products Grid */}
             <ProductsGrid isExpanded={isProductsExpanded} />
           </div>

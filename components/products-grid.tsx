@@ -255,7 +255,7 @@ export function ProductsGrid({ isExpanded }: ProductsGridProps) {
                     onClick={() => handleProductClick(product, refKey)}
                     className="group relative flex flex-col transition-transform hover:scale-105"
                   >
-                    <div ref={assignImageRef(refKey)} className="mb-2 aspect-square overflow-hidden rounded-lg bg-slate-800/50">
+                    <div ref={assignImageRef(refKey)} className="mb-2 aspect-square overflow-hidden rounded-lg">
                       {product.image ? (
                         <Image src={product.image} alt={product.name} width={200} height={200} className="h-full w-full object-contain" />
                       ) : (
@@ -292,7 +292,7 @@ export function ProductsGrid({ isExpanded }: ProductsGridProps) {
                   onClick={() => handleProductClick(product, refKey)}
                   className="group relative flex flex-col transition-transform hover:scale-105"
                 >
-                  <div ref={assignImageRef(refKey)} className="mb-2 aspect-square overflow-hidden rounded-lg bg-slate-800/50">
+                  <div ref={assignImageRef(refKey)} className="mb-2 aspect-square overflow-hidden rounded-lg">
                     {product.image ? (
                       <Image src={product.image} alt={product.name} width={200} height={200} className="h-full w-full object-contain" />
                     ) : (
@@ -328,7 +328,7 @@ export function ProductsGrid({ isExpanded }: ProductsGridProps) {
                   onClick={() => handleProductClick(product, refKey)}
                   className="group relative flex flex-col transition-transform hover:scale-105"
                 >
-                  <div ref={assignImageRef(refKey)} className="mb-2 aspect-square overflow-hidden rounded-lg bg-slate-800/50">
+                  <div ref={assignImageRef(refKey)} className="mb-2 aspect-square overflow-hidden rounded-lg">
                     {product.image ? (
                       <Image src={product.image} alt={product.name} width={200} height={200} className="h-full w-full object-contain" />
                     ) : (
@@ -356,8 +356,8 @@ export function ProductsGrid({ isExpanded }: ProductsGridProps) {
             className={`grid gap-4 ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}
           >
             {BRANDS.map((brand) => (
-              <motion.div layout key={brand.name} className="group rounded-lg border border-white/10 bg-slate-800/30 p-4 transition hover:border-sky-400/30 hover:bg-slate-800/50">
-                <div className="mb-2 flex h-16 items-center justify-center rounded-lg bg-slate-700/50">
+              <motion.div layout key={brand.name} className="group rounded-lg p-4 transition">
+                <div className="mb-2 flex h-16 items-center justify-center rounded-lg">
                   <span className="text-lg font-semibold text-white">{brand.name.slice(0, 2)}</span>
                 </div>
                 <h3 className="mb-1 text-sm font-medium text-white">{brand.name}</h3>
@@ -390,7 +390,7 @@ export function ProductsGrid({ isExpanded }: ProductsGridProps) {
                   onClick={() => handleProductClick(product, refKey)}
                   className="group relative flex flex-col transition-transform hover:scale-105"
                 >
-                  <div ref={assignImageRef(refKey)} className="mb-2 aspect-square overflow-hidden rounded-lg bg-slate-800/50">
+                  <div ref={assignImageRef(refKey)} className="mb-2 aspect-square overflow-hidden rounded-lg">
                     {product.image ? (
                       <Image src={product.image} alt={product.name} width={200} height={200} className="h-full w-full object-contain" />
                     ) : (

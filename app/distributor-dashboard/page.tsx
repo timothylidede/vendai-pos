@@ -1042,8 +1042,456 @@ export default function DistributorDashboard() {
               </div>
             )}
 
+            {/* Orders Tab */}
+            {activeTab === 'orders' && (
+              <div className="px-6 py-4">
+                <div className="mx-auto max-w-7xl">
+                  {/* Header */}
+                  <div className="mb-6 flex items-center justify-between">
+                    <div>
+                      <h1 className="mb-2 text-3xl font-bold text-slate-100">Orders</h1>
+                      <p className="text-slate-400">Manage and fulfill your orders</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Button variant="outline" className="border-white/20 text-slate-200 hover:bg-white/10">
+                        Export
+                      </Button>
+                      <Button className="bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white">
+                        Create order
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="mb-6 flex items-center gap-2 border-b border-white/10">
+                    {['All', 'Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'].map((tab) => (
+                      <button
+                        key={tab}
+                        className="px-4 py-3 text-sm font-medium text-slate-300 hover:text-white border-b-2 border-transparent hover:border-sky-500 transition-all"
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Empty State */}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-12 text-center">
+                    <div className="mb-6 flex justify-center">
+                      <div className="w-48 h-48 rounded-full bg-gradient-to-br from-slate-800/50 to-slate-900/50 flex items-center justify-center">
+                        <ShoppingCart className="w-20 h-20 text-slate-400" />
+                      </div>
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-100 mb-2">No orders yet</h2>
+                    <p className="text-slate-400 mb-6">You haven't received any orders yet.</p>
+                    <Button className="bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white">
+                      View Products
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Messages Tab */}
+            {activeTab === 'messages' && (
+              <div className="px-6 py-4">
+                <div className="mx-auto max-w-7xl">
+                  <div className="mb-6">
+                    <h1 className="mb-2 text-3xl font-bold text-slate-100">Messages</h1>
+                    <p className="text-slate-400">Communicate with your retailers</p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-6 h-[calc(100vh-200px)]">
+                    {/* Conversations List */}
+                    <div className="col-span-1 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl overflow-hidden flex flex-col">
+                      <div className="p-4 border-b border-white/10">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Search conversations..."
+                            className="w-full pl-10 pr-4 py-2 rounded-lg backdrop-blur-md bg-white/5 border border-white/10 text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="flex-1 overflow-y-auto">
+                        {/* Empty State */}
+                        <div className="p-8 text-center">
+                          <MessageSquare className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+                          <p className="text-slate-400 text-sm">No messages yet</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Message View */}
+                    <div className="col-span-2 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl flex items-center justify-center">
+                      <div className="text-center">
+                        <MessageSquare className="w-20 h-20 text-slate-400 mx-auto mb-4" />
+                        <p className="text-slate-300 text-lg">Select a conversation</p>
+                        <p className="text-slate-400 text-sm">Choose a conversation to start messaging</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Customers Tab */}
+            {activeTab === 'customers' && (
+              <div className="px-6 py-4">
+                <div className="mx-auto max-w-7xl">
+                  <div className="mb-6 flex items-center justify-between">
+                    <div>
+                      <h1 className="mb-2 text-3xl font-bold text-slate-100">Customers</h1>
+                      <p className="text-slate-400">Manage your retail customer base</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Button variant="outline" className="border-white/20 text-slate-200 hover:bg-white/10">
+                        Export
+                      </Button>
+                      <Button className="bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add customer
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Search and Filter */}
+                  <div className="mb-6 flex items-center gap-3">
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search customers..."
+                        className="w-full pl-12 pr-4 py-3 rounded-xl backdrop-blur-md bg-white/5 border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      />
+                    </div>
+                    <Button variant="outline" className="border-white/20 text-slate-200 hover:bg-white/10">
+                      <Filter className="w-4 h-4 mr-2" />
+                      Filters
+                    </Button>
+                  </div>
+
+                  {/* Stats Cards */}
+                  <div className="grid grid-cols-4 gap-4 mb-6">
+                    {[
+                      { label: 'Total Customers', value: '0', icon: Users },
+                      { label: 'Active This Month', value: '0', icon: TrendingUp },
+                      { label: 'Average Order Value', value: 'KES 0', icon: BarChart3 },
+                      { label: 'Repeat Customers', value: '0%', icon: Users }
+                    ].map((stat, index) => {
+                      const Icon = stat.icon;
+                      return (
+                        <div key={index} className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-4">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 rounded-lg bg-sky-500/20">
+                              <Icon className="w-4 h-4 text-sky-300" />
+                            </div>
+                            <span className="text-xs text-slate-400">{stat.label}</span>
+                          </div>
+                          <p className="text-2xl font-bold text-white">{stat.value}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Empty State */}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-12 text-center">
+                    <Users className="w-20 h-20 text-slate-400 mx-auto mb-4" />
+                    <h2 className="text-2xl font-bold text-slate-100 mb-2">No customers yet</h2>
+                    <p className="text-slate-400 mb-6">Start getting orders to build your customer base</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Marketing Tab */}
+            {activeTab === 'marketing' && (
+              <div className="px-6 py-4">
+                <div className="mx-auto max-w-7xl">
+                  <div className="mb-6">
+                    <h1 className="mb-2 text-3xl font-bold text-slate-100">Marketing</h1>
+                    <p className="text-slate-400">Promote your products and grow your business</p>
+                  </div>
+
+                  {/* Marketing Cards */}
+                  <div className="grid grid-cols-2 gap-6 mb-6">
+                    {/* Promotions */}
+                    <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h3 className="text-xl font-semibold text-slate-100 mb-2">Promotions</h3>
+                          <p className="text-sm text-slate-400">Create special offers and discounts</p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-purple-500/20">
+                          <TrendingUp className="w-6 h-6 text-purple-300" />
+                        </div>
+                      </div>
+                      <div className="mb-4">
+                        <p className="text-3xl font-bold text-white">0</p>
+                        <p className="text-sm text-slate-400">Active promotions</p>
+                      </div>
+                      <Button className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Create Promotion
+                      </Button>
+                    </div>
+
+                    {/* Email Campaigns */}
+                    <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h3 className="text-xl font-semibold text-slate-100 mb-2">Email Campaigns</h3>
+                          <p className="text-sm text-slate-400">Send targeted emails to retailers</p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-blue-500/20">
+                          <Mail className="w-6 h-6 text-blue-300" />
+                        </div>
+                      </div>
+                      <div className="mb-4">
+                        <p className="text-3xl font-bold text-white">0</p>
+                        <p className="text-sm text-slate-400">Campaigns sent</p>
+                      </div>
+                      <Button className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Create Campaign
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Marketing Tools */}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                    <h3 className="text-lg font-semibold text-slate-100 mb-4">Marketing Tools</h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      {[
+                        { title: 'New Product Launch', desc: 'Announce new products to retailers', icon: Sparkles },
+                        { title: 'Seasonal Offers', desc: 'Create limited-time seasonal deals', icon: TrendingUp },
+                        { title: 'Loyalty Program', desc: 'Reward repeat customers', icon: Users },
+                        { title: 'Bundle Deals', desc: 'Create product bundles', icon: Package },
+                        { title: 'Free Shipping', desc: 'Offer free shipping promotions', icon: ShoppingBag },
+                        { title: 'Referral Program', desc: 'Get retailers to refer others', icon: Users }
+                      ].map((tool, index) => {
+                        const Icon = tool.icon;
+                        return (
+                          <button
+                            key={index}
+                            className="p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all text-left group"
+                          >
+                            <Icon className="w-8 h-8 text-slate-400 group-hover:text-sky-300 transition-colors mb-3" />
+                            <h4 className="text-sm font-medium text-slate-100 mb-1">{tool.title}</h4>
+                            <p className="text-xs text-slate-400">{tool.desc}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Analytics Tab */}
+            {activeTab === 'analytics' && (
+              <div className="px-6 py-4">
+                <div className="mx-auto max-w-7xl">
+                  <div className="mb-6">
+                    <h1 className="mb-2 text-3xl font-bold text-slate-100">Analytics</h1>
+                    <p className="text-slate-400">Track your performance and insights</p>
+                  </div>
+
+                  {/* Date Range Selector */}
+                  <div className="mb-6 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {['Today', 'Last 7 days', 'Last 30 days', 'Last 90 days'].map((range) => (
+                        <button
+                          key={range}
+                          className="px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-white/5 transition-all"
+                        >
+                          {range}
+                        </button>
+                      ))}
+                    </div>
+                    <Button variant="outline" className="border-white/20 text-slate-200 hover:bg-white/10">
+                      Export Report
+                    </Button>
+                  </div>
+
+                  {/* Key Metrics */}
+                  <div className="grid grid-cols-4 gap-4 mb-6">
+                    {[
+                      { label: 'Total Sales', value: 'KES 0', change: '+0%', icon: TrendingUp },
+                      { label: 'Orders', value: '0', change: '+0%', icon: ShoppingCart },
+                      { label: 'Average Order', value: 'KES 0', change: '+0%', icon: BarChart3 },
+                      { label: 'Products Sold', value: '0', change: '+0%', icon: Package }
+                    ].map((metric, index) => {
+                      const Icon = metric.icon;
+                      return (
+                        <div key={index} className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                          <div className="flex items-center justify-between mb-4">
+                            <span className="text-sm text-slate-400">{metric.label}</span>
+                            <Icon className="w-5 h-5 text-slate-400" />
+                          </div>
+                          <p className="text-3xl font-bold text-white mb-1">{metric.value}</p>
+                          <span className="text-sm text-green-400">{metric.change}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Charts Row */}
+                  <div className="grid grid-cols-2 gap-6 mb-6">
+                    {/* Sales Chart */}
+                    <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                      <h3 className="text-lg font-semibold text-slate-100 mb-4">Sales Overview</h3>
+                      <div className="h-64 flex items-center justify-center border border-dashed border-white/10 rounded-xl">
+                        <div className="text-center">
+                          <BarChart3 className="w-16 h-16 text-slate-400 mx-auto mb-2" />
+                          <p className="text-slate-400 text-sm">No sales data yet</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Top Products */}
+                    <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                      <h3 className="text-lg font-semibold text-slate-100 mb-4">Top Products</h3>
+                      <div className="h-64 flex items-center justify-center border border-dashed border-white/10 rounded-xl">
+                        <div className="text-center">
+                          <Package className="w-16 h-16 text-slate-400 mx-auto mb-2" />
+                          <p className="text-slate-400 text-sm">No product data yet</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Additional Insights */}
+                  <div className="grid grid-cols-3 gap-6">
+                    <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                      <h4 className="text-sm font-medium text-slate-400 mb-3">Customer Growth</h4>
+                      <p className="text-2xl font-bold text-white mb-1">0</p>
+                      <p className="text-xs text-slate-400">New customers this month</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                      <h4 className="text-sm font-medium text-slate-400 mb-3">Conversion Rate</h4>
+                      <p className="text-2xl font-bold text-white mb-1">0%</p>
+                      <p className="text-xs text-slate-400">Views to orders</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                      <h4 className="text-sm font-medium text-slate-400 mb-3">Return Rate</h4>
+                      <p className="text-2xl font-bold text-white mb-1">0%</p>
+                      <p className="text-xs text-slate-400">Orders returned</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* My Shop Tab */}
+            {activeTab === 'myshop' && (
+              <div className="px-6 py-4">
+                <div className="mx-auto max-w-7xl">
+                  <div className="mb-6 flex items-center justify-between">
+                    <div>
+                      <h1 className="mb-2 text-3xl font-bold text-slate-100">My Shop</h1>
+                      <p className="text-slate-400">Manage how your shop appears to retailers</p>
+                    </div>
+                    <Button className="bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white">
+                      Preview Shop
+                    </Button>
+                  </div>
+
+                  {/* Shop Status */}
+                  <div className="mb-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-xl bg-slate-800 flex items-center justify-center">
+                          <Store className="w-8 h-8 text-slate-400" />
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-semibold text-slate-100 mb-1">
+                            {userData?.organizationDisplayName || userData?.organizationName || 'Your Shop'}
+                          </h3>
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-2 w-2 rounded-full bg-amber-400"></span>
+                            <span className="text-sm text-amber-400">Inactive - Complete setup to go live</span>
+                          </div>
+                        </div>
+                      </div>
+                      <Button variant="outline" className="border-white/20 text-slate-200 hover:bg-white/10">
+                        Edit Details
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Shop Sections */}
+                  <div className="grid grid-cols-2 gap-6 mb-6">
+                    {/* Brand Story */}
+                    <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-slate-100">Brand Story</h3>
+                        <Button variant="ghost" className="text-sky-400 hover:text-sky-300">
+                          <Plus className="w-4 h-4 mr-1" />
+                          Add
+                        </Button>
+                      </div>
+                      <div className="border border-dashed border-white/10 rounded-xl p-8 text-center">
+                        <FileText className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                        <p className="text-slate-400 text-sm mb-2">Tell retailers your story</p>
+                        <p className="text-xs text-slate-500">Share what makes your brand unique</p>
+                      </div>
+                    </div>
+
+                    {/* Shop Images */}
+                    <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-slate-100">Shop Images</h3>
+                        <Button variant="ghost" className="text-sky-400 hover:text-sky-300">
+                          <Plus className="w-4 h-4 mr-1" />
+                          Add
+                        </Button>
+                      </div>
+                      <div className="border border-dashed border-white/10 rounded-xl p-8 text-center">
+                        <Camera className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                        <p className="text-slate-400 text-sm mb-2">Add shop photos</p>
+                        <p className="text-xs text-slate-500">Show your products and workspace</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Shop Policies */}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                    <h3 className="text-lg font-semibold text-slate-100 mb-4">Shop Policies</h3>
+                    <div className="space-y-4">
+                      {[
+                        { title: 'Minimum Order Quantity', value: 'Not set', icon: Package },
+                        { title: 'Payment Terms', value: 'Not set', icon: BarChart3 },
+                        { title: 'Shipping Policy', value: 'Not set', icon: ShoppingBag },
+                        { title: 'Return Policy', value: 'Not set', icon: ClipboardCheck }
+                      ].map((policy, index) => {
+                        const Icon = policy.icon;
+                        return (
+                          <div key={index} className="flex items-center justify-between p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all">
+                            <div className="flex items-center gap-3">
+                              <Icon className="w-5 h-5 text-slate-400" />
+                              <div>
+                                <p className="text-sm font-medium text-slate-100">{policy.title}</p>
+                                <p className="text-xs text-slate-400">{policy.value}</p>
+                              </div>
+                            </div>
+                            <Button variant="ghost" className="text-sky-400 hover:text-sky-300 text-sm">
+                              Configure
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Other Tabs - Placeholder */}
-            {activeTab !== 'home' && activeTab !== 'products' && activeTab !== 'settings' && (
+            {activeTab !== 'home' && activeTab !== 'products' && activeTab !== 'settings' && 
+             activeTab !== 'orders' && activeTab !== 'messages' && activeTab !== 'customers' && 
+             activeTab !== 'marketing' && activeTab !== 'analytics' && activeTab !== 'myshop' && (
               <div className="flex min-h-[calc(100vh-2rem)] items-center justify-center px-6 py-4">
                 <div className="text-center">
                   <div className="mb-4 text-6xl">🚧</div>

@@ -653,8 +653,8 @@ export default function DistributorDashboard() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 overflow-auto">
-          <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="pointer-events-none fixed inset-0 -z-10">
             <div className="absolute inset-0 bg-slate-950/65 backdrop-blur-[140px]" />
             <div className="absolute -top-32 left-1/2 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full bg-sky-500/18 blur-[160px]" />
             <div className="absolute bottom-[-18%] right-[-12%] h-[24rem] w-[24rem] rounded-full bg-indigo-500/18 blur-[160px]" />
@@ -698,25 +698,26 @@ export default function DistributorDashboard() {
           )}
 
           {/* Content Area */}
-          <div className="relative z-10 px-8 py-6">
+          <div className="relative z-10">
             {/* Home Tab - Get Started Guide */}
             {activeTab === 'home' && (
-              <div className="mx-auto max-w-5xl">
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mb-8"
-                >
-                  <h1 className="mb-2 text-3xl font-bold text-slate-100">
-                    Hi {userData?.displayName?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'Timothy'},
-                  </h1>
-                  <p className="text-lg text-slate-300">
-                    Let's finish setting up your shop
-                  </p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    Add at least 2 products to go live to retailers on Vendai.
-                  </p>
-                </motion.div>
+              <div className="px-6 py-4">
+                <div className="mx-auto max-w-5xl">
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-8"
+                  >
+                    <h1 className="mb-2 text-3xl font-bold text-slate-100">
+                      Hi {userData?.displayName?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'Timothy'},
+                    </h1>
+                    <p className="text-lg text-slate-300">
+                      Let's finish setting up your shop
+                    </p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Add at least 2 products to go live to retailers on Vendai.
+                    </p>
+                  </motion.div>
 
                 {/* Get Started Guide Card */}
                 <motion.div
@@ -894,21 +895,156 @@ export default function DistributorDashboard() {
                     </Button>
                   </motion.div>
                 </div>
+                </div>
               </div>
             )}
 
             {/* Products Tab */}
             {activeTab === 'products' && (
-              <ProductsContent 
+              <div className="px-6 py-4">
+                <ProductsContent 
                 activeProductsTab={activeProductsTab}
                 setActiveProductsTab={setActiveProductsTab}
                 userData={userData}
               />
+              </div>
+            )}
+
+            {/* Settings Tab */}
+            {activeTab === 'settings' && (
+              <div className="px-6 py-4">
+                <div className="mx-auto max-w-5xl">
+                  <div className="mb-8">
+                    <h1 className="mb-2 text-3xl font-bold text-slate-100">
+                      {activeSettingsTab === 'shop' && 'Shop settings'}
+                      {activeSettingsTab === 'shipping' && 'Shipping tools'}
+                      {activeSettingsTab === 'account' && 'Account settings'}
+                      {activeSettingsTab === 'team' && 'Team'}
+                    </h1>
+                    <p className="text-slate-400">
+                      {activeSettingsTab === 'shop' && 'Manage your shop details and preferences'}
+                      {activeSettingsTab === 'shipping' && 'Configure shipping options and rates'}
+                      {activeSettingsTab === 'account' && 'Update your account information'}
+                      {activeSettingsTab === 'team' && 'Manage team members and permissions'}
+                    </p>
+                  </div>
+
+                  {/* Settings Content */}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-8">
+                    {activeSettingsTab === 'shop' && (
+                      <div className="space-y-6">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300 mb-2">Shop Name</label>
+                          <input
+                            type="text"
+                            placeholder="Your shop name"
+                            className="w-full px-4 py-3 rounded-xl backdrop-blur-md bg-white/5 border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300 mb-2">Shop Description</label>
+                          <textarea
+                            placeholder="Tell retailers about your shop"
+                            rows={4}
+                            className="w-full px-4 py-3 rounded-xl backdrop-blur-md bg-white/5 border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300 mb-2">Business Type</label>
+                          <select className="w-full px-4 py-3 rounded-xl backdrop-blur-md bg-white/5 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50">
+                            <option value="">Select business type</option>
+                            <option value="manufacturer">Manufacturer</option>
+                            <option value="distributor">Distributor</option>
+                            <option value="wholesaler">Wholesaler</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeSettingsTab === 'shipping' && (
+                      <div className="space-y-6">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300 mb-2">Shipping Methods</label>
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
+                              <input type="checkbox" className="w-4 h-4" />
+                              <span className="text-slate-200">Standard Shipping</span>
+                            </div>
+                            <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
+                              <input type="checkbox" className="w-4 h-4" />
+                              <span className="text-slate-200">Express Shipping</span>
+                            </div>
+                            <div className="flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
+                              <input type="checkbox" className="w-4 h-4" />
+                              <span className="text-slate-200">Free Shipping (Minimum Order)</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeSettingsTab === 'account' && (
+                      <div className="space-y-6">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300 mb-2">Full Name</label>
+                          <input
+                            type="text"
+                            defaultValue={userData?.displayName || user?.displayName || ''}
+                            className="w-full px-4 py-3 rounded-xl backdrop-blur-md bg-white/5 border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
+                          <input
+                            type="email"
+                            defaultValue={user?.email || ''}
+                            disabled
+                            className="w-full px-4 py-3 rounded-xl backdrop-blur-md bg-white/5 border border-white/10 text-slate-400 placeholder-slate-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300 mb-2">Phone Number</label>
+                          <input
+                            type="tel"
+                            placeholder="+254 700 000 000"
+                            className="w-full px-4 py-3 rounded-xl backdrop-blur-md bg-white/5 border border-white/10 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {activeSettingsTab === 'team' && (
+                      <div className="space-y-6">
+                        <div className="flex items-center justify-between mb-6">
+                          <p className="text-slate-300">Manage your team members and their access</p>
+                          <Button className="bg-sky-500 hover:bg-sky-600 text-white">
+                            <Plus className="w-4 h-4 mr-2" />
+                            Invite Member
+                          </Button>
+                        </div>
+                        <div className="text-center py-12 text-slate-400">
+                          No team members yet. Invite someone to collaborate!
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Save Button */}
+                    <div className="mt-8 flex justify-end gap-3">
+                      <Button variant="outline" className="border-white/20 text-slate-200 hover:bg-white/10">
+                        Cancel
+                      </Button>
+                      <Button className="bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white">
+                        Save Changes
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* Other Tabs - Placeholder */}
-            {activeTab !== 'home' && activeTab !== 'products' && (
-              <div className="flex h-96 items-center justify-center">
+            {activeTab !== 'home' && activeTab !== 'products' && activeTab !== 'settings' && (
+              <div className="flex min-h-[calc(100vh-2rem)] items-center justify-center px-6 py-4">
                 <div className="text-center">
                   <div className="mb-4 text-6xl">🚧</div>
                   <h2 className="mb-2 text-2xl font-semibold text-slate-100 capitalize">

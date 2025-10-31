@@ -175,9 +175,10 @@ function ProductDetailOverlay({ product, originRect, isClosing, onCloseComplete 
 
 type ProductsGridProps = {
   isExpanded: boolean
+  viewMode?: 'products' | 'brands'
 }
 
-export function ProductsGrid({ isExpanded }: ProductsGridProps) {
+export function ProductsGrid({ isExpanded, viewMode = 'products' }: ProductsGridProps) {
   const [selectedProduct, setSelectedProduct] = useState<SelectedProductState | null>(null)
   const [isClosing, setIsClosing] = useState(false)
   const [viewedProducts, setViewedProducts] = useState<Set<string>>(new Set())
@@ -228,135 +229,90 @@ export function ProductsGrid({ isExpanded }: ProductsGridProps) {
     return () => document.removeEventListener("keydown", handleEscape)
   }, [selectedProduct, handleClose])
 
-  // Filter products by categories
-  const recentlyViewed = MOCK_PRODUCTS.filter(p => viewedProducts.has(p.id)).slice(0, itemsPerRow)
-  const newProducts = MOCK_PRODUCTS.slice(0, itemsPerRow)
-  const popularProducts = MOCK_PRODUCTS.slice(2, 2 + itemsPerRow)
-  const recommendedProducts = MOCK_PRODUCTS.slice(1, 1 + itemsPerRow)
+  // Organize products following the specified arrangement
+  // 1. Most recently ordered (simulated with first products)
+  const recentlyOrdered = MOCK_PRODUCTS.slice(0, 2)
+  const usedIds = new Set(recentlyOrdered.map(p => p.id))
+  
+  // 2. Most recently viewed
+  const recentlyViewed = MOCK_PRODUCTS.filter(p => viewedProducts.has(p.id) && !usedIds.has(p.id)).slice(0, 2)
+  recentlyViewed.forEach(p => usedIds.add(p.id))
+  
+  // 3. Frequently purchased (simulated with next products)
+  const frequentlyPurchased = MOCK_PRODUCTS.filter(p => !usedIds.has(p.id)).slice(0, 2)
+  frequentlyPurchased.forEach(p => usedIds.add(p.id))
+  
+  // 4. Similar products (same category as recently ordered/viewed)
+  const similarProducts = MOCK_PRODUCTS.filter(p => {
+    if (usedIds.has(p.id)) return false
+    const recentCategories = [...recentlyOrdered, ...recentlyViewed].map(rp => rp.category)
+    return recentCategories.includes(p.category)
+  }).slice(0, 3)
+  similarProducts.forEach(p => usedIds.add(p.id))
+  
+  // 5. New arrivals / trending (remaining products)
+  const newArrivals = MOCK_PRODUCTS.filter(p => !usedIds.has(p.id)).slice(0, 3)
+  newArrivals.forEach(p => usedIds.add(p.id))
+  
+  // 6. Promotional items (any remaining)
+  const promotional = MOCK_PRODUCTS.filter(p => !usedIds.has(p.id))
+  
+  // Combine all products in order without duplication
+  const organizedProducts = [
+    ...recentlyOrdered,
+    ...recentlyViewed,
+    ...frequentlyPurchased,
+    ...similarProducts,
+    ...newArrivals,
+    ...promotional
+  ]
 
   return (
     <div className="relative h-full">
       <div className={`p-6 transition-opacity duration-300 ${selectedProduct ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
-        {/* Recently Viewed */}
-        {recentlyViewed.length > 0 && (
-          <section className="mb-10">
-            <h2 className="mb-4 text-lg font-semibold text-white">Recently viewed</h2>
-            <motion.div
-              layout
-              transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
-              className={`grid gap-4 ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}
-            >
-              {recentlyViewed.map((product) => {
-                const refKey = `recent-${product.id}`
-                return (
-                  <motion.button
-                    layout
-                    key={refKey}
-                    onClick={() => handleProductClick(product, refKey)}
-                    className="group relative flex flex-col transition-transform hover:scale-105"
-                  >
-                    <div ref={assignImageRef(refKey)} className="mb-2 aspect-square overflow-hidden rounded-lg">
-                      {product.image ? (
-                        <Image src={product.image} alt={product.name} width={200} height={200} className="h-full w-full object-contain" />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-slate-600">
-                          <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={0.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                    <h3 className="text-xs text-slate-300 line-clamp-2">{product.name}</h3>
-                    <p className="text-sm font-semibold text-white">KES {product.price.toLocaleString()}</p>
-                  </motion.button>
-                )
-              })}
-            </motion.div>
-          </section>
+        {/* Products View */}
+        {viewMode === 'products' && (
+          <motion.div
+            layout
+            transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
+            className={`grid gap-4 ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}
+          >
+            {organizedProducts.map((product, index) => {
+              const refKey = `product-${product.id}-${index}`
+              return (
+                <motion.button
+                  layout
+                  key={refKey}
+                  onClick={() => handleProductClick(product, refKey)}
+                  className="group relative transition-transform hover:scale-105"
+                >
+                  <div ref={assignImageRef(refKey)} className="aspect-square overflow-hidden rounded-lg">
+                    {product.image ? (
+                      <Image src={product.image} alt={product.name} width={200} height={200} className="h-full w-full object-contain" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-slate-600">
+                        <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={0.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                </motion.button>
+              )
+            })}
+          </motion.div>
         )}
 
-        {/* New from brands you follow */}
+        {/* Brands View */}
+        {viewMode === 'brands' && (
         <section className="mb-10">
-          <h2 className="mb-4 text-lg font-semibold text-white">New from brands you follow</h2>
-          <motion.div
-            layout
-            transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
-            className={`grid gap-4 ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}
-          >
-            {newProducts.map((product) => {
-              const refKey = `new-${product.id}`
-              return (
-                <motion.button
-                  layout
-                  key={refKey}
-                  onClick={() => handleProductClick(product, refKey)}
-                  className="group relative flex flex-col transition-transform hover:scale-105"
-                >
-                  <div ref={assignImageRef(refKey)} className="mb-2 aspect-square overflow-hidden rounded-lg">
-                    {product.image ? (
-                      <Image src={product.image} alt={product.name} width={200} height={200} className="h-full w-full object-contain" />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-slate-600">
-                        <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={0.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-                  <h3 className="text-xs text-slate-300 line-clamp-2">{product.name}</h3>
-                  <p className="text-sm font-semibold text-white">KES {product.price.toLocaleString()}</p>
-                </motion.button>
-              )
-            })}
-          </motion.div>
-        </section>
-
-        {/* Popular with shops like yours */}
-        <section className="mb-10">
-          <h2 className="mb-4 text-lg font-semibold text-white">Popular with shops like yours</h2>
-          <motion.div
-            layout
-            transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
-            className={`grid gap-4 ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}
-          >
-            {popularProducts.map((product) => {
-              const refKey = `popular-${product.id}`
-              return (
-                <motion.button
-                  layout
-                  key={refKey}
-                  onClick={() => handleProductClick(product, refKey)}
-                  className="group relative flex flex-col transition-transform hover:scale-105"
-                >
-                  <div ref={assignImageRef(refKey)} className="mb-2 aspect-square overflow-hidden rounded-lg">
-                    {product.image ? (
-                      <Image src={product.image} alt={product.name} width={200} height={200} className="h-full w-full object-contain" />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-slate-600">
-                        <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={0.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-                  <h3 className="text-xs text-slate-300 line-clamp-2">{product.name}</h3>
-                  <p className="text-sm font-semibold text-white">KES {product.price.toLocaleString()}</p>
-                </motion.button>
-              )
-            })}
-          </motion.div>
-        </section>
-
-        {/* Brands you might like */}
-        <section className="mb-10">
-          <h2 className="mb-4 text-lg font-semibold text-white">Brands you might like</h2>
           <motion.div
             layout
             transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
             className={`grid gap-4 ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}
           >
             {BRANDS.map((brand) => (
-              <motion.div layout key={brand.name} className="group rounded-lg p-4 transition">
+              <motion.div layout key={brand.name} className="group rounded-lg border border-white/10 p-4 transition hover:border-sky-400/30">
                 <div className="mb-2 flex h-16 items-center justify-center rounded-lg">
                   <span className="text-lg font-semibold text-white">{brand.name.slice(0, 2)}</span>
                 </div>
@@ -372,42 +328,8 @@ export function ProductsGrid({ isExpanded }: ProductsGridProps) {
             ))}
           </motion.div>
         </section>
-
-        {/* Products you might like */}
-        <section className="mb-10">
-          <h2 className="mb-4 text-lg font-semibold text-white">Products you might like</h2>
-          <motion.div
-            layout
-            transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
-            className={`grid gap-4 ${isExpanded ? "grid-cols-6" : "grid-cols-4"}`}
-          >
-            {recommendedProducts.map((product) => {
-              const refKey = `recommended-${product.id}`
-              return (
-                <motion.button
-                  layout
-                  key={refKey}
-                  onClick={() => handleProductClick(product, refKey)}
-                  className="group relative flex flex-col transition-transform hover:scale-105"
-                >
-                  <div ref={assignImageRef(refKey)} className="mb-2 aspect-square overflow-hidden rounded-lg">
-                    {product.image ? (
-                      <Image src={product.image} alt={product.name} width={200} height={200} className="h-full w-full object-contain" />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-slate-600">
-                        <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={0.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-                  <h3 className="text-xs text-slate-300 line-clamp-2">{product.name}</h3>
-                  <p className="text-sm font-semibold text-white">KES {product.price.toLocaleString()}</p>
-                </motion.button>
-              )
-            })}
-          </motion.div>
-        </section>
+        )}
+        
       </div>
 
       {selectedProduct && (

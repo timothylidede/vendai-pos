@@ -7,7 +7,8 @@ import {
   ShoppingCart, Package, HeartHandshake, Truck, Users,
   ArrowRightCircle, TrendingUp,
   Settings, UserCircle, ChevronDown, 
-  User, Mail, MapPin, LogOut, X, Search
+  User, Mail, MapPin, LogOut, X, Search, Plus,
+  MessageSquare, Filter, Bell, ShoppingBag, Globe
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { signOut } from 'firebase/auth'
@@ -168,6 +169,7 @@ export function ModulesDashboard() {
   const [showProfile, setShowProfile] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isProductsExpanded, setIsProductsExpanded] = useState(false);
+  const [viewMode, setViewMode] = useState<'products' | 'brands'>('products');
   const router = useRouter();
   const [needsInventory, setNeedsInventory] = useState(false)
   const orgId = useMemo(() => userData?.organizationName || 'default', [userData?.organizationName])
@@ -450,55 +452,61 @@ export function ModulesDashboard() {
 
         {/* Navigation Items */}
         <div className="flex flex-col items-center space-y-6 mt-2">
-          <button className="group relative flex items-center justify-center text-sky-400 transition-colors">
-            <svg className="w-10 h-10 p-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
+          <motion.button 
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            className="group relative flex items-center justify-center text-sky-400 transition-colors"
+          >
+            <MessageSquare className="w-6 h-6 transition-transform group-hover:rotate-12" />
             <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Chat</span>
-          </button>
+          </motion.button>
 
-          <button className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors">
-            <svg className="w-10 h-10 p-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-            </svg>
+          <motion.button 
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+          >
+            <Filter className="w-6 h-6 transition-transform group-hover:rotate-12" />
             <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Filters</span>
-          </button>
+          </motion.button>
 
-          <button className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors">
-            <div className="w-10 h-10 flex items-center justify-center">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-            </div>
+          <motion.button 
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+          >
+            <Bell className="w-6 h-6 transition-transform group-hover:rotate-12" />
             <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Notifications</span>
-          </button>
+          </motion.button>
 
-          <button className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors">
-            <div className="w-10 h-10 flex items-center justify-center">
-              <ShoppingCart className="w-5 h-5" />
-            </div>
+          <motion.button 
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+            className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+          >
+            <ShoppingCart className="w-6 h-6 transition-transform group-hover:rotate-12" />
             <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Cart</span>
-          </button>
+          </motion.button>
 
-          <button 
+          <motion.button 
             onClick={toggleProfileDropdown}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
             className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors"
           >
-            <div className="w-10 h-10 flex items-center justify-center">
-              <UserCircle className="w-5 h-5" />
-            </div>
+            <UserCircle className="w-6 h-6 transition-transform group-hover:rotate-12" />
             <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Profile</span>
-          </button>
+          </motion.button>
 
-          <button 
+          <motion.button 
             onClick={() => setShowOrgSettings(true)}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
             className="group relative flex items-center justify-center text-slate-400 hover:text-white transition-colors"
           >
-            <div className="w-10 h-10 flex items-center justify-center">
-              <Settings className="w-5 h-5" />
-            </div>
+            <Settings className="w-6 h-6 transition-transform group-hover:rotate-12" />
             <span className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900/95 border border-white/10 rounded-lg text-xs font-medium text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 shadow-lg">Settings</span>
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -554,22 +562,46 @@ export function ModulesDashboard() {
       <div className={`flex-1 flex flex-col relative z-10 transition-all duration-300 ${isProductsExpanded ? 'ml-3' : ''}`}>
         {/* Header */}
         <div className="flex items-center px-6 h-16 gap-4">
-          {/* Toggle Arrow Button - Aligned with products tab */}
-          <button
+          {/* Plus Icon Button */}
+          <motion.button
+            whileHover={{ scale: 1.1, rotate: 90 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => setIsProductsExpanded(!isProductsExpanded)}
-            className="flex-shrink-0 h-10 w-10 rounded-xl bg-slate-800/50 backdrop-blur-sm transition-colors hover:bg-slate-700/50 flex items-center justify-center"
+            className="flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center text-slate-400 hover:text-white transition-colors"
           >
-            <svg 
-              className={`h-5 w-5 text-slate-300 transition-transform duration-300 ${isProductsExpanded ? 'rotate-180' : ''}`}
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
+            <Plus className="h-6 w-6" />
+          </motion.button>
 
-          <div className="relative profile-dropdown-container ml-auto">
+          {/* Products/Brands Toggle */}
+          <div className="flex items-center gap-3 ml-auto">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setViewMode('products')}
+              className={`flex items-center justify-center h-10 w-10 rounded-full transition-colors ${
+                viewMode === 'products' 
+                  ? 'text-white' 
+                  : 'text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              <ShoppingBag className="h-5 w-5" />
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setViewMode('brands')}
+              className={`flex items-center justify-center h-10 w-10 rounded-full transition-colors ${
+                viewMode === 'brands' 
+                  ? 'text-white' 
+                  : 'text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              <Globe className="h-5 w-5" />
+            </motion.button>
+          </div>
+
+          <div className="relative profile-dropdown-container">
             <div className="opacity-0 pointer-events-none">
               <button 
                 onClick={toggleProfileDropdown}
@@ -698,9 +730,9 @@ export function ModulesDashboard() {
 
         {/* Products Layout Area */}
         <div className="flex-1 pl-3 pr-3 pb-3 pt-2 overflow-hidden">
-          <div className="relative h-full rounded-2xl products-scrollbar overflow-y-auto">
+          <div className="relative h-full rounded-2xl overflow-y-auto scrollbar-hide">
             {/* Products Grid */}
-            <ProductsGrid isExpanded={isProductsExpanded} />
+            <ProductsGrid isExpanded={isProductsExpanded} viewMode={viewMode} />
           </div>
         </div>
       </div>
